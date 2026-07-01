@@ -1,0 +1,28 @@
+---
+description: Core backtest and forward-test integrity — no biased simulation
+alwaysApply: true
+---
+
+# Backtest Integrity
+
+Every simulation must answer: **what could this strategy have known and traded at time t?**
+
+## Non-negotiables
+
+1. **Time order** — Train, validate, and test on chronological splits only. Never shuffle bars or random-split time series.
+2. **Decision vs execution** — Features/signals at bar `t`; fills at `t+1` (next open/bar) unless the spec explicitly models same-bar execution.
+3. **Point-in-time data** — At date `t`, use only rows with `timestamp <= t`. No restated fundamentals, revised index membership, or full-sample stats.
+4. **Honest universe** — Backtest the tradable set that existed at `t`, including names later delisted or failed.
+5. **Realistic friction** — Default to commissions, spread/slippage, and borrow/short constraints; document if omitted.
+6. **Pre-registration** — Log hypothesis in `research/hypothesis_log.md` before deep tuning; record variants tried to avoid data snooping.
+
+## Before merging simulation code, verify
+
+- [ ] No `.shift(-1)`, negative lags, or `bfill` used to build features or labels
+- [ ] Scalers, imputers, and feature selection fit **only** on the train fold
+- [ ] Labels do not leak future returns into features at the same timestamp
+- [ ] Walk-forward or purged CV for any hyperparameter search (not one in-sample optimum)
+
+## Red flags — stop and fix
+
+`future`, `lookahead`, `bfill` on features, `train_test_split(shuffle=True)` on time series, universe filtered by **final** outcome, optimizing on the same slice you report as OOS.

@@ -1,0 +1,33 @@
+---
+description: Prevent survivorship and point-in-time universe bias in data
+globs:
+  - "data/**/*.py"
+  - "data/**/*.ipynb"
+alwaysApply: false
+---
+
+# Survivorship & Universe Bias
+
+The backtest universe must reflect **who could have been traded then**, not who survived to today.
+
+## Rules
+
+- Build a **point-in-time (PIT) universe**: symbol is tradable on date `t` only if listed, not halted, and meets liquidity/market-cap rules **as of `t`**.
+- Keep delisted, merged, and bankrupt tickers in history until their last trade date; do not drop them retroactively.
+- Do not use today's index membership (e.g. current S&P 500) applied to past dates — use historical constituent files with `start_date` / `end_date`.
+- Do not pre-filter to "winners" (stocks that 10x'd, names with complete data, firms that never missed earnings).
+- Corporate actions: apply splits/dividends on the correct ex-dates; use PIT shares outstanding for market-cap filters.
+- When fetching data, store `list_date`, `delist_date`, and `is_active` — backtests slice on these, not on `dropna()` across the full sample.
+
+## Examples
+
+```python
+# BAD — only symbols with data through 2024
+symbols = prices.columns[prices.iloc[-1].notna()]
+
+# GOOD — tradable on each date
+tradable = universe[(universe["date"] == t) & (universe["is_listed"]) & (universe["adv_20d"] >= min_adv)]
+
+# BAD — filter by full-sample return before backtest
+winners = returns.sum().nlargest(100).index
+```

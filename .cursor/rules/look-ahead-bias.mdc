@@ -1,0 +1,42 @@
+---
+description: Prevent look-ahead bias in features, signals, and backtests
+globs:
+  - "data/**/*.py"
+  - "strategies/**/*.py"
+  - "backtest/**/*.py"
+  - "models/**/*.py"
+  - "research/**/*.py"
+  - "research/**/*.ipynb"
+alwaysApply: false
+---
+
+# Look-Ahead Bias
+
+A value used for a decision at time `t` must depend only on information available **at or before** `t`.
+
+## Rules
+
+- Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly.
+- **Never** use `shift(-n)`, `lead`, `bfill`, or forward-looking joins to build features or labels.
+- Merge auxiliary data with `merge_asof(..., direction='backward')` (or equivalent), never forward-fill from the future.
+- Cross-sectional ranks/z-scores at `t` use only the cross-section available at `t` (no full-sample mean/std).
+- ML: fit preprocessors, selectors, and models on train only; `transform` val/test. No `fit` on full history.
+- Backtest loop: update portfolio state **after** the fill bar, not using that bar's outcome to decide the same bar.
+
+## Examples
+
+```python
+# BAD — today's close in today's signal
+signal = (close > close.rolling(20).mean())
+
+# GOOD — signal uses yesterday's completed bar
+signal = (close.shift(1) > close.shift(1).rolling(20).mean())
+
+# BAD — label leaks into feature row at same t
+df["fwd_ret"] = close.pct_change(5).shift(-5)
+df["feature"] = df["fwd_ret"].rolling(10).mean()  # peeking
+
+# GOOD — label is separate; features lagged
+df["label"] = close.pct_change(5).shift(-5)  # only for training target column
+df["feature"] = close.shift(1).pct_change().rolling(10).mean()
+```

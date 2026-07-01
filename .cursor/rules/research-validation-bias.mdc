@@ -1,0 +1,31 @@
+---
+description: Prevent overfitting, data snooping, and leaky validation in research
+globs:
+  - "research/**"
+  - "models/**/*.py"
+  - "backtest/**/*.py"
+alwaysApply: false
+---
+
+# Research & Validation Bias
+
+Good in-sample metrics are not evidence until validated without reuse of the test slice.
+
+## Rules
+
+- **One hypothesis, one primary test** — Log in `research/hypothesis_log.md` before heavy iteration. Note how many variants were tried.
+- **Holdout** — Reserve a final OOS period (or paper-trading window) never used for tuning, feature selection, or kill/keep decisions until the end.
+- **Walk-forward** — Retrain and re-tune on rolling train windows; measure on the subsequent out-of-sample window.
+- **Purged / embargoed CV** — When labels overlap in time (e.g. 5-day forward return), purge training rows whose label window overlaps test, and add an embargo gap.
+- **No peeking at OOS** — If OOS degrades, do not tweak and re-test on the same OOS; fix on train/validation only or wait for new data.
+- **Report friction** — Net of fees, spread, slippage, and realistic position limits. Flag results that flip sign after costs.
+- **Forward test parity** — Paper/live code must use the same signal timing, universe rules, and lag logic as the backtest.
+
+## Metric discipline
+
+- Prefer deflated Sharpe, PBO, or simple "variants tried vs. best" accounting when running many experiments.
+- Compare against a naive baseline (buy-and-hold, random timing, zero signal) on the same universe and costs.
+
+## Red flags
+
+Single global `GridSearchCV` on all history, test set reused across notebook reruns, "we dropped 2020" without PIT reason, Sharpe > 3 with no OOS.
