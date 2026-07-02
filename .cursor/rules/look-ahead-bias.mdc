@@ -12,15 +12,31 @@ alwaysApply: false
 
 # Look-Ahead Bias
 
-A value used for a decision at time `t` must depend only on information available **at or before** `t`.
+A value used for a **decision or feature** at time `t` must depend only on information available **at or before** `t`.
+
+Forward-looking values are allowed **only** as isolated **labels / prediction targets** for training and evaluation — never as features, signals, or inputs to rolling stats at the same row.
+
+## Decision timeline (default)
+
+Align every row to one decision timestamp `t` (bar close):
+
+| Role | Timestamp | Meaning |
+|------|-----------|---------|
+| Features & signal | `t` | Known at or before close `t` |
+| Decision | `t` | Enter / exit choice made at close `t` |
+| Fill | `t` | Entry executes at close `t` (not `t+1`) |
+| Label (train/eval only) | `t → t+1` | Outcome you are predicting (e.g. next close) |
+
+Row `t` therefore answers: *given everything known at close `t`, should we enter now, usually to capture what happens over `t+1`?*
 
 ## Rules
 
 - Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly.
-- **Never** use `shift(-n)`, `lead`, `bfill`, or forward-looking joins to build features or labels.
+- **Never** use `shift(-n)`, `lead`, `bfill`, or forward-looking joins to build **features, signals, or cross-row derived inputs**.
+- **Labels / targets only:** `shift(-n)` on price or forward returns is allowed in dedicated target columns (e.g. `close.shift(-1)` for the value at `t+1`). Keep targets in separate columns; never feed them into feature engineering on the same row.
 - Merge auxiliary data with `merge_asof(..., direction='backward')` (or equivalent), never forward-fill from the future.
 - Cross-sectional ranks/z-scores at `t` use only the cross-section available at `t` (no full-sample mean/std).
-- ML: fit preprocessors, selectors, and models on train only; `transform` val/test. No `fit` on full history.
+- ML: fit preprocessors, selectors, and models on train only; `transform` val/test. No `fit` on full history. Drop or exclude label columns before `predict` at inference.
 - Backtest loop: update portfolio state **after** the fill bar, not using that bar's outcome to decide the same bar.
 
 ## Examples
@@ -32,11 +48,17 @@ signal = (close > close.rolling(20).mean())
 # GOOD — signal uses yesterday's completed bar
 signal = (close.shift(1) > close.shift(1).rolling(20).mean())
 
-# BAD — label leaks into feature row at same t
+# BAD — forward return used as a feature (peeking)
 df["fwd_ret"] = close.pct_change(5).shift(-5)
-df["feature"] = df["fwd_ret"].rolling(10).mean()  # peeking
+df["feature"] = df["fwd_ret"].rolling(10).mean()
 
-# GOOD — label is separate; features lagged
-df["label"] = close.pct_change(5).shift(-5)  # only for training target column
+# GOOD — label is forward-looking; features use only past data at t
+df["target"] = close.shift(-1)                    # prediction column: close at t+1
+df["label"] = close.shift(-1) / close - 1         # or forward return t → t+1
 df["feature"] = close.shift(1).pct_change().rolling(10).mean()
+
+# GOOD — decide at close t, enter at t; model trained on target, infers from features only
+X = df[["feature"]]                               # no target/label columns
+y = df["target"]
+# at inference: signal = model.predict(X)  →  order at close t
 ```
