@@ -1,16 +1,22 @@
 # Hypothesis Log
 
 
-| ID    | Date       | Asset    | Factor           | Status  |
-| ----- | ---------- | -------- | ---------------- | ------- |
-| H-001 | 2026-02-07 | Equities | SMART Beta       | PENDING |
-| H-002 | 2026-02-07 | Equities | Size & Value     | PENDING |
-| H-003 | 2026-02-07 | Equities | Sentiment        | PENDING |
-| H-004 | 2026-02-07 | Equities | HMM Trend Regime | PENDING |
-| H-005 | 2026-02-07 | Equities | Autocorrelation  | PENDING |
+| ID    | Date       | Asset    | Factor                  | Status  |
+| ----- | ---------- | -------- | ----------------------- | ------- |
+| H-001 | 2026-02-07 | Equities | SMART Beta              | PENDING |
+| H-002 | 2026-02-07 | Equities | Size & Value            | PENDING |
+| H-003 | 2026-02-07 | Equities | Sentiment               | PENDING |
+| H-004 | 2026-02-07 | Equities | HMM Trend Regime        | PENDING |
+| H-005 | 2026-02-07 | Equities | Autocorrelation         | PENDING |
+| H-006 | 2026-07-04 | Equities | Idiosyncratic Vol Rank  | PENDING |
+| H-007 | 2026-07-04 | Equities | OBV-Confirmed Momentum  | PENDING |
+| H-008 | 2026-07-04 | Equities | GK Vol Ratio (Reversal) | PENDING |
+| H-009 | 2026-07-06 | Equities | GBM vs RNN vs Ensemble   | PENDING |
 
 
 ---
+
+
 
 ## H-001 · Equities · SMART Beta · 2026-02-07
 
@@ -56,7 +62,7 @@
 | **Status**             | PENDING                                                                                                                                                                                                                                                 |
 | **Hypothesis**         | Higher sentiment = higher movement in price, etc.                                                                                                                                                                                                       |
 | **Economic rationale** | Sentiment is used to explain the percieved value of a stock, thus depending on vibe certain retail investors may back off or go into a specific stock.                                                                                                  |
-| **Data required**      | —                                                                                                                                                                                                                                                       |
+| **Data required**      | Test Alpha Vantage; if not works historically use GDELT Dataset. Deploy with Alpha V' and apply transformations due to training.                                                                                                                        |
 | **Test to complete**   | Firstly, is there a tradable signal? (if applicable: use the past week of news headlines to create a sentiment score using FinBert) Then, explore the decay of the signal (especially if using GDELT as need to decide on a window of articles to use). |
 | **Alphalens summary**  | —                                                                                                                                                                                                                                                       |
 | **Notes**              | Need to work out how to get a hold of the data first.                                                                                                                                                                                                   |
@@ -96,6 +102,155 @@
 | **Test to complete**   | —                                                                                                                                                                                                                                                  |
 | **Alphalens summary**  | —                                                                                                                                                                                                                                                  |
 | **Notes**              | Test idea after creating predictions using the model, in a notebook or a backtest.                                                                                                                                                                 |
+
+
+---
+
+
+
+## H-006 · Equities · Idiosyncratic Vol Rank · 2026-07-04
+
+
+| Field                  |                                                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Status**             | PENDING                                                                                                                                                                                                                  |
+| **What it is**         | Cross-sectional rank of each stock's 20-day residual return volatility after stripping out market exposure.                                                                                                                |
+| **Hypothesis**         | Low idiosyncratic-vol rank (quieter stock-specific noise) predicts higher next-week returns; high rank predicts lower returns (idiosyncratic volatility puzzle).                                                          |
+| **Economic rationale** | Lottery preference and short-sale constraints leave high idio-vol names overpriced; arbitrageurs more easily correct mispricing in low idio-vol names. Related to H-001 low-vol / BAB literature but isolates stock-specific rather than market-linked risk. |
+| **Data required**      | Daily OHLCV panel + market return series (e.g. SPY or equal-weight universe).                                                                                                                                            |
+| **Test to complete**   | Quintile spread and IC of idio-vol rank vs 5-day forward return; compare to total realised vol rank as baseline.                                                                                                         |
+| **Alphalens summary**  | —                                                                                                                                                                                                                        |
+| **Notes**              | Expect negative monotonicity (low rank → long). Use PIT universe and cross-sectional rank on each date only. Purge/embargo for overlapping 5d labels.                                                                    |
+
+**Formulae**
+
+- Daily log return: `ln(P_t / P_{t-1})`
+- Rolling 20-day OLS: `r_i = alpha + beta * r_market + epsilon`
+- Idiosyncratic vol: standard deviation of `epsilon` over 20 days
+- Factor: cross-sectional percentile rank of idio vol on date t
+- Label (next-week return): `P_{t+5} / P_t - 1`
+
+
+---
+
+
+
+## H-007 · Equities · OBV-Confirmed Momentum · 2026-07-04
+
+
+| Field                  |                                                                                                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | PENDING                                                                                                                                                                                                                 |
+| **What it is**         | Price momentum retained only when On-Balance Volume trend agrees with price direction; unconfirmed moves are zeroed or down-weighted vs raw momentum.                                                                   |
+| **Hypothesis**         | OBV-confirmed momentum has higher next-week (and next-day) predictive power than raw momentum alone.                                                                                                                    |
+| **Economic rationale** | Price moves backed by cumulative volume flow reflect informed participation; price moves without volume support are more likely to fade. Pairs with H-004 regime work (momentum in trends).                             |
+| **Data required**      | Daily OHLCV panel.                                                                                                                                                                                                      |
+| **Test to complete**   | Paired IC and quintile spreads: raw momentum vs OBV-confirmed momentum vs next-week return; repeat for 1d horizon using price/volume alignment table below.                                                             |
+| **Alphalens summary**  | —                                                                                                                                                                                                                       |
+| **Notes**              | Compare marginal lift over raw momentum on same universe and rebalance schedule. Normalise OBV trend cross-sectionally (pct-rank of OBV change) if scale differs across tickers.                                        |
+
+**Formulae**
+
+- Raw momentum: `P_{t-L} / P_{t-S} - 1` (e.g. L = 252 days, S = 21 days skip)
+- OBV: add volume on up days, subtract on down days; `OBV_t = OBV_{t-1} + sign(P_t - P_{t-1}) * V_t`
+- OBV trend: `OBV_t - OBV_{t-W}` (e.g. W = 20 days)
+- Confirmed momentum: keep raw momentum only when its sign matches OBV trend sign; else 0
+- Label (next-week return): `P_{t+5} / P_t - 1`
+
+**Price vs volume alignment (suggested next day)**
+
+
+| Price momentum | OBV trend | Suggested next day        |
+| -------------- | --------- | ------------------------- |
+| Positive       | Rising    | Long / hold long          |
+| Positive       | Falling   | Flat / reduce exposure    |
+| Negative       | Falling   | Short / hold short        |
+| Negative       | Rising    | Flat / cover (divergence) |
+
+
+---
+
+
+
+## H-008 · Equities · GK Vol Ratio (Reversal) · 2026-07-04
+
+
+| Field                  |                                                                                                                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | PENDING                                                                                                                                                                                                                      |
+| **What it is**         | Ratio of short-window Garman–Klass (intraday OHLC) volatility to longer-window realised close-to-close volatility; high values flag intraday stress not fully reflected in closes.                                           |
+| **Hypothesis**         | High GK/realised vol ratio predicts negative next-week returns (short-horizon mean reversion).                                                                                                                                 |
+| **Economic rationale** | Wide intraday ranges with muted close-to-close vol suggest two-way fighting, liquidity shocks, or intraday overreaction that partially reverses — opposite to momentum. Overlaps H-002 volume-spike reversal idea but uses range-based vol. |
+| **Data required**      | Daily OHLC (open, high, low, close).                                                                                                                                                                                         |
+| **Test to complete**   | Quintile spread and IC of GK vol ratio vs 5-day forward return; winsorise ratio and floor denominator; test interaction with H-004 regime (reversal stronger in ranging markets).                                            |
+| **Alphalens summary**  | —                                                                                                                                                                                                                            |
+| **Notes**              | Reversal signals are turnover- and cost-sensitive — report net of spread/slippage. May conflict with H-007 on same names; test as overlay or let GBM combine.                                                            |
+
+**Formulae**
+
+- Garman–Klass variance: `0.5 * (ln(H/L))^2 - (2*ln(2) - 1) * (ln(C/O))^2`
+- GK vol: square root of variance (clip at zero if negative)
+- Realised vol: standard deviation of `ln(C_t / C_{t-1})` over 20 days
+- Ratio: 5-day average GK vol divided by 20-day realised vol
+- Label (next-week return): `P_{t+5} / P_t - 1`
+
+
+---
+
+
+
+## H-009 · Equities · GBM vs RNN vs Ensemble · 2026-07-06
+
+
+| Field                  |                                                                                                                                                                                                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | PENDING                                                                                                                                                                                                                                                         |
+| **What it is**         | GBM vs RNN vs ensemble. GBM: pooled (single model, all tickers — not one model per ticker). Features: final production set. Run after factor features are built.                                                                                                |
+| **Hypothesis**         | No single architecture dominates all forward horizons; pooled GBM, shared-weight RNN, or an IC-weighted ensemble will win on OOS Alphalens metrics once the production feature set is frozen.                                                                   |
+| **Economic rationale** | GBM ranks well on cross-sectional factors; RNN may capture serial structure factors only encode via lags. An ensemble may stabilise errors when the two disagree.                                                                                                 |
+| **Data required**      | Daily OHLCV panel via `fetch_top_n_equities` (PIT universe); final production feature pipeline (log feature-spec version in Notes).                                                                                                                             |
+| **Test to complete**   | Walk-forward bake-off: pooled GBM vs shared-weight LSTM/GRU vs validation-IC ensemble on identical splits, labels, and universe. Primary kill/keep on 5d horizon via Alphalens tearsheet (IC, quantile spreads, turnover). Secondary horizons: 1d, 10d, 21d. |
+| **Alphalens summary**  | —                                                                                                                                                                                                                                                               |
+| **Notes**              | See configuration, delisting handling, overfitting controls, and ensemble rule below. H-005 (correlation overlay) is a separate factor — test only after this bake-off. Freeze feature spec before running; note variants tried vs best.                        |
+
+**Configuration**
+
+```text
+PRIMARY_FORWARD_HORIZON_DAYS: 5   # change only here; purge/embargo and primary Alphalens periods follow this
+SECONDARY_FORWARD_HORIZON_DAYS: 1, 10, 21   # exploratory only — do not use for primary kill/keep
+```
+
+**Models**
+
+- **GBM (pooled):** one gradient-boosted model trained on all `(date, ticker)` rows stacked together — **not** a separate model per ticker. At inference, pass one row per ticker per day through the same model.
+- **RNN:** shared-weight LSTM or GRU — one sequence per ticker, same weights across names. Lookback length tuned on validation only (capped search budget).
+- **Ensemble:** compute Spearman IC of GBM and RNN scores vs label on the walk-forward **validation** window only; set `w_i = max(IC_i, 0) / sum(max(IC_j, 0))`; combined score = `w_gbm * score_gbm + w_rnn * score_rnn` (or rank the blend). **Freeze weights before the holdout block** — do not retune on test.
+
+**Label and signal**
+
+- **Primary label:** cross-sectional percentile rank of forward return on date `t` (PIT universe only): rank of `P_{t+h} / P_t - 1` where `h = PRIMARY_FORWARD_HORIZON_DAYS`.
+- **Trading signal:** cross-sectional rank of model output at `t` (long top, short bottom). Alphalens factor input = model score or its cross-sectional rank.
+
+**Universe / tensor shape (delistings)**
+
+- Fixed-shape panel `(T, N_max, F)` with **NaN padding** for slots where a ticker is not yet listed or has delisted.
+- **Mask** padded positions in RNN loss and in metrics; never forward-fill prices from the future.
+- GBM: omit or mask rows with NaN features; do not train on padded ghost tickers.
+
+**Overfitting controls**
+
+- Walk-forward retrain; early stopping on validation only (RNN).
+- GBM: `max_depth`, `min_child_samples`, `subsample`, `colsample_bytree`, limited boosting rounds.
+- RNN: dropout, weight decay, gradient clipping; cap hyperparameter trials.
+- Winsorize features and labels; fit scalers on train fold only.
+- Purged / embargoed CV when forward labels overlap across rows (embargo ≥ primary horizon).
+- Same splits, costs, and universe for all three approaches.
+
+**Formulae**
+
+- Forward return: `r_{t,h} = P_{t+h} / P_t - 1`
+- Primary label: `label_{i,t} = pct_rank(r_{t,h})` across tradable tickers on date `t`
+- Ensemble weight: `w_i = max(IC_i^{val}, 0) / Σ_j max(IC_j^{val}, 0)`
 
 
 ---
