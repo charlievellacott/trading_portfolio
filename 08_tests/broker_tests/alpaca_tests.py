@@ -1,7 +1,7 @@
 """Alpaca broker connectivity and order-lifecycle integration test.
 
 Run:
-    python tests/broker_tests/alpaca_tests.py
+    python 08_tests/broker_tests/alpaca_tests.py
 
 API keys are read from config/credentials.env (line 1 = key, line 2 = secret).
 Uses paper trading by default; pass --live to hit the live endpoint (not recommended).

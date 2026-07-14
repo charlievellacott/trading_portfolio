@@ -1,0 +1,36 @@
+# Maps logical Python package names (e.g. data, performance) to numbered
+# top-level folders (e.g. 01_data, 07_performance). Folder names can't start
+# with digits in import statements, so run `pip install -e .` from the repo
+# root to make `from data.ingestion...` and similar imports work.
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-portfolio"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.setuptools.package-dir]
+data = "01_data"
+strategies = "03_strategies"
+risk = "04_risk"
+execution = "05_execution"
+portfolio = "06_portfolio"
+performance = "07_performance"
+
+[tool.setuptools]
+packages = [ 
+  "data",
+  "data.ingestion",
+  "data.processing",
+  "strategies",
+  "strategies.base",
+  "risk",
+  "risk.monte_carlo",
+  "execution",
+  "execution.brokers",
+  "portfolio",
+  "performance",
+]

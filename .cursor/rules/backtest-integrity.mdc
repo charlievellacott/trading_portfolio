@@ -14,7 +14,7 @@ Every simulation must answer: **what could this strategy have known and traded a
 3. **Point-in-time data** — At date `t`, use only rows with `timestamp <= t`. No restated fundamentals, revised index membership, or full-sample stats.
 4. **Honest universe** — Backtest the tradable set that existed at `t`, including names later delisted or failed.
 5. **Realistic friction** — Default to commissions, spread/slippage, and borrow/short constraints; document if omitted.
-6. **Pre-registration** — Log hypothesis in `research/hypothesis_log.md` before deep tuning; record variants tried to avoid data snooping.
+6. **Pre-registration** — Log hypothesis in `02_research/hypothesis_log.md` before deep tuning; record variants tried to avoid data snooping.
 
 ## Before merging simulation code, verify
 

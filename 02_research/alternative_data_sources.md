@@ -12,7 +12,7 @@ GET [https://www.alphavantage.co/query?function=NEWS_SENTIMENT](https://www.alph
 Free tier: 25 requests/day (standard free key) — you can batch multiple tickers per call (comma-separated), so 150 stocks can often fit in 5-10 calls
 Historical: Yes, time_from/time_to supports going back several years
 Output: Per-article sentiment + per-ticker aggregate score — trivially joins to your long df on (ticker, date)
-Key constraint: The free key rate limit is real; you need to cache results to parquet and not re-fetch (you already have data/cache/)
+Key constraint: The free key rate limit is real; you need to cache results to parquet and not re-fetch (you already have 01_data/cache/)
 Get a key at alphavantage.co — instant, no credit card.
 
 1. StockTwits — Social Sentiment (Zero friction, no key needed)
@@ -48,9 +48,9 @@ Reproducible: Yes — it's a static dataset
 The simplest access pattern is the GDELT 2.0 Mentions table via BigQuery — BigQuery free tier gives you 1 TB/month of queries.
 
 Recommended Approach for Your Framework
-Given your setup (long-format df, data/cache/, look-ahead bias rules), the cleanest path is:
+Given your setup (long-format df, 01_data/cache/, look-ahead bias rules), the cleanest path is:
 
-For deployment (live signal): Alpha Vantage NEWS_SENTIMENT — fetch nightly, store to parquet in data/cache/, merge into your feature store with merge_asof(..., direction='backward') so you never leak future sentiment into past bars.
+For deployment (live signal): Alpha Vantage NEWS_SENTIMENT — fetch nightly, store to parquet in 01_data/cache/, merge into your feature store with merge_asof(..., direction='backward') so you never leak future sentiment into past bars.
 
 For backtesting from 2020: Finnhub news + VADER locally — it's deterministic, free, and you own the scoring logic. One batch fetch stores everything to parquet once, then it's just a join.
 

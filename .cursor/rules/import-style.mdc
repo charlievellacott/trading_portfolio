@@ -1,0 +1,35 @@
+---
+description: Enforce explicit absolute from-imports for local modules
+globs:
+  - "01_data/**/*.py"
+  - "03_strategies/**/*.py"
+  - "04_risk/**/*.py"
+  - "05_execution/**/*.py"
+  - "06_portfolio/**/*.py"
+  - "07_performance/**/*.py"
+  - "08_tests/**/*.py"
+alwaysApply: true
+---
+
+# Import Style (Local Code)
+
+Use explicit, static imports for project code so refactors remain safe and grep-able.
+
+## Rules
+
+- Local imports must use **absolute `from ... import ...`** form:
+
+```python
+from data.ingestion.equity_fetcher import fetch_top_n_equities
+from execution.brokers.alpaca_broker import AlpacaBroker
+```
+
+- Do **not** use dynamic imports for local code:
+
+```python
+# BAD (local)
+import importlib
+module = importlib.import_module("data.ingestion.equity_fetcher")
+```
+
+- Library imports are unconstrained (use the idiomatic form, including `import x as y`).

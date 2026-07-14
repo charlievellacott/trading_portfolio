@@ -1,0 +1,25 @@
+---
+description: Enforce numbered, logical markdown sections in Jupyter notebooks
+globs: "**/*.ipynb"
+alwaysApply: false
+---
+
+# Notebook Structure (Numbered Sections)
+
+All Jupyter notebooks must be organized into clear, **numbered** markdown headings separating each high-level section.
+
+## Rules
+
+- Start with a level-1 heading: `# <Notebook Title>`
+- Use level-2 headings for top-level sections, numbered `0.`, `1.`, `2.` ... in order: `## 0. Imports & Config`
+- If a section needs subsections, use level-3 headings with compound numbering: `### 2.1 <Subsection>`
+- Keep numbering stable (avoid renumbering churn); only insert new sections as decimals (e.g. `2.1`, `2.2`) when helpful
+- Each top-level section should contain at least one cell (markdown or code) and be logically self-contained
+
+## Example notebook template 
+
+## 0. Imports & Config
+## 1. Data Loading
+## 2. Data Cleaning & Engineering
+## 3. Modeling / Signal Construction
+## 4. Evaluation (plots, metrics, sanity checks)

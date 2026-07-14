@@ -1,5 +1,5 @@
 """Integration tests for equity data fetchers (live Yahoo Finance).
-Uses pytest to test the equity fetcher, to test run: python -m pytest tests/test_fetchers.py -v"""
+Uses pytest to test the equity fetcher, to test run: python -m pytest 08_tests/test_fetchers.py -v"""
 from __future__ import annotations
 
 import sys

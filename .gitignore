@@ -1,2 +1,10 @@
 config/credentials.env
-data/cache/
+01_data/cache/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/

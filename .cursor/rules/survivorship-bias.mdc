@@ -1,8 +1,8 @@
 ---
 description: Prevent survivorship and point-in-time universe bias in data
 globs:
-  - "data/**/*.py"
-  - "data/**/*.ipynb"
+  - "01_data/**/*.py"
+  - "01_data/**/*.ipynb"
 alwaysApply: false
 ---
 

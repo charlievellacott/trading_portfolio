@@ -1,12 +1,12 @@
 ---
 description: Prevent look-ahead bias in features, signals, and backtests
 globs:
-  - "data/**/*.py"
-  - "strategies/**/*.py"
+  - "01_data/**/*.py"
+  - "03_strategies/**/*.py"
   - "backtest/**/*.py"
   - "models/**/*.py"
-  - "research/**/*.py"
-  - "research/**/*.ipynb"
+  - "02_research/**/*.py"
+  - "02_research/**/*.ipynb"
 alwaysApply: false
 ---
 
