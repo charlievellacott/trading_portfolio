@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
-from pathlib import Path
 from urllib.request import urlretrieve
 
 import pandas as pd
@@ -18,21 +18,25 @@ SP500_CSV_URL = (
 DEFAULT_CSV_NAME = "sp500_historical_components.csv"
 
 
-def _default_universe_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "universe"
+def _default_csv_dir() -> str:
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data_files",
+        "s1_equities",
+    )
 
 
-def ensure_sp500_csv(path: Path | None = None) -> Path:
+def ensure_sp500_csv(path: str | None = None) -> str:
     """Download the historical S&P 500 CSV if it is not already on disk."""
-    path = path or (_default_universe_dir() / DEFAULT_CSV_NAME)
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
+    path = path or os.path.join(_default_csv_dir(), DEFAULT_CSV_NAME)
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         logger.info("Downloading S&P 500 historical constituents to %s", path)
         urlretrieve(SP500_CSV_URL, path)
     return path
 
 
-def load_sp500_snapshots(csv_path: Path | None = None) -> pd.DataFrame:
+def load_sp500_snapshots(csv_path: str | None = None) -> pd.DataFrame:
     """Load sorted S&P 500 snapshot rows (date, tickers)."""
     path = ensure_sp500_csv(csv_path)
     df = pd.read_csv(path, parse_dates=["date"])
@@ -41,7 +45,7 @@ def load_sp500_snapshots(csv_path: Path | None = None) -> pd.DataFrame:
 
 def constituents_on_or_before(
     as_of: date | str,
-    csv_path: Path | None = None,
+    csv_path: str | None = None,
 ) -> tuple[pd.Timestamp, list[str]]:
     """
     Return S&P 500 members from the latest snapshot on or before ``as_of``.
@@ -66,3 +70,4 @@ def constituents_on_or_before(
     universe_date = pd.Timestamp(row["date"]).normalize()
     tickers = [t.strip() for t in str(row["tickers"]).split(",") if t.strip()]
     return universe_date, tickers
+

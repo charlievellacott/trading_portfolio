@@ -1,7 +1,12 @@
 # Maps logical Python package names (e.g. data, performance) to numbered
 # top-level folders (e.g. 01_data, 07_performance). Folder names can't start
-# with digits in import statements, so run `pip install -e .` from the repo
-# root to make `from data.ingestion...` and similar imports work.
+# with digits in import statements, so install editable from the repo root:
+#
+#   python -m pip install -e . --config-settings editable_mode=strict
+#
+# Use strict mode (path-based .pth + hardlink farm under build/) so basedpyright
+# / static analysis can resolve `from data.ingestion...`. The default setuptools
+# editable mode uses import hooks, which basedpyright cannot follow.
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -25,6 +30,7 @@ packages = [
   "data",
   "data.ingestion",
   "data.processing",
+  "data.processing.feature_implementation",
   "strategies",
   "strategies.base",
   "risk",

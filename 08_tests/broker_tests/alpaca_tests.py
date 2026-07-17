@@ -9,20 +9,20 @@ Uses paper trading by default; pass --live to hit the live endpoint (not recomme
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, OrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest
 
-CREDENTIALS_PATH = ROOT / "config" / "credentials.env"
+CREDENTIALS_PATH = os.path.join(ROOT, "config", "credentials.env")
 DEFAULT_SYMBOL = "SPY"
 FILL_POLL_INTERVAL_SEC = 2.0
 FILL_TIMEOUT_SEC = 120.0
@@ -41,12 +41,13 @@ class CheckResult:
     detail: str
 
 
-def load_credentials(path: Path = CREDENTIALS_PATH) -> tuple[str, str]:
+def load_credentials(path: str = CREDENTIALS_PATH) -> tuple[str, str]:
     """Return (api_key, secret_key) from the first two non-empty lines."""
-    if not path.is_file():
+    if not os.path.isfile(path):
         raise FileNotFoundError(f"Credentials file not found: {path}")
 
-    lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    with open(path, encoding="utf-8") as f:
+        lines = [ln.strip() for ln in f if ln.strip()]
     if len(lines) < 2:
         raise ValueError(f"Expected key and secret on lines 1-2 of {path}")
 

@@ -1,0 +1,57 @@
+---
+description: Prefer and extend existing project subroutines over reimplementing
+alwaysApply: true
+---
+
+# Reuse Existing Interfaces
+
+Before writing new fetch, feature, clean, or broker logic, **search the codebase** for an existing subroutine and call it. Program to the project’s interfaces; do not reimplement the same capability beside them.
+
+## Workflow
+
+1. **Search** — Look in the relevant package (`01_data/ingestion`, `01_data/processing`, brokers, etc.) for an existing helper.
+2. **Use** — Import and call it (absolute `from data...` / package imports per import-style).
+3. **Extend** — If nothing fits but the concern belongs there, add a helper next to its peers (same module or sibling module) and reuse shared internals — do not fork a parallel `yfinance` / factor / clean path.
+4. **New module only** — When the concern is genuinely new (e.g. a new asset-class fetcher or hypothesis factor), create it in the established layout and mirror existing APIs (long panel schema, naming, caching).
+
+## Canonical homes (start here)
+
+| Need | Prefer |
+|------|--------|
+| Single-ticker or batch equity OHLCV | `fetch_ohlcv`, `fetch_top_n_equities` in `data.ingestion.equity_fetcher` |
+| PIT S&P universe | `data.ingestion.sp500_universe` |
+| Factor / indicator math | `data.processing.feature_implementation.*` (e.g. `obv_momentum`) |
+| Attach a registered factor to a long panel | `data.processing.feature_store` entrypoints (e.g. `add_obv_confirmed_momentum`) |
+| Panel cleaning / winsorize / ffill | `data.processing.cleaner` |
+
+Other asset fetchers live under `data.ingestion` (`fx_fetcher`, `crypto_fetcher`, `commodity_fetcher`) — extend those files rather than calling raw vendor APIs from notebooks or strategies.
+
+## Examples
+
+```python
+# BAD — new yfinance download beside the project fetcher
+import yfinance as yf
+raw = yf.download("AAPL", start="2020-01-01")
+
+# GOOD
+from data.ingestion.equity_fetcher import fetch_ohlcv
+panel = fetch_ohlcv("AAPL", "2020-01-01")
+```
+
+```python
+# BAD — inline OBV / momentum in a notebook or strategy
+panel["obv"] = ...  # hand-rolled
+
+# GOOD — modular helpers / store API
+from data.processing.feature_implementation.obv_momentum import add_obv, add_raw_momentum
+from data.processing.feature_store import add_obv_confirmed_momentum
+panel = add_obv(panel)
+panel = add_obv_confirmed_momentum(panel, mode="signed")
+```
+
+## Red flags
+
+- Second copy of a fetcher that wraps the same vendor (`yfinance`, broker SDK, etc.)
+- Factor formula duplicated in a notebook when it already exists under `feature_implementation`
+- Private `_download_*` reimplemented outside its owning module instead of calling the public API
+If any thing seems majorly wrong ask the user for guidance

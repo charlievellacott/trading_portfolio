@@ -1,0 +1,111 @@
+---
+description: Workflow and code layout for implementing a new factor from 02_research/hypothesis_log.md end-to-end (math module, feature-store entrypoint, tests, notes, and markdown-only notebook stub). Invoke manually with @factor-implementation.
+alwaysApply: false
+---
+
+# @factor-implementation
+
+Use when the user asks to implement a hypothesis in [`02_research/hypothesis_log.md`](02_research/hypothesis_log.md). Mirrors the H-001 / H-002 pattern. **Do not deviate silently** — if any step is ambiguous, ask the user before planning.
+
+Related always-applied rules (do not re-explain): [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc), [import-style](.cursor/rules/import-style.mdc), [path-style](.cursor/rules/path-style.mdc), [backtest-integrity](.cursor/rules/backtest-integrity.mdc), [notebook-structure](.cursor/rules/notebook-structure.mdc).
+
+## Step 1 — Explore before asking
+
+Read, in this order: the target H-XXX entry in `hypothesis_log.md`, [`01_data/processing/feature_store.py`](01_data/processing/feature_store.py), [`01_data/processing/feature_implementation/`](01_data/processing/feature_implementation), an existing peer factor (e.g. [`obv_momentum.py`](01_data/processing/feature_implementation/obv_momentum.py) or [`gk_vol_ratio.py`](01_data/processing/feature_implementation/gk_vol_ratio.py)), and [`08_tests/test_features.py`](08_tests/test_features.py).
+
+## Step 2 — Clarify (must happen before Plan)
+
+Ask concise questions covering, at minimum:
+
+1. **Data scope.** If the factor requires anything beyond OHLCV (e.g. SPY, market cap, fundamentals, sentiment), **stop and ask for the exact source, schema, PIT semantics, and cache/format** before proceeding. Never fabricate a data path.
+2. **Modes / variants.** What discrete variants (if any) should the store expose? Column name will always be `<factor>_{mode}` — no windows in the name, no free-form `col_name`.
+3. **Tunable parameters and defaults.** Confirm defaults from the hypothesis log; every tunable must be a keyword arg, overridable only via `name=value`.
+4. **Edge cases.** Denominator floors, bad-bar handling, invalid inputs. Default is **no floor and no winsorize in library code** — bad denom / invalid inputs → NaN.
+5. **Normalization.** Determine cross-sectional vs time-series (see menus below) and confirm the choice with the user.
+
+## Step 3 — Normalization menus (present options with pros/cons)
+
+Feature is **cross-sectional** if predictive information comes from ranking names against each other on the same date; **time-series** if it lives per-ticker and comparing across names would be misleading.
+
+### Cross-sectional (`normalize=True`)
+
+| Option | How | Pros | Cons |
+|---|---|---|---|
+| CS pct-rank by `date` (default) | `groupby('date').rank(pct=True)` | GBM-ready, scale-free, robust to outliers, comparable across names | Loses magnitude information |
+| CS z-score by `date` | `(x - mean_t) / std_t` on each date | Preserves relative magnitudes | Sensitive to outliers; needs winsorize |
+| CS demean by `date` only | `x - mean_t` | Keeps units, removes market level | No scale normalization |
+
+Present all three; **default and recommend CS pct-rank** unless the user says otherwise.
+
+### Time-series (`normalize=True`)
+
+| Option | How | Pros | Cons |
+|---|---|---|---|
+| Per-ticker rolling z-score (recommended default) | `(x - roll_mean) / roll_std` per ticker, `norm_window` kwarg, `min_periods=norm_window`; NaN when `std==0` | Adapts to changing regimes; no lookahead; institutionally standard | Sensitive to window choice; loses long-run level info |
+| Per-ticker expanding z-score | Uses all history up to `t` | No window choice; stable | Slow to react to regime change; early-sample instability |
+| Per-ticker rolling min-max to `[0,1]` | `(x - roll_min) / (roll_max - roll_min)` | Bounded, GBM-friendly | Extremely sensitive to window extremes; not shift-invariant |
+| Per-ticker robust rolling z (median / MAD) | `(x - roll_median) / (1.4826 * roll_MAD)` | Outlier-robust | Slightly biased if data is clean-Gaussian; more compute |
+
+Present all four; **default and recommend rolling z-score** with `norm_window` = the factor's own longest lookback window, unless the user says otherwise.
+
+## Step 4 — Plan (CreatePlan)
+
+Lock every open decision from Step 2 concretely: modes, column name pattern, defaults, denom handling, normalization type + variant, test list, notes edits, notebook sections. No "optional" or "or" left in the plan.
+
+## Step 5 — Implement (only after user approves the plan)
+
+### 5.1 Math module — `01_data/processing/feature_implementation/<factor>.py`
+
+- Module docstring names the hypothesis (`"""H-XXX <factor>: series primitives and panel helpers."""`).
+- **Series primitives** first (pure `pd.Series` in / `pd.Series` out), then **panel `add_*` helpers** that call them per ticker.
+- No `include_components` flag. Intermediates are attached only by calling the smaller `add_*` helpers directly.
+- Panel helpers must: `_require_columns` validate; handle empty panel; sort by `["ticker", "date"]` with `kind="mergesort"`; restore original row order via `reindex`.
+- Reuse peers' patterns; do not duplicate `cross_sectional_pct_rank` (import from `obv_momentum` or the store, per H-002).
+
+### 5.2 Store entrypoint — `01_data/processing/feature_store.py`
+
+- One function per hypothesis: `add_<factor>(panel, *, ...tunables..., mode="...", normalize=True) -> pd.DataFrame`.
+- Kwargs are keyword-only (`*` after `panel`).
+- Validate mode + numeric ranges; require OHLC(V) columns present.
+- Write a **single** output column `<factor>_{mode}` (no free-form `col_name` unless the user explicitly asks).
+- If `normalize=True`: apply CS or TS normalization per the choice from Step 3.
+- Drop all temp columns before returning.
+- Docstring states: features at `t` use OHLCV through close of `t`; labels are **not** attached here.
+- Export from [`01_data/processing/__init__.py`](01_data/processing/__init__.py) alphabetically, updating `__all__`.
+
+### 5.3 Tests — extend [`08_tests/test_features.py`](08_tests/test_features.py)
+
+Add these tests (mirror the H-002 block):
+
+1. Hand-checked one-bar / small-series formula for each primitive.
+2. Modes → correct auto column names present; relationships between modes hold on `normalize=False`.
+3. Edge cases: bad inputs → NaN (no exception); invalid `mode` and missing columns → `ValueError`.
+4. `normalize=True` bounds: CS pct-rank in `[0, 1]`; TS z-score finite where defined.
+5. **No lookahead:** feature computed on a truncated prefix of the panel equals the full-panel feature on shared dates (`normalize=False`).
+
+Reuse the existing `_make_panel` helper.
+
+### 5.4 Hypothesis log — [`02_research/hypothesis_log.md`](02_research/hypothesis_log.md)
+
+Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g. `normalize` default, mode column-name pattern, denominator handling, "no floor / no winsorize in store", monotonic-rank equivalences). Update the **Formulae** block to match the implemented code (windows, std convention, mode names).
+
+### 5.5 Notebook stub — `02_research/notebooks/factor_tests/H-XXX_<factor>.ipynb`
+
+**Markdown-only** (no runnable code cells); code cells are present but empty per the H-001 layout. Follows [notebook-structure](.cursor/rules/notebook-structure.mdc). Sections:
+
+- Title cell: idea / claim / why it might work / data required; mode table; explicit note when the store does not floor/winsorize; point to `add_<factor>`.
+- `## 0. Imports & Config` — markdown listing kwargs to configure.
+- `## 1. Data Loading` — call project fetchers only (see [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc)).
+- `## 2. Data Cleaning & Engineering` — where any winsorize / floor lives.
+- `## 3. Modeling / Signal Construction` — call `add_<factor>`.
+- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks).
+
+Do not create an Alphalens or research notebook beyond this stub unless explicitly requested.
+
+## Red flags — stop and reconsider
+
+- Formula defined inline in a notebook or in a strategy file instead of `feature_implementation/`.
+- Store function exposes `col_name`, `include_components`, `winsorize`, or `floor` kwargs without an explicit user request.
+- Non-OHLCV data pulled from a vendor without asking for source/schema/PIT semantics first.
+- Any use of `.shift(-1)`, `bfill` on features, or fitting scalers on the full panel (violates [backtest-integrity](.cursor/rules/backtest-integrity.mdc)).
+- `from pathlib import Path` or `import data.foo` in project code (violates [path-style](.cursor/rules/path-style.mdc) / [import-style](.cursor/rules/import-style.mdc)).

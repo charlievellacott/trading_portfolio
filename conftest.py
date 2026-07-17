@@ -15,7 +15,7 @@ def _require_editable_install() -> None:
         raise RuntimeError(
             "Project packages are not importable.\n\n"
             "Run this once from the repo root:\n"
-            "  python -m pip install -e .\n"
+            "  python -m pip install -e . --config-settings editable_mode=strict\n"
         ) from exc
 
 

@@ -1,0 +1,56 @@
+---
+description: Prefer os and os.path for paths and working directories over pathlib
+globs:
+  - "**/*.py"
+  - "**/*.ipynb"
+alwaysApply: true
+---
+
+# Path Style (`os` over `pathlib`)
+
+Use the **`os`** module (especially `os.path`) for paths, joins, and working-directory changes. Do **not** introduce `pathlib` or `Path` in new or edited code when `os` can do the job.
+
+## Rules
+
+- Import `os` (and `os.path` via `os.path`); avoid `from pathlib import Path`.
+- Build paths with `os.path.join`, `os.path.abspath`, `os.path.dirname`, and `os.path.basename`.
+- Check and create directories with `os.path.exists`, `os.path.isdir`, and `os.makedirs(..., exist_ok=True)`.
+- Change or read the working directory with `os.chdir` and `os.getcwd`.
+- When editing a file that already uses `pathlib`, convert touched path logic to `os` if the change is localized; do not rewrite unrelated modules solely for this rule.
+
+## Preferred patterns
+
+```python
+import os
+
+# Module-relative directory (e.g. parent of package → cache/)
+_HERE = os.path.abspath(__file__)
+_PKG_ROOT = os.path.dirname(os.path.dirname(_HERE))
+DEFAULT_CACHE_DIR = os.path.join(_PKG_ROOT, "cache")
+
+# Repo root from a test file two levels down
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Join and ensure directory exists
+out_path = os.path.join(ROOT, "01_data", "cache", "panel.parquet")
+os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+# Working directory
+os.chdir(ROOT)
+cwd = os.getcwd()
+```
+
+## Avoid
+
+```python
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+cache = ROOT / "cache"
+cache.mkdir(parents=True, exist_ok=True)
+```
+
+## Exceptions (use `pathlib` only when required)
+
+- A third-party API explicitly requires `pathlib.Path` (type hint or argument); convert at the boundary: `Path(os.path.join(...))`.
+- Standard-library tools with no `os` equivalent you need in that call (e.g. `pathlib.Path.glob`); prefer `glob.glob` with string paths when practical.

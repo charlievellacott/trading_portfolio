@@ -2,18 +2,18 @@
 Uses pytest to test the equity fetcher, to test run: python -m pytest 08_tests/test_fetchers.py -v"""
 from __future__ import annotations
 
+import os
 import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
-from data.ingestion.equity_fetcher import OHLCV_COLUMNS, fetch_top_n_equities
+from data.ingestion.equity_fetcher import OHLCV_COLUMNS, fetch_ohlcv, fetch_top_n_equities
 
 # ---------------------------------------------------------------------------
 # Test parameters
@@ -124,3 +124,12 @@ def test_fetch_top_n_equities_no_long_gaps(equity_panel: pd.DataFrame) -> None:
 # tests the OHLCV quality: -ve prices, NaN close, negative volume, wrong number of tickers
 def test_fetch_top_n_equities_ohlcv_quality(equity_panel: pd.DataFrame) -> None:
     assert_ohlcv_quality(equity_panel)
+
+
+def test_fetch_ohlcv_single_ticker() -> None:
+    panel = fetch_ohlcv("AAPL", TEST_START, TEST_END, cache_dir=None)
+    assert_panel_schema(panel)
+    assert_date_range(panel, TEST_START, TEST_END)
+    assert panel["ticker"].nunique() == 1
+    assert panel["ticker"].iloc[0] == "AAPL"
+    assert not panel["close"].isna().any()

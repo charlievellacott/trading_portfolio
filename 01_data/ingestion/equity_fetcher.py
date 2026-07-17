@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import time
 from datetime import date, datetime
-from pathlib import Path
 
 import pandas as pd
 import yfinance as yf
@@ -21,7 +21,10 @@ CHUNK_SIZE = 50
 MAX_RETRIES = 3
 RETRY_DELAY_SEC = 2.0
 
-DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
+DEFAULT_CACHE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "cache",
+)
 
 
 def _to_timestamp(value: date | str | pd.Timestamp) -> pd.Timestamp:
@@ -41,24 +44,51 @@ def _cache_key(tickers: list[str], start: pd.Timestamp, end: pd.Timestamp, label
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
-def _read_cache(cache_dir: Path, key: str) -> pd.DataFrame | None:
-    path = cache_dir / f"{key}.parquet"
-    if path.exists():
-        logger.debug("Cache hit: %s", path.name)
+def _read_cache(cache_dir: str, key: str) -> pd.DataFrame | None:
+    path = os.path.join(cache_dir, f"{key}.parquet")
+    if os.path.exists(path):
+        logger.debug("Cache hit: %s", os.path.basename(path))
         return pd.read_parquet(path)
     return None
 
 
-def _write_cache(cache_dir: Path, key: str, df: pd.DataFrame) -> None:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    path = cache_dir / f"{key}.parquet"
+def _write_cache(cache_dir: str, key: str, df: pd.DataFrame) -> None:
+    os.makedirs(cache_dir, exist_ok=True)
+    path = os.path.join(cache_dir, f"{key}.parquet")
     df.to_parquet(path, index=False)
 
 
-def _wide_to_long(raw: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
+def _canonical_to_yahoo(symbol: str) -> str:
+    """Map project ticker form to Yahoo Finance symbol (e.g. ``BRK.B`` → ``BRK-B``)."""
+    return symbol.replace(".", "-")
+
+
+def _yahoo_to_canonical(symbol: str) -> str:
+    """Map Yahoo Finance symbol back to project ticker form (e.g. ``BRK-B`` → ``BRK.B``)."""
+    return symbol.replace("-", ".")
+
+
+def _build_yahoo_ticker_maps(
+    tickers: list[str],
+) -> tuple[list[str], dict[str, str]]:
+    """Return Yahoo download symbols and a Yahoo→canonical lookup."""
+    yahoo_tickers = [_canonical_to_yahoo(t) for t in tickers]
+    yahoo_to_canonical = {y: c for y, c in zip(yahoo_tickers, tickers)}
+    return yahoo_tickers, yahoo_to_canonical
+
+
+def _wide_to_long(
+    raw: pd.DataFrame,
+    tickers: list[str],
+    *,
+    yahoo_to_canonical: dict[str, str] | None = None,
+) -> pd.DataFrame:
     """Normalize yfinance output to long OHLCV format."""
     if raw.empty:
         return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
+
+    if yahoo_to_canonical is None:
+        yahoo_to_canonical = {t: t for t in tickers}
 
     if isinstance(raw.columns, pd.MultiIndex):
         level0 = raw.columns.get_level_values(0)
@@ -66,6 +96,7 @@ def _wide_to_long(raw: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
         frames: list[pd.DataFrame] = []
 
         for ticker in tickers:
+            canonical = yahoo_to_canonical.get(ticker, ticker)
             if grouped_by_ticker:
                 if ticker not in level0:
                     continue
@@ -90,14 +121,17 @@ def _wide_to_long(raw: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
                     "Volume": "volume",
                 }
             )
-            sub["ticker"] = ticker
+            sub["ticker"] = canonical
             frames.append(sub[["date", "ticker", *OHLCV_COLUMNS]])
 
         if not frames:
             return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
-        return pd.concat(frames, ignore_index=True)
+        out = pd.concat(frames, ignore_index=True)
+        out.columns.name = None
+        return out
 
     ticker = tickers[0]
+    canonical = yahoo_to_canonical.get(ticker, ticker)
     flat = raw.reset_index()
     date_col = flat.columns[0]
     flat = flat.rename(
@@ -110,8 +144,10 @@ def _wide_to_long(raw: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
             "Volume": "volume",
         }
     )
-    flat["ticker"] = ticker
-    return flat[["date", "ticker", *OHLCV_COLUMNS]]
+    flat["ticker"] = canonical
+    out = flat[["date", "ticker", *OHLCV_COLUMNS]]
+    out.columns.name = None
+    return out
 
 
 def _download_ohlcv(
@@ -119,7 +155,7 @@ def _download_ohlcv(
     start: pd.Timestamp,
     end: pd.Timestamp,
     *,
-    cache_dir: Path | None,
+    cache_dir: str | None,
     cache_label: str,
 ) -> pd.DataFrame:
     """Batch-download daily OHLCV for tickers in [start, end]."""
@@ -130,14 +166,17 @@ def _download_ohlcv(
         key = _cache_key(tickers, start, end, cache_label)
         cached = _read_cache(cache_dir, key)
         if cached is not None:
+            cached.columns.name = None
             return cached
+
+    yahoo_tickers, yahoo_to_canonical = _build_yahoo_ticker_maps(tickers)
 
     # yfinance end is exclusive
     end_exclusive = end + pd.Timedelta(days=1)
     frames: list[pd.DataFrame] = []
 
-    for i in range(0, len(tickers), CHUNK_SIZE):
-        chunk = tickers[i : i + CHUNK_SIZE]
+    for i in range(0, len(yahoo_tickers), CHUNK_SIZE):
+        chunk = yahoo_tickers[i : i + CHUNK_SIZE]
         raw: pd.DataFrame | None = None
 
         for attempt in range(1, MAX_RETRIES + 1):
@@ -163,7 +202,7 @@ def _download_ohlcv(
         if raw is None or raw.empty:
             continue
 
-        chunk_df = _wide_to_long(raw, chunk)
+        chunk_df = _wide_to_long(raw, chunk, yahoo_to_canonical=yahoo_to_canonical)
         if not chunk_df.empty:
             frames.append(chunk_df)
 
@@ -172,6 +211,7 @@ def _download_ohlcv(
     else:
         result = pd.concat(frames, ignore_index=True)
         result["date"] = pd.to_datetime(result["date"]).dt.normalize()
+        result.columns.name = None
 
     if cache_dir is not None:
         _write_cache(cache_dir, key, result)
@@ -206,7 +246,7 @@ def fetch_top_n_equities(
     lookback_days: int = 20,
     end_date: str | date | None = None,
     min_ranking_bars: int = 10,
-    cache_dir: Path | None = DEFAULT_CACHE_DIR,
+    cache_dir: str | None = DEFAULT_CACHE_DIR,
 ) -> pd.DataFrame:
     """
     Return long-format daily OHLCV for the top-n S&P 500 names by trailing
@@ -285,4 +325,46 @@ def fetch_top_n_equities(
     all_nan = panel[ohlcv].isna().all(axis=1)
     panel = panel.loc[~all_nan].copy()
     panel = panel.sort_values(["date", "ticker"]).reset_index(drop=True)
+    panel.columns.name = None
+    return panel
+
+
+def fetch_ohlcv(
+    ticker: str,
+    start_date: str | date,
+    end_date: str | date | None = None,
+    *,
+    cache_dir: str | None = DEFAULT_CACHE_DIR,
+) -> pd.DataFrame:
+    """
+    Return long-format daily OHLCV for a single ticker over ``[start_date, end_date]``.
+
+    Columns: date, ticker, open, high, low, close, volume
+    """
+    symbol = ticker.strip().upper()
+    if not symbol:
+        raise ValueError("ticker must be a non-empty string")
+
+    start_ts = _to_timestamp(start_date)
+    end_ts = _to_timestamp(end_date) if end_date is not None else _to_timestamp(datetime.now().date())
+
+    if end_ts < start_ts:
+        raise ValueError("end_date must be on or after start_date")
+
+    panel = _download_ohlcv(
+        [symbol],
+        start_ts,
+        end_ts,
+        cache_dir=cache_dir,
+        cache_label=f"single_{symbol}",
+    )
+
+    if panel.empty:
+        return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
+
+    ohlcv = list(OHLCV_COLUMNS)
+    all_nan = panel[ohlcv].isna().all(axis=1)
+    panel = panel.loc[~all_nan].copy()
+    panel = panel.sort_values(["date", "ticker"]).reset_index(drop=True)
+    panel.columns.name = None
     return panel
