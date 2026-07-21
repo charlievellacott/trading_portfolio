@@ -16,10 +16,22 @@ All Jupyter notebooks must be organized into clear, **numbered** markdown headin
 - Keep numbering stable (avoid renumbering churn); only insert new sections as decimals (e.g. `2.1`, `2.2`) when helpful
 - Each top-level section should contain at least one cell (markdown or code) and be logically self-contained
 
-## Example notebook template 
+## Example notebook template
 
 ## 0. Imports & Config
 ## 1. Data Loading
 ## 2. Data Cleaning & Engineering
 ## 3. Modeling / Signal Construction
 ## 4. Evaluation (plots, metrics, sanity checks)
+
+## Alphalens tear sheets (factor-test notebooks)
+
+When a notebook runs `al.tears.create_full_tear_sheet` (or an equivalent full tear helper):
+
+1. **Display and save** — show the tear in-notebook **and** write a multi-page **PDF**.
+2. **Directory** — `02_research/notebooks/factor_tests/tearsheets/` (create with `os.makedirs(..., exist_ok=True)` if missing).
+3. **Filename** — `H-XXX_{factor_col}.pdf` where `H-XXX` is the hypothesis id and `factor_col` is the exact panel column (stem + window/mode arguments), e.g. `H-002_gk_vol_reversal_5_63.pdf`, `H-004_residual_mom_126_21.pdf`.
+4. **Capture pattern** — Alphalens calls `plt.show()` after each plot (clears figures under Agg). Temporarily replace `plt.show` so each figure with axes is written into the PDF via `matplotlib.backends.backend_pdf.PdfPages` before `plt.close("all")`. Restore `plt.show` in a `finally` block.
+5. **Re-runs** overwrite the same path. Do not auto-tear every screened column unless the user asks (runtime).
+
+Define `TEARSHEET_DIR` next to other paths in `## 0. Imports & Config`. Import `matplotlib` / `pyplot` / `PdfPages` there (or in the evaluation helpers cell).

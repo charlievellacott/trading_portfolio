@@ -99,7 +99,7 @@ Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g
 - `## 1. Data Loading` — for S1 equities factor tests, load `s1_factor_panel_train.parquet` (already the research IS; do not re-split). Use project fetchers only for data the train panel does not carry (e.g. SPY). See [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc).
 - `## 2. Data Cleaning & Engineering` — where any winsorize / floor lives.
 - `## 3. Modeling / Signal Construction` — call `add_<factor>`.
-- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default.
+- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default. When a full (runnable) factor-test notebook is built later, Alphalens full tear sheets must **display and save** a multi-page PDF under `02_research/notebooks/factor_tests/tearsheets/` named `H-XXX_{factor_col}.pdf` — see [notebook-structure](.cursor/rules/notebook-structure.mdc).
 
 Do not create an Alphalens or research notebook beyond this stub unless explicitly requested.
 
