@@ -42,6 +42,15 @@ def regression_column_name(metric: str, window: int, *, multi_window: bool) -> s
     return metric
 
 
+def windowed_column_name(stem: str, *parts: int, multi: bool) -> str:
+    """Bare ``stem`` when one combo; ``stem_{p0}_{p1}_...`` when ``multi``."""
+    if not multi:
+        return stem
+    if not parts:
+        raise ValueError("parts must be non-empty when multi=True")
+    return stem + "".join(f"_{p}" for p in parts)
+
+
 def rolling_ols_stats(
     y: pd.Series,
     x: pd.Series,
@@ -227,3 +236,201 @@ def add_rolling_beta(
     drop_cols = ["log_ret", market_col]
     result = work.drop(columns=[c for c in drop_cols if c in work.columns])
     return _restore_order(result, original_index)
+
+
+# ---------------------------------------------------------------------------
+# H-004 primitives (added below existing code — no alterations above)
+# ---------------------------------------------------------------------------
+
+
+def rolling_conditional_ols_stats(
+    y: pd.Series,
+    x: pd.Series,
+    window: int,
+    *,
+    side: str,
+    min_obs: int | None = None,
+) -> pd.DataFrame:
+    """
+    Rolling OLS of ``y`` on ``x`` restricted to bars where ``x`` is below
+    (``side='down'``) or at/above (``side='up'``) the in-window mean of ``x``.
+
+    Parameters
+    ----------
+    side : {'down', 'up'}
+    min_obs : int or None
+        Minimum observations in the conditional subset for the regression to be
+        valid. Default ``max(20, window // 4)``.
+
+    Returns DataFrame with columns ``alpha``, ``beta``, ``r2``, ``n_obs``.
+    """
+    if side not in ("down", "up"):
+        raise ValueError(f"side must be 'down' or 'up', got {side!r}")
+    if window < 1:
+        raise ValueError("window must be >= 1")
+    if min_obs is None:
+        min_obs = max(20, window // 4)
+    if min_obs < 2:
+        min_obs = 2
+
+    n = len(y)
+    alpha = np.full(n, np.nan)
+    beta = np.full(n, np.nan)
+    r2 = np.full(n, np.nan)
+    n_obs_arr = np.full(n, np.nan)
+
+    y_arr = y.to_numpy(dtype=float)
+    x_arr = x.to_numpy(dtype=float)
+
+    for i in range(window - 1, n):
+        y_w = y_arr[i - window + 1 : i + 1]
+        x_w = x_arr[i - window + 1 : i + 1]
+        valid = np.isfinite(y_w) & np.isfinite(x_w)
+        if int(valid.sum()) < window:
+            continue
+        y_v = y_w[valid]
+        x_v = x_w[valid]
+
+        x_mean = x_v.mean()
+        if side == "down":
+            mask = x_v < x_mean
+        else:
+            mask = x_v >= x_mean
+
+        count = int(mask.sum())
+        if count < min_obs:
+            continue
+
+        y_sub = y_v[mask]
+        x_sub = x_v[mask]
+        x_demean = x_sub - x_sub.mean()
+        ss_xx = np.sum(x_demean ** 2)
+        if ss_xx == 0.0:
+            continue
+
+        y_demean = y_sub - y_sub.mean()
+        b = np.sum(x_demean * y_demean) / ss_xx
+        a = y_sub.mean() - b * x_sub.mean()
+        eps = y_sub - a - b * x_sub
+        ss_res = np.sum(eps ** 2)
+        ss_tot = np.sum(y_demean ** 2)
+
+        alpha[i] = a
+        beta[i] = b
+        r2[i] = np.nan if ss_tot == 0.0 else 1.0 - ss_res / ss_tot
+        n_obs_arr[i] = count
+
+    return pd.DataFrame(
+        {"alpha": alpha, "beta": beta, "r2": r2, "n_obs": n_obs_arr},
+        index=y.index,
+    )
+
+
+def rolling_multi_ols_stats(
+    y: pd.Series,
+    X: pd.DataFrame,
+    window: int,
+) -> pd.DataFrame:
+    """
+    Rolling multivariate OLS of ``y`` on columns of ``X`` with intercept.
+
+    Uses the last ``window`` jointly finite rows. NaN when the design matrix
+    is rank-deficient or fewer than ``window`` valid observations exist.
+
+    Returns DataFrame with columns ``["alpha", *X.columns]`` (intercept + slopes).
+    """
+    if window < 1:
+        raise ValueError("window must be >= 1")
+
+    regressors = list(X.columns)
+    k = len(regressors)
+    n = len(y)
+
+    out_alpha = np.full(n, np.nan)
+    out_slopes = np.full((n, k), np.nan)
+
+    y_arr = y.to_numpy(dtype=float)
+    X_arr = X.to_numpy(dtype=float)
+
+    for i in range(window - 1, n):
+        y_w = y_arr[i - window + 1 : i + 1]
+        X_w = X_arr[i - window + 1 : i + 1]
+        valid = np.isfinite(y_w) & np.all(np.isfinite(X_w), axis=1)
+        if int(valid.sum()) < window:
+            continue
+
+        y_v = y_w[valid]
+        X_v = X_w[valid]
+        ones = np.ones((len(y_v), 1))
+        design = np.hstack([ones, X_v])
+
+        if np.linalg.matrix_rank(design) < design.shape[1]:
+            continue
+
+        # Normal equations: (X'X)^-1 X'y
+        try:
+            coeffs, _, _, _ = np.linalg.lstsq(design, y_v, rcond=None)
+        except np.linalg.LinAlgError:
+            continue
+
+        out_alpha[i] = coeffs[0]
+        out_slopes[i] = coeffs[1:]
+
+    result: dict[str, np.ndarray] = {"alpha": out_alpha}
+    for j, col in enumerate(regressors):
+        result[col] = out_slopes[:, j]
+    return pd.DataFrame(result, index=y.index)
+
+
+def blume_adjust(
+    beta: pd.Series,
+    *,
+    alpha: float = 0.67,
+    beta_prior: float = 1.0,
+) -> pd.Series:
+    """Blume-adjusted beta: ``alpha * beta + (1 - alpha) * beta_prior``."""
+    return alpha * beta.astype(float) + (1.0 - alpha) * beta_prior
+
+
+def residual_momentum_signal(
+    residuals: pd.Series,
+    formation_window: int,
+    skip: int,
+) -> pd.Series:
+    """
+    Blitz residual-momentum signal: ``mean(ε) / std(ε)`` over the formation
+    window excluding the most recent ``skip`` bars.
+
+    For each bar ``t``, uses residuals from ``t - formation_window + 1`` to
+    ``t - skip`` (inclusive). Returns NaN when std == 0 or insufficient data.
+
+    Requires ``formation_window > skip >= 0``.
+    """
+    if formation_window < 1:
+        raise ValueError("formation_window must be >= 1")
+    if skip < 0:
+        raise ValueError("skip must be >= 0")
+    if formation_window <= skip:
+        raise ValueError("formation_window must be greater than skip")
+
+    usable_length = formation_window - skip
+    res = residuals.astype(float)
+    n = len(res)
+    out = np.full(n, np.nan)
+    arr = res.to_numpy()
+
+    for i in range(n):
+        start = i - formation_window + 1
+        end = i - skip + 1
+        if start < 0:
+            continue
+        window_vals = arr[start:end]
+        finite = window_vals[np.isfinite(window_vals)]
+        if len(finite) < usable_length:
+            continue
+        std = float(np.std(finite, ddof=1))
+        if std == 0.0:
+            continue
+        out[i] = float(np.mean(finite)) / std
+
+    return pd.Series(out, index=residuals.index, dtype=float)

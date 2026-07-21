@@ -2,12 +2,14 @@
 description: Enforce explicit absolute from-imports for local modules
 globs:
   - "01_data/**/*.py"
-  - "03_strategies/**/*.py"
-  - "04_risk/**/*.py"
-  - "05_execution/**/*.py"
-  - "06_portfolio/**/*.py"
-  - "07_performance/**/*.py"
-  - "08_tests/**/*.py"
+  - "03_models/**/*.py"
+  - "04_backtest/**/*.py"
+  - "05_strategies/**/*.py"
+  - "06_risk/**/*.py"
+  - "07_execution/**/*.py"
+  - "08_portfolio/**/*.py"
+  - "09_performance/**/*.py"
+  - "10_tests/**/*.py"
 alwaysApply: true
 ---
 

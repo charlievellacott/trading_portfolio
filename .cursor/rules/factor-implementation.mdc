@@ -11,15 +11,15 @@ Related always-applied rules (do not re-explain): [reuse-interfaces](.cursor/rul
 
 ## Step 1 — Explore before asking
 
-Read, in this order: the target H-XXX entry in `hypothesis_log.md`, [`01_data/processing/feature_store.py`](01_data/processing/feature_store.py), [`01_data/processing/feature_implementation/`](01_data/processing/feature_implementation), an existing peer factor (e.g. [`obv_momentum.py`](01_data/processing/feature_implementation/obv_momentum.py) or [`gk_vol_ratio.py`](01_data/processing/feature_implementation/gk_vol_ratio.py)), and [`08_tests/test_features.py`](08_tests/test_features.py).
+Read, in this order: the target H-XXX entry in `hypothesis_log.md`, [`01_data/processing/feature_store.py`](01_data/processing/feature_store.py), [`01_data/processing/feature_implementation/`](01_data/processing/feature_implementation), an existing peer factor (e.g. [`obv_momentum.py`](01_data/processing/feature_implementation/obv_momentum.py) or [`gk_vol_ratio.py`](01_data/processing/feature_implementation/gk_vol_ratio.py)), and [`10_tests/test_features.py`](10_tests/test_features.py).
 
 ## Step 2 — Clarify (must happen before Plan)
 
 Ask concise questions covering, at minimum:
 
 1. **Data scope.** If the factor requires anything beyond OHLCV (e.g. SPY, market cap, fundamentals, sentiment), **stop and ask for the exact source, schema, PIT semantics, and cache/format** before proceeding. Never fabricate a data path.
-2. **Modes / variants.** What discrete variants (if any) should the store expose? Column name will always be `<factor>_{mode}` — no windows in the name, no free-form `col_name`.
-3. **Tunable parameters and defaults.** Confirm defaults from the hypothesis log; every tunable must be a keyword arg, overridable only via `name=value`.
+2. **Modes / variants.** What discrete variants (if any) should the store expose? Column name is `<factor>_{mode}` for a single window-combo; when window kwargs are lists with more than one combo, suffix window parts (e.g. `obv_mom_signed_252_21_20`). No free-form `col_name`.
+3. **Tunable parameters and defaults.** Confirm defaults from the hypothesis log; every tunable must be a keyword arg, overridable only via `name=value`. Prefer scalar window kwargs. Use `int | list[int]` multi-window (cartesian product + suffixed column names via `normalize_windows` / `windowed_column_name` from `beta.py`) **only when the hypothesis explicitly requires screening multiple lookbacks in one store call** — do not add list support by default.
 4. **Edge cases.** Denominator floors, bad-bar handling, invalid inputs. Default is **no floor and no winsorize in library code** — bad denom / invalid inputs → NaN.
 5. **Normalization.** Determine cross-sectional vs time-series (see menus below) and confirm the choice with the user.
 
@@ -67,13 +67,13 @@ Lock every open decision from Step 2 concretely: modes, column name pattern, def
 - One function per hypothesis: `add_<factor>(panel, *, ...tunables..., mode="...", normalize=True) -> pd.DataFrame`.
 - Kwargs are keyword-only (`*` after `panel`).
 - Validate mode + numeric ranges; require OHLC(V) columns present.
-- Write a **single** output column `<factor>_{mode}` (no free-form `col_name` unless the user explicitly asks).
+- Write output column(s): `<factor>_{mode}` when a single window-combo is produced; when window-like kwargs are lists yielding more than one combo, suffix the window parts (e.g. `obv_mom_signed_252_21_20`, `gk_vol_ratio_5_20`) — same rule as beta/idio multi-window naming. No free-form `col_name` unless the user explicitly asks.
 - If `normalize=True`: apply CS or TS normalization per the choice from Step 3.
 - Drop all temp columns before returning.
 - Docstring states: features at `t` use OHLCV through close of `t`; labels are **not** attached here.
 - Export from [`01_data/processing/__init__.py`](01_data/processing/__init__.py) alphabetically, updating `__all__`.
 
-### 5.3 Tests — extend [`08_tests/test_features.py`](08_tests/test_features.py)
+### 5.3 Tests — extend [`10_tests/test_features.py`](10_tests/test_features.py)
 
 Add these tests (mirror the H-002 block):
 
@@ -82,6 +82,7 @@ Add these tests (mirror the H-002 block):
 3. Edge cases: bad inputs → NaN (no exception); invalid `mode` and missing columns → `ValueError`.
 4. `normalize=True` bounds: CS pct-rank in `[0, 1]`; TS z-score finite where defined.
 5. **No lookahead:** feature computed on a truncated prefix of the panel equals the full-panel feature on shared dates (`normalize=False`).
+6. **Multi-window (only if the store API accepts list window kwargs):** single-int → bare column names; list kwargs → suffixed columns present and values match the scalar call for the same combo; invalid combos → `ValueError`. Skip this item when the factor is scalar-window only.
 
 Reuse the existing `_make_panel` helper.
 
@@ -93,12 +94,12 @@ Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g
 
 **Markdown-only** (no runnable code cells); code cells are present but empty per the H-001 layout. Follows [notebook-structure](.cursor/rules/notebook-structure.mdc). Sections:
 
-- Title cell: idea / claim / why it might work / data required; mode table; explicit note when the store does not floor/winsorize; point to `add_<factor>`.
+- Title cell: idea / claim / why it might work / data required; mode table; explicit note when the store does not floor/winsorize; point to `add_<factor>`. For **S1 equities** factor tests, note loading `s1_factor_panel_train.parquet` (not the full census) and that Alphalens `periods=(1, 5, 21)` is the S1 default — other strategies may differ.
 - `## 0. Imports & Config` — markdown listing kwargs to configure.
-- `## 1. Data Loading` — call project fetchers only (see [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc)).
+- `## 1. Data Loading` — for S1 equities factor tests, load `s1_factor_panel_train.parquet` (already the research IS; do not re-split). Use project fetchers only for data the train panel does not carry (e.g. SPY). See [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc).
 - `## 2. Data Cleaning & Engineering` — where any winsorize / floor lives.
 - `## 3. Modeling / Signal Construction` — call `add_<factor>`.
-- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks).
+- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default.
 
 Do not create an Alphalens or research notebook beyond this stub unless explicitly requested.
 

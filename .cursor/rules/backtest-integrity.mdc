@@ -10,7 +10,7 @@ Every simulation must answer: **what could this strategy have known and traded a
 ## Non-negotiables
 
 1. **Time order** — Train, validate, and test on chronological splits only. Never shuffle bars or random-split time series.
-2. **Decision vs execution** — Features/signals at bar `t`; fills at `t+1` (next open/bar) unless the spec explicitly models same-bar execution.
+2. **Decision vs execution** — Features/signals known at close of bar `t`; decision and fill at close `t` (after the close of `t`). The prediction target is the next bar (`t+1`, e.g. next-close return). Document explicitly if a strategy instead fills at `t+1` open.
 3. **Point-in-time data** — At date `t`, use only rows with `timestamp <= t`. No restated fundamentals, revised index membership, or full-sample stats.
 4. **Honest universe** — Backtest the tradable set that existed at `t`, including names later delisted or failed.
 5. **Realistic friction** — Default to commissions, spread/slippage, and borrow/short constraints; document if omitted.
@@ -18,7 +18,7 @@ Every simulation must answer: **what could this strategy have known and traded a
 
 ## Before merging simulation code, verify
 
-- [ ] No `.shift(-1)`, negative lags, or `bfill` used to build features or labels
+- [ ] No `.shift(-1)`, negative lags, or `bfill` used to build **features or signals** (labels may use `shift(-n)` in dedicated target columns only)
 - [ ] Scalers, imputers, and feature selection fit **only** on the train fold
 - [ ] Labels do not leak future returns into features at the same timestamp
 - [ ] Walk-forward or purged CV for any hyperparameter search (not one in-sample optimum)

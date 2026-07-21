@@ -2,8 +2,9 @@
 description: Prevent overfitting, data snooping, and leaky validation in research
 globs:
   - "02_research/**"
-  - "models/**/*.py"
-  - "backtest/**/*.py"
+  - "03_models/**/*.py"
+  - "04_backtest/**/*.py"
+  - "01_data/data_files/s1_equities/*.ipynb"
 alwaysApply: false
 ---
 
@@ -15,6 +16,9 @@ Good in-sample metrics are not evidence until validated without reuse of the tes
 
 - **One hypothesis, one primary test** — Log in `02_research/hypothesis_log.md` before heavy iteration. Note how many variants were tried.
 - **Holdout** — Reserve a final OOS period (or paper-trading window) never used for tuning, feature selection, or kill/keep decisions until the end.
+- **S1 equities panel artifacts** — `s1_factor_panel.ipynb` writes two parquets controlled by `RESEARCH_IS_FRACTION` (default `0.70`):
+  - `s1_factor_panel_train.parquet` — chronological train / research IS (first fraction of unique trading dates). Use this for factor IC / Alphalens screens. Do **not** re-split it.
+  - `s1_factor_panel_full.parquet` — full sample (census). Reserved for later model OOS / backtests; do **not** use it to pick windows or freeze `feature_spec`.
 - **Walk-forward** — Retrain and re-tune on rolling train windows; measure on the subsequent out-of-sample window.
 - **Purged / embargoed CV** — When labels overlap in time (e.g. 5-day forward return), purge training rows whose label window overlaps test, and add an embargo gap.
 - **No peeking at OOS** — If OOS degrades, do not tweak and re-test on the same OOS; fix on train/validation only or wait for new data.
@@ -28,4 +32,4 @@ Good in-sample metrics are not evidence until validated without reuse of the tes
 
 ## Red flags
 
-Single global `GridSearchCV` on all history, test set reused across notebook reruns, "we dropped 2020" without PIT reason, Sharpe > 3 with no OOS.
+Single global `GridSearchCV` on all history, test set reused across notebook reruns, "we dropped 2020" without PIT reason, Sharpe > 3 with no OOS, re-fetching full history for factor IC when the train parquet already exists, screening windows on `s1_factor_panel_full.parquet`.

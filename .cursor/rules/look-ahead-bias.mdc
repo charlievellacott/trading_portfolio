@@ -2,9 +2,9 @@
 description: Prevent look-ahead bias in features, signals, and backtests
 globs:
   - "01_data/**/*.py"
-  - "03_strategies/**/*.py"
-  - "backtest/**/*.py"
-  - "models/**/*.py"
+  - "03_models/**/*.py"
+  - "04_backtest/**/*.py"
+  - "05_strategies/**/*.py"
   - "02_research/**/*.py"
   - "02_research/**/*.ipynb"
 alwaysApply: false
@@ -18,16 +18,16 @@ Forward-looking values are allowed **only** as isolated **labels / prediction ta
 
 ## Decision timeline (default)
 
-Align every row to one decision timestamp `t` (bar close):
+Align every row to one decision timestamp `t` (bar close). Matches [backtest-integrity](.cursor/rules/backtest-integrity.mdc):
 
 | Role | Timestamp | Meaning |
 |------|-----------|---------|
 | Features & signal | `t` | Known at or before close `t` |
-| Decision | `t` | Enter / exit choice made at close `t` |
-| Fill | `t` | Entry executes at close `t` (not `t+1`) |
-| Label (train/eval only) | `t → t+1` | Outcome you are predicting (e.g. next close) |
+| Decision | `t` | Enter / exit choice made after the close of `t` |
+| Fill | `t` | Entry executes at close `t` (same bar as the decision) |
+| Label (train/eval only) | `t → t+1` | Outcome you are predicting (e.g. next close / next-bar return) |
 
-Row `t` therefore answers: *given everything known at close `t`, should we enter now, usually to capture what happens over `t+1`?*
+Row `t` therefore answers: *given everything known at close `t`, should we enter now to capture what happens over `t+1`?*
 
 ## Rules
 

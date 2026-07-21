@@ -23,6 +23,8 @@ Before writing new fetch, feature, clean, or broker logic, **search the codebase
 | Factor / indicator math | `data.processing.feature_implementation.*` (e.g. `obv_momentum`) |
 | Attach a registered factor to a long panel | `data.processing.feature_store` entrypoints (e.g. `add_obv_confirmed_momentum`) |
 | Panel cleaning / winsorize / ffill | `data.processing.cleaner` |
+| S1 equities factor-test panel (train / research IS) | `01_data/data_files/s1_equities/s1_factor_panel_train.parquet` (built by `s1_factor_panel.ipynb`) |
+| S1 equities full census panel | `01_data/data_files/s1_equities/s1_factor_panel_full.parquet` |
 
 Other asset fetchers live under `data.ingestion` (`fx_fetcher`, `crypto_fetcher`, `commodity_fetcher`) — extend those files rather than calling raw vendor APIs from notebooks or strategies.
 
