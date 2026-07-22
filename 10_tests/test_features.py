@@ -937,51 +937,67 @@ def test_drop_beta_workspace() -> None:
     assert not any(c.startswith("_ws_") for c in cleaned.columns)
 
 
-# --- FF fetcher schema (monkeypatched) ---
+# --- FF fetcher schema (ETF Tier A, monkeypatched) ---
 
 def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> None:
-    import data.ingestion.fama_french_fetcher as ff_mod
+    import data.ingestion.alternative_data.fama_french_fetcher as ff_impl
+    import data.ingestion.fama_french_fetcher as ff_shim
 
-    mock_ff3_csv = (
-        "Some banner\n"
-        ",Mkt-RF,SMB,HML,RF\n"
-        "20230102,  0.50, -0.10,  0.20, 0.01\n"
-        "20230103,  -0.30,  0.05, -0.10, 0.01\n"
-        "\n"
-        "Annual section\n"
-    )
-    mock_mom_csv = (
-        "Banner\n"
-        ",Mom\n"
-        "20230102,  0.80\n"
-        "20230103,  -0.40\n"
-    )
+    # Two dates of closes per ETF → one simple-return row after dropna
+    closes = {
+        "SPY": (100.0, 101.0),
+        "IWM": (50.0, 50.5),
+        "IWD": (80.0, 80.8),
+        "IWF": (90.0, 90.45),
+        "MTUM": (70.0, 71.4),
+        "BIL": (100.0, 100.02),
+    }
+    dates = [pd.Timestamp("2023-01-02"), pd.Timestamp("2023-01-03")]
+    call_count = {"n": 0}
 
-    call_count = {"ff3": 0, "mom": 0}
+    def mock_fetch_ohlcv(ticker, start_date, end_date=None, *, cache_dir=None):
+        call_count["n"] += 1
+        c0, c1 = closes[ticker.strip().upper()]
+        return pd.DataFrame(
+            {
+                "date": dates,
+                "ticker": ticker.strip().upper(),
+                "open": [c0, c1],
+                "high": [c0, c1],
+                "low": [c0, c1],
+                "close": [c0, c1],
+                "volume": [1_000_000, 1_000_000],
+            }
+        )
 
-    def mock_download(url: str) -> str:
-        if "Research_Data" in url:
-            call_count["ff3"] += 1
-            return mock_ff3_csv
-        else:
-            call_count["mom"] += 1
-            return mock_mom_csv
-
-    monkeypatch.setattr(ff_mod, "_download_zip_csv", mock_download)
+    monkeypatch.setattr(ff_impl, "fetch_ohlcv", mock_fetch_ohlcv)
 
     import tempfile
     cache_dir = tempfile.mkdtemp()
-    result = ff_mod.fetch_ff_factors_daily(cache_dir=cache_dir)
+    # Call via compatibility shim (old import path)
+    result = ff_shim.fetch_ff_factors_daily(cache_dir=cache_dir)
     assert set(result.columns) == {"date", "mkt_rf", "smb", "hml", "rf", "mom"}
-    assert len(result) == 2
-    assert result["mkt_rf"].iloc[0] == pytest.approx(0.005)
-    assert result["smb"].iloc[0] == pytest.approx(-0.001)
-    assert result["mom"].iloc[0] == pytest.approx(0.008)
-    assert result["rf"].iloc[0] == pytest.approx(0.0001)
+    assert len(result) == 1
+
+    spy_r = 101.0 / 100.0 - 1.0
+    iwm_r = 50.5 / 50.0 - 1.0
+    iwd_r = 80.8 / 80.0 - 1.0
+    iwf_r = 90.45 / 90.0 - 1.0
+    mtum_r = 71.4 / 70.0 - 1.0
+    bil_r = 100.02 / 100.0 - 1.0
+
+    assert result["rf"].iloc[0] == pytest.approx(bil_r)
+    assert result["mkt_rf"].iloc[0] == pytest.approx(spy_r - bil_r)
+    assert result["smb"].iloc[0] == pytest.approx(iwm_r - spy_r)
+    assert result["hml"].iloc[0] == pytest.approx(iwd_r - iwf_r)
+    assert result["mom"].iloc[0] == pytest.approx(mtum_r - spy_r)
     assert result["date"].is_monotonic_increasing
 
+    n_after_build = call_count["n"]
+    assert n_after_build == 6  # one fetch_ohlcv per ETF
+
     # Second call hits cache
-    result2 = ff_mod.fetch_ff_factors_daily(cache_dir=cache_dir)
-    assert call_count["ff3"] == 1
-    assert len(result2) == 2
+    result2 = ff_shim.fetch_ff_factors_daily(cache_dir=cache_dir)
+    assert call_count["n"] == n_after_build
+    assert len(result2) == 1
 

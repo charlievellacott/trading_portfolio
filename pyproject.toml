@@ -31,6 +31,7 @@ performance = "09_performance"
 packages = [
   "data",
   "data.ingestion",
+  "data.ingestion.alternative_data",
   "data.processing",
   "data.processing.feature_implementation",
   "models",

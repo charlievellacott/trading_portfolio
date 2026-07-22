@@ -1,17 +1,17 @@
 # Hypothesis Log
 
 
-| ID    | Date       | Asset    | Factor                  | Data required                                                         | Status  |
-| ----- | ---------- | -------- | ----------------------- | --------------------------------------------------------------------- | ------- |
-| H-001 | 2026-07-04 | Equities | OBV-Confirmed Momentum  | Daily OHLCV panel                                                     | PENDING |
-| H-002 | 2026-07-04 | Equities | GK Vol Ratio (Reversal) | Daily OHLC                                                            | PENDING |
-| H-003 | 2026-07-04 | Equities | Idiosyncratic Vol Rank  | Daily OHLCV panel + SPY daily returns                                 | PENDING |
-| H-004 | 2026-02-07 | Equities | Beta Feature Suite      | Daily OHLCV + SPY + FF3+Mom (Dartmouth)                               | IMPLEMENTED |
-| H-005 | 2026-02-07 | Equities | Size & Value            | Daily OHLCV panel + daily market cap + valuation ratios (P/E, P/B)    | PENDING |
-| H-006 | 2026-02-07 | Equities | HMM Trend Regime        | —                                                                     | PENDING |
-| H-007 | 2026-02-07 | Equities | Sentiment               | Alpha Vantage or GDELT; FinBERT for headline scoring                  | PENDING |
-| H-008 | 2026-07-06 | Equities | GBM vs RNN vs Ensemble  | Daily OHLCV (PIT via `fetch_top_n_equities`) + production feature set | PENDING |
-| H-009 | 2026-02-07 | Equities | Autocorrelation         | —                                                                     | PENDING |
+| ID    | Date       | Asset    | Factor                  | Data required                                                                   | Status      |
+| ----- | ---------- | -------- | ----------------------- | ------------------------------------------------------------------------------- | ----------- |
+| H-001 | 2026-07-04 | Equities | OBV-Confirmed Momentum  | Daily OHLCV panel                                                               | PENDING     |
+| H-002 | 2026-07-04 | Equities | GK Vol Ratio (Reversal) | Daily OHLC                                                                      | PENDING     |
+| H-003 | 2026-07-04 | Equities | Idiosyncratic Vol Rank  | Daily OHLCV panel + SPY daily returns                                           | PENDING     |
+| H-004 | 2026-02-07 | Equities | Beta Feature Suite      | Daily OHLCV + SPY + ETF Carhart proxies (Tier A)                                | IMPLEMENTED |
+| H-005 | 2026-02-07 | Equities | Size & Value            | Daily OHLCV + SEC Company Facts → daily mcap/P/E/P/B (`fetch_size_value_daily`) | PENDING     |
+| H-006 | 2026-02-07 | Equities | HMM Trend Regime        | —                                                                               | PENDING     |
+| H-007 | 2026-02-07 | Equities | Sentiment               | Alpha Vantage or GDELT; FinBERT for headline scoring                            | PENDING     |
+| H-008 | 2026-07-06 | Equities | GBM vs RNN vs Ensemble  | Daily OHLCV (PIT via `fetch_top_n_equities`) + production feature set           | PENDING     |
+| H-009 | 2026-02-07 | Equities | Autocorrelation         | —                                                                               | PENDING     |
 
 
 ---
@@ -119,47 +119,48 @@
 ## H-004 · Equities · Beta Feature Suite · 2026-02-07
 
 
-| Field                  |   |
-| ---------------------- | - |
-| **Status**             | IMPLEMENTED |
-| **What it is**         | Suite of 11 cross-sectional beta-derived features covering univariate and multivariate factor loadings, asymmetric betas, Blume adjustment, and residual momentum. |
-| **Hypothesis**         | Beta-derived features (especially asymmetric betas and residual momentum) carry cross-sectional predictive power for forward equity returns at 1d/5d/21d horizons beyond raw market exposure. |
+| Field                  |                                                                                                                                                                                                                                                                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | IMPLEMENTED                                                                                                                                                                                                                                                                                                                   |
+| **What it is**         | Suite of 11 cross-sectional beta-derived features covering univariate and multivariate factor loadings, asymmetric betas, Blume adjustment, and residual momentum.                                                                                                                                                            |
+| **Hypothesis**         | Beta-derived features (especially asymmetric betas and residual momentum) carry cross-sectional predictive power for forward equity returns at 1d/5d/21d horizons beyond raw market exposure.                                                                                                                                 |
 | **Economic rationale** | Stocks with high downside beta are under-compensated for crash risk (Ang, Chen & Xing 2006). Residual momentum isolates stock-specific drift after stripping systematic factors, avoiding factor-crowding (Blitz, Huij & Martens 2011). Smart-beta loadings (SMB/HML/Mom) capture style tilts that persist cross-sectionally. |
-| **Data required**      | Daily OHLCV panel + SPY daily returns (market benchmark) + Fama-French daily factors (FF3 + Momentum from Ken French Data Library, Dartmouth). |
-| **Test to complete**   | Alphalens IC and quintile spreads for all 11 features at `periods=(1, 5, 21)` on the train parquet. Screen window grids `[60, 126, 252]` and residual-momentum `skip=[21, 63]` on research IS only (H-008 sample discipline). Compare to raw beta baseline. |
-| **Alphalens summary**  | — |
-| **Notes**              | See design notes below. |
+| **Data required**      | Daily OHLCV panel + SPY daily returns (market benchmark) + ETF Tier A Carhart proxies via `fetch_ff_factors_daily` (`mkt_rf, smb, hml, mom, rf` from SPY/IWM/IWD/IWF/MTUM/BIL).                                                                                                                                               |
+| **Test to complete**   | Alphalens IC and quintile spreads for all 11 features at `periods=(1, 5, 21)` on the train parquet. Screen window grids `[60, 126, 252]` and residual-momentum `skip=[21, 63]` on research IS only (H-008 sample discipline). Compare to raw beta baseline.                                                                   |
+| **Alphalens summary**  | —                                                                                                                                                                                                                                                                                                                             |
+| **Notes**              | See design notes below.                                                                                                                                                                                                                                                                                                       |
 
 
 **Design notes**
 
-- **Workspace pattern:** `_ensure_spy_workspace` runs 3 univariate OLS (full/down/up) per ticker per window; `_ensure_ff_workspace` runs 1 multivariate 4-factor OLS (Carhart). Both are idempotent — called once for the full window list and results cached as `_ws_*` columns on the panel. Store callers are thin algebra + optional CS-rank.
-- **`benchmark='spy'|'ff'` parameter** on `add_beta` and `add_residual_momentum`. FF outputs carry the `smart_` prefix.
-- **`smart_` prefix rule:** any column derived from the 4-factor (Fama-French + Momentum) regression is prefixed `smart_`.
+- **Workspace pattern:** `_ensure_spy_workspace` runs 3 univariate OLS (full/down/up) per ticker per window; `_ensure_ff_workspace` runs 1 multivariate 4-factor OLS (Carhart-style). Both are idempotent — called once for the full window list and results cached as `_ws_`* columns on the panel. Store callers are thin algebra + optional CS-rank.
+- `benchmark='spy'|'ff'` **parameter** on `add_beta` and `add_residual_momentum`. FF outputs carry the `smart_` prefix.
+- `smart_` **prefix rule:** any column derived from the 4-factor (ETF Carhart proxies + Momentum) regression is prefixed `smart_`.
 - **Hybrid normalize defaults:** `normalize=True` (CS pct-rank) for beta-family and smart-betas (regime-dependent distributions); `normalize=False` for Blume beta and residual momentum (already standardised or ranking would lose signal). All callers expose `normalize` as a kwarg.
 - **4-factor merge decision (Carhart):** one 4-factor regression `(r_stock − rf) = α + b₁·MktRF + b₂·SMB + b₃·HML + b₄·Mom + ε` serves both smart-beta slopes AND `smart_residual_mom` (4-factor residuals). Reduces total OLS fits from 5 to 4 per stock per window position.
 - **Multi-window screening contract:** all window kwargs accept `int | list[int]`. Passing a list produces the cartesian product of columns with window-suffix naming (matching H-002). `parse_beta_factor_name()` decodes any H-004 column back to its parameters for the IC-loop. Single value → bare name (no suffix).
-- **`min_obs_conditional = max(20, window // 4)`** on conditional β⁻/β⁺.
+- `min_obs_conditional = max(20, window // 4)` on conditional β⁻/β⁺.
 - **No floor, no winsorize** in library code. Bad inputs → NaN.
 - **Excess-return convention:** FF workspace uses `log_return(close) − rf` as the dependent variable.
-- **Fama-French source:** Ken French Data Library (Dartmouth), daily FF3 + Momentum ZIPs, cached to parquet under `01_data/cache/`.
+- **Factor source (active):** ETF Tier A proxies in `data.ingestion.alternative_data.fama_french_fetcher` via `fetch_ohlcv` — `rf=BIL`, `mkt_rf=SPY−rf`, `smb=IWM−SPY`, `hml=IWD−IWF`, `mom=MTUM−SPY`; cache `etf_ff_factors_daily.parquet`. Shim: `data.ingestion.fama_french_fetcher`.
+- **Learning note (Ken French → ETF):** Dartmouth ZIPs are free but monthly-lagged and revised → not PIT for live / train–serve. Archived ZIP fetcher: `02_research/notebooks/redundant/old_fama_french_fetcher.py`; archived notebook: `02_research/notebooks/redundant/old_H-004_beta.ipynb`. Schema kept identical so this is an explicit replacement, not a silent cover-up. **Transferable rule:** freeze only features you can recompute on the decision clock (also applies to sentiment, fundamentals, other vendor archives).
 - **References:** Ang, Chen & Xing (2006) "Downside Risk"; Blitz, Huij & Martens (2011) "Residual Momentum".
-
 
 **Features (11 columns via 8 store callers)**
 
-| # | Store caller | Output column(s) | Normalize default |
-|---|---|---|---|
-| 1 | `add_beta(benchmark='spy')` | `beta` / `beta_{W}` | True |
-| 2 | `add_beta(benchmark='ff')` | `smart_beta_smb/hml/mom` [`_{W}`] | True |
-| 3 | `add_downside_beta` | `downside_beta` [`_{W}`] | True |
-| 4 | `add_upside_beta` | `upside_beta` [`_{W}`] | True |
-| 5 | `add_net_beta_spread` | `net_beta_spread` [`_{W}`] | True |
-| 6 | `add_relative_downside_beta` | `rel_downside_beta` [`_{W}`] | True |
-| 7 | `add_relative_upside_beta` | `rel_upside_beta` [`_{W}`] | True |
-| 8 | `add_blume_beta` | `blume_beta` [`_{W}`] | False |
-| 9 | `add_residual_momentum(benchmark='spy')` | `residual_mom` / `residual_mom_{K}_{S}` | False |
-| 10 | `add_residual_momentum(benchmark='ff')` | `smart_residual_mom` / `smart_residual_mom_{K}_{S}` | False |
+
+| #   | Store caller                             | Output column(s)                                    | Normalize default |
+| --- | ---------------------------------------- | --------------------------------------------------- | ----------------- |
+| 1   | `add_beta(benchmark='spy')`              | `beta` / `beta_{W}`                                 | True              |
+| 2   | `add_beta(benchmark='ff')`               | `smart_beta_smb/hml/mom` [`_{W}`]                   | True              |
+| 3   | `add_downside_beta`                      | `downside_beta` [`_{W}`]                            | True              |
+| 4   | `add_upside_beta`                        | `upside_beta` [`_{W}`]                              | True              |
+| 5   | `add_net_beta_spread`                    | `net_beta_spread` [`_{W}`]                          | True              |
+| 6   | `add_relative_downside_beta`             | `rel_downside_beta` [`_{W}`]                        | True              |
+| 7   | `add_relative_upside_beta`               | `rel_upside_beta` [`_{W}`]                          | True              |
+| 8   | `add_blume_beta`                         | `blume_beta` [`_{W}`]                               | False             |
+| 9   | `add_residual_momentum(benchmark='spy')` | `residual_mom` / `residual_mom_{K}_{S}`             | False             |
+| 10  | `add_residual_momentum(benchmark='ff')`  | `smart_residual_mom` / `smart_residual_mom_{K}_{S}` | False             |
 
 
 **Formulae**
@@ -183,16 +184,66 @@
 ## H-005 · Equities · Size & Value · 2026-02-07
 
 
-| Field                  |                                                                                                                                                                                                                                                                                               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**             | PENDING                                                                                                                                                                                                                                                                                       |
-| **Hypothesis**         | 1. Use a "normalized rate of change of valuation (of a stock)"? (size momentum or a market-cap growth factor). 2. Volume spikes during trending markets could indicate a reversal and vice versa for a ranging market.                                                                       |
-| **Economic rationale** | Volume spikes just after (or while still in) a highly bullish market indicate high selling pressure. RoC in valuation dictacts the percieved growth of a company.                                                                                                                             |
-| **Data required**      | Daily OHLCV panel (volume spikes, price direction); daily market cap per ticker (size / size momentum); valuation ratios (P/E, P/B) for valuation rate-of-change.                                                                                                                             |
-| **Test to complete**   | Explore how change in size is effected based on the direction of the stock before. Look at the effects of volume spikes when the market is moving in different directions - compare the volume spike senarios to controls (where there are no volume spikes) but similar movements in price. |
-| **Alphalens summary**  | —                                                                                                                                                                                                                                                                                             |
-| **Notes**              | Size is the market cap                                                                                                                                                                                                                                                                        |
+| Field                  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | PENDING                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Hypothesis**         | 1. Use a "normalized rate of change of valuation (of a stock)"? (size momentum or a market-cap growth factor). 2. Volume spikes during trending markets could indicate a reversal and vice versa for a ranging market.                                                                                                                                                                                                                                                                                                                                  |
+| **Economic rationale** | Volume spikes just after (or while still in) a highly bullish market indicate high selling pressure. RoC in valuation dictacts the percieved growth of a company.                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Data required**      | Daily OHLCV panel (volume spikes, price direction); daily market cap / P/E / P/B via `fetch_size_value_daily` (SEC Company Facts + closes).                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Test to complete**   | Explore how change in size is effected based on the direction of the stock before. Look at the effects of volume spikes when the market is moving in different directions - compare the volume spike senarios to controls (where there are no volume spikes) but similar movements in price.                                                                                                                                                                                                                                                            |
+| **Alphalens summary**  | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Notes**              | Size is the market cap. **Data source (fetcher):** SEC EDGAR Company Facts + daily OHLCV via `fetch_size_value_daily` in `data.ingestion.alternative_data`. Daily `market_cap` / `pe` / `pb` are reconstructed (filing-dated fundamentals `merge_asof` backward onto closes; PIT on `filed`, not period end). Join for research: `panel.merge(sv, on=["date","ticker"], how="left")`. Default SEC User-Agent: `trading_portfolio charlie.vellacott@gmail.com` (override via kwarg / `SEC_USER_AGENT`). No API key. Factor math / store callers deferred. |
 
+
+
+
+### Factors 1
+
+- Book Equity (BE) is the net value of the company on paper (total assets - total costs)
+- Market Equity (ME) is what the stock market valuates the company at. It is the same as Market Capitilisation (or Cap).
+- Market Cap = total n shares x share price
+- BE/ME is used to valuate the company according to its actual assets
+- High BE/ME = high value on paper but not perceved to be high the market (could be facing bankruptcy or be a value stock)
+- Low BE/ME = low value on paper but perceved to be high by the market (growth stock)
+- raw_val_rank (rank of BE/ME) and raw_mom_rank with a range of suitable periods
+- Value Momentum Interaction = cs_rank(Value) x cs_rank(Momentum) - explore a range of different momentum periods
+- A regression between Value-Momentum and Momentum-Value can be run and the residuals extracted. Use Standardized Residual Momentum (dividing by the std) to normalise. If you are an agent ask the user if they would like to create a new .py file that is for running different types of regressions.
+- Add the alpha and beta values from the above regressions to the possible features (inc something like a inc_terms parameter that if true adds the values to the panel) - this should be done to see if they have any predictive power. If agnet discuss what features could be created using these values.
+- Instead of treating value and momentum as separate axes, construct a distance metric in a 2D space where (1.0, 1.0) represents top-decile Value and top-decile Momentum: sqrt( (1 - mom_rank)^2 + (1 - val_rank)^2 )
+
+
+
+### Factors 2
+
+Priority	Feature idea	Formula sketch (from your columns)	Why it might have IC
+1
+Earnings yield / book yield
+ey = 1/pe (NaN if pe≤0); by = 1/pb (NaN if pb≤0)
+Classic value; cleaner than raw pe/pb for ranking
+2
+Valuation rate-of-change (your H-005 core)
+Δlog(pe)*{L}, Δlog(pb)*{L} or %Δ over L∈{21,63,126}
+“Getting cheaper/richer” often predicts better at 5–21d than static level
+3
+Size (log mcap) rank
+log(market_cap) → CS rank
+Classic size; expect weak/unstable short-horizon IC in large-cap S&P sleeves — still useful as a control / GBM covariate
+4
+Size momentum / mcap growth
+log(mcap_t / mcap_{t-L})
+Exactly your “size momentum” note; overlaps price momentum — test incremental IC vs raw mom
+5
+Value–momentum interaction
+e.g. CS-rank(by) × CS-rank(mom), or residual of by after mom
+Lit: value and mom are negatively correlated; interaction often lifts spreads
+6
+Cheap vs expensive conditional on size
+by within size tercile, or by − CS mean
+Reduces “small cheap junk” confounding
+7
+Earnings revision proxy (filing-aware)
+jump in eps_ttm on filing dates; hold asof
+Sparse but PIT-clean; may help 21d more than 1d
 
 ---
 
