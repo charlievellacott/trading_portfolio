@@ -5,32 +5,20 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from data.processing.feature_implementation.momentum import raw_momentum
+from data.processing.feature_implementation.utilities import (
+    _require_columns,
+    _restore_order,
+    _sorted_by_ticker_date,
+    cross_sectional_pct_rank,
+)
+
 VALID_MODES = frozenset({"signed", "strict_zero", "soft"})
 DEFAULT_LOOKBACK = 252
 DEFAULT_SKIP = 21
 DEFAULT_OBV_WINDOW = 20
 
 _REQUIRED_OHLCV = frozenset({"date", "ticker", "close", "volume"})
-
-
-def raw_momentum(
-    close: pd.Series,
-    lookback: int = DEFAULT_LOOKBACK,
-    skip: int = DEFAULT_SKIP,
-) -> pd.Series:
-    """
-    Skip-month style momentum: ``close.shift(skip) / close.shift(lookback) - 1``.
-
-    ``lookback`` (L) is how far back the start price is; ``skip`` (S) is how far
-    back the end price is. Requires ``lookback > skip >= 0``.
-    """
-    if lookback < 1:
-        raise ValueError("lookback must be >= 1")
-    if skip < 0:
-        raise ValueError("skip must be >= 0")
-    if lookback <= skip:
-        raise ValueError("lookback must be greater than skip")
-    return close.shift(skip) / close.shift(lookback) - 1.0
 
 
 def on_balance_volume(close: pd.Series, volume: pd.Series) -> pd.Series:
@@ -43,7 +31,6 @@ def on_balance_volume(close: pd.Series, volume: pd.Series) -> pd.Series:
     signed = np.sign(delta.to_numpy(dtype=float))
     signed = np.where(np.isnan(signed), np.nan, signed)
     contribution = pd.Series(signed, index=close.index, dtype=float) * volume.astype(float)
-    # First bar has no prior close — start OBV at 0 after a NaN first contribution.
     contribution = contribution.fillna(0.0)
     return contribution.cumsum()
 
@@ -108,62 +95,12 @@ def combine_momentum_obv(
     return combined.where(mom.notna() & obv_tr.notna())
 
 
-def cross_sectional_pct_rank(
-    panel: pd.DataFrame,
-    col: str,
-    *,
-    by: str = "date",
-) -> pd.Series:
-    """Percentile rank of ``col`` within each ``by`` group, values in [0, 1]."""
-    if col not in panel.columns:
-        raise ValueError(f"panel missing column: {col!r}")
-    if by not in panel.columns:
-        raise ValueError(f"panel missing column: {by!r}")
-    return panel.groupby(by, sort=False)[col].rank(pct=True, method="average")
-
-
-def _require_columns(panel: pd.DataFrame, required: set[str]) -> None:
-    missing = required - set(panel.columns)
-    if missing:
-        raise ValueError(f"panel missing columns: {sorted(missing)}")
-
-
-def _sorted_by_ticker_date(panel: pd.DataFrame) -> pd.DataFrame:
-    return panel.sort_values(["ticker", "date"], kind="mergesort")
-
-
-def _restore_order(result: pd.DataFrame, original_index: pd.Index) -> pd.DataFrame:
-    return result.reindex(original_index)
-
-
 def _per_ticker_obv(close: pd.Series, volume: pd.Series, ticker: pd.Series) -> pd.Series:
     """Compute OBV within each ticker, preserving row alignment."""
     out = pd.Series(np.nan, index=close.index, dtype=float)
     for _, idx in ticker.groupby(ticker, sort=False).groups.items():
         out.loc[idx] = on_balance_volume(close.loc[idx], volume.loc[idx]).to_numpy()
     return out
-
-
-def add_raw_momentum(
-    panel: pd.DataFrame,
-    *,
-    lookback: int = DEFAULT_LOOKBACK,
-    skip: int = DEFAULT_SKIP,
-    col: str = "raw_momentum",
-) -> pd.DataFrame:
-    """Return a copy of ``panel`` with per-ticker raw momentum in ``col``."""
-    _require_columns(panel, {"date", "ticker", "close"})
-    if panel.empty:
-        out = panel.copy()
-        out[col] = pd.Series(dtype=float)
-        return out
-
-    original_index = panel.index
-    work = _sorted_by_ticker_date(panel.copy())
-    work[col] = work.groupby("ticker", sort=False)["close"].transform(
-        lambda s: raw_momentum(s, lookback=lookback, skip=skip)
-    )
-    return _restore_order(work, original_index)
 
 
 def add_obv(

@@ -136,7 +136,7 @@
 - **Workspace pattern:** `_ensure_spy_workspace` runs 3 univariate OLS (full/down/up) per ticker per window; `_ensure_ff_workspace` runs 1 multivariate 4-factor OLS (Carhart-style). Both are idempotent — called once for the full window list and results cached as `_ws_`* columns on the panel. Store callers are thin algebra + optional CS-rank.
 - `benchmark='spy'|'ff'` **parameter** on `add_beta` and `add_residual_momentum`. FF outputs carry the `smart_` prefix.
 - `smart_` **prefix rule:** any column derived from the 4-factor (ETF Carhart proxies + Momentum) regression is prefixed `smart_`.
-- **Hybrid normalize defaults:** `normalize=True` (CS pct-rank) for beta-family and smart-betas (regime-dependent distributions); `normalize=False` for Blume beta and residual momentum (already standardised or ranking would lose signal). All callers expose `normalize` as a kwarg.
+- **Normalize policy:** `normalize=True` (CS pct-rank) for beta-family and smart-betas (regime-dependent distributions). **No `normalize` kwarg** on `add_blume_beta` or `add_residual_momentum` — those outputs are never CS-ranked (Blume shrinkage / residual-momentum magnitude would be discarded).
 - **4-factor merge decision (Carhart):** one 4-factor regression `(r_stock − rf) = α + b₁·MktRF + b₂·SMB + b₃·HML + b₄·Mom + ε` serves both smart-beta slopes AND `smart_residual_mom` (4-factor residuals). Reduces total OLS fits from 5 to 4 per stock per window position.
 - **Multi-window screening contract:** all window kwargs accept `int | list[int]`. Passing a list produces the cartesian product of columns with window-suffix naming (matching H-002). `parse_beta_factor_name()` decodes any H-004 column back to its parameters for the IC-loop. Single value → bare name (no suffix).
 - `min_obs_conditional = max(20, window // 4)` on conditional β⁻/β⁺.
@@ -149,18 +149,18 @@
 **Features (11 columns via 8 store callers)**
 
 
-| #   | Store caller                             | Output column(s)                                    | Normalize default |
-| --- | ---------------------------------------- | --------------------------------------------------- | ----------------- |
-| 1   | `add_beta(benchmark='spy')`              | `beta` / `beta_{W}`                                 | True              |
-| 2   | `add_beta(benchmark='ff')`               | `smart_beta_smb/hml/mom` [`_{W}`]                   | True              |
-| 3   | `add_downside_beta`                      | `downside_beta` [`_{W}`]                            | True              |
-| 4   | `add_upside_beta`                        | `upside_beta` [`_{W}`]                              | True              |
-| 5   | `add_net_beta_spread`                    | `net_beta_spread` [`_{W}`]                          | True              |
-| 6   | `add_relative_downside_beta`             | `rel_downside_beta` [`_{W}`]                        | True              |
-| 7   | `add_relative_upside_beta`               | `rel_upside_beta` [`_{W}`]                          | True              |
-| 8   | `add_blume_beta`                         | `blume_beta` [`_{W}`]                               | False             |
-| 9   | `add_residual_momentum(benchmark='spy')` | `residual_mom` / `residual_mom_{K}_{S}`             | False             |
-| 10  | `add_residual_momentum(benchmark='ff')`  | `smart_residual_mom` / `smart_residual_mom_{K}_{S}` | False             |
+| #   | Store caller                             | Output column(s)                                    | Normalize |
+| --- | ---------------------------------------- | --------------------------------------------------- | --------- |
+| 1   | `add_beta(benchmark='spy')`              | `beta` / `beta_{W}`                                 | True (default) |
+| 2   | `add_beta(benchmark='ff')`               | `smart_beta_smb/hml/mom` [`_{W}`]                   | True (default) |
+| 3   | `add_downside_beta`                      | `downside_beta` [`_{W}`]                            | True (default) |
+| 4   | `add_upside_beta`                        | `upside_beta` [`_{W}`]                              | True (default) |
+| 5   | `add_net_beta_spread`                    | `net_beta_spread` [`_{W}`]                          | True (default) |
+| 6   | `add_relative_downside_beta`             | `rel_downside_beta` [`_{W}`]                        | True (default) |
+| 7   | `add_relative_upside_beta`               | `rel_upside_beta` [`_{W}`]                          | True (default) |
+| 8   | `add_blume_beta`                         | `blume_beta` [`_{W}`]                               | **none** (never CS-ranked) |
+| 9   | `add_residual_momentum(benchmark='spy')` | `residual_mom` / `residual_mom_{K}_{S}`             | **none** (never CS-ranked) |
+| 10  | `add_residual_momentum(benchmark='ff')`  | `smart_residual_mom` / `smart_residual_mom_{K}_{S}` | **none** (never CS-ranked) |
 
 
 **Formulae**
@@ -192,7 +192,7 @@
 | **Data required**      | Daily OHLCV panel (volume spikes, price direction); daily market cap / P/E / P/B via `fetch_size_value_daily` (SEC Company Facts + closes).                                                                                                                                                                                                                                                                                                                                                                                                              |
 | **Test to complete**   | Explore how change in size is effected based on the direction of the stock before. Look at the effects of volume spikes when the market is moving in different directions - compare the volume spike senarios to controls (where there are no volume spikes) but similar movements in price.                                                                                                                                                                                                                                                            |
 | **Alphalens summary**  | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Notes**              | Size is the market cap. **Data source (fetcher):** SEC EDGAR Company Facts + daily OHLCV via `fetch_size_value_daily` in `data.ingestion.alternative_data`. Daily `market_cap` / `pe` / `pb` are reconstructed (filing-dated fundamentals `merge_asof` backward onto closes; PIT on `filed`, not period end). Join for research: `panel.merge(sv, on=["date","ticker"], how="left")`. Default SEC User-Agent: `trading_portfolio charlie.vellacott@gmail.com` (override via kwarg / `SEC_USER_AGENT`). No API key. Factor math / store callers deferred. |
+| **Notes**              | Size is the market cap. **Data source (fetcher):** SEC EDGAR Company Facts + daily OHLCV via `fetch_size_value_daily` in `data.ingestion.alternative_data`. Daily `market_cap` / `pe` / `pb` are reconstructed (filing-dated fundamentals `merge_asof` backward onto closes; PIT on `filed`, not period end). Join for research: `panel.merge(sv, on=["date","ticker"], how="left")`. Default SEC User-Agent: `trading_portfolio charlie.vellacott@gmail.com` (override via kwarg / `SEC_USER_AGENT`). No API key. **Implemented features (store callers in `feature_store.py`):** `add_book_yield` → `book_yield` (1/pb); `add_earnings_yield` → `earnings_yield` (1/pe); `add_log_mcap` → `log_mcap` (log market cap); `add_valuation_roc` → `val_roc_{metric}` (Δlog over window L, metric='pe' or 'pb'); `add_size_momentum` → `size_mom` (log mcap RoC, multi-window via list); `add_value_momentum_interaction` → `val_mom_interact` (cs_rank(by) × cs_rank(mom)); `add_value_momentum_distance` → `val_mom_dist` (sqrt((1-mom_rank)^2 + (1-val_rank)^2), ideal=(1,1)); `add_value_momentum_residual` → `val_mom_resid` (standardised residual from rolling OLS of cs_rank(by) on cs_rank(mom)). **Normalization:** `normalize=True` (CS pct-rank) kept on `add_book_yield`, `add_earnings_yield`, `add_log_mcap` (level features). **No `normalize` kwarg** on `add_valuation_roc`, `add_size_momentum`, `add_value_momentum_interaction`, `add_value_momentum_distance`, `add_value_momentum_residual` — those outputs are never CS-ranked (already Δlog / rank-space / z-scored). **Edge cases:** no floor, no winsorize; pe/pb/mcap ≤ 0 → NaN. **Momentum input:** `raw_momentum` from `momentum.py` (lookback=252, skip=21 default). **Expectations:** Earnings yield / book yield are classic value — expect moderate IC. Valuation RoC ("getting cheaper/richer") often predicts better at 5-21d than static level. Size (log mcap) rank — expect weak/unstable short-horizon IC in large-cap S&P sleeves, but useful as GBM covariate. Size momentum overlaps price momentum — test incremental IC. Value-momentum interaction / distance / residual — lit shows value and momentum are negatively correlated; interaction often lifts IC spreads. **Issues:** SEC data sparse (quarterly filings only); fundamental-dependent features will have stale periods between filings; S&P 500 sleeve is large-cap biased reducing size-effect power. |
 
 
 

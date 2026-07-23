@@ -8,25 +8,29 @@ import re
 import numpy as np
 import pandas as pd
 
-from data.processing.feature_implementation.beta import (
-    blume_adjust,
-    log_return,
-    normalize_windows,
-    regression_column_name,
-    residual_momentum_signal,
+from data.processing.feature_implementation.linear_regression import (
     rolling_conditional_ols_stats,
     rolling_multi_ols_stats,
     rolling_ols_stats,
     rolling_residual,
-    windowed_column_name,
 )
-from data.processing.feature_implementation.obv_momentum import (
+from data.processing.feature_implementation.utilities import (
+    _require_columns,
+    _restore_order,
+    _sorted_by_ticker_date,
     cross_sectional_pct_rank,
+    log_return,
+    normalize_windows,
+    regression_column_name,
+    windowed_column_name,
 )
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+
+DEFAULT_BETA_WINDOW = 20
+_OLS_OUTPUT_COLUMNS = ("alpha", "beta", "r2", "idio_vol")
 
 _WS_PREFIX = "_ws_"
 
@@ -43,26 +47,174 @@ _DUAL_WINDOW_FEATURES = frozenset({
 })
 ALL_H004_FEATURES = _SINGLE_WINDOW_FEATURES | _DUAL_WINDOW_FEATURES
 
-# Sorted longest-stem-first for unambiguous prefix matching in the parser
 _ALL_STEMS_SORTED = sorted(ALL_H004_FEATURES, key=lambda s: -len(s))
 
 
 # ---------------------------------------------------------------------------
-# Helpers (same pattern as idiosyncratic_vol.py)
+# Beta-specific primitives (moved from beta.py)
 # ---------------------------------------------------------------------------
 
-def _require_columns(panel: pd.DataFrame, required: set[str] | frozenset[str]) -> None:
-    missing = required - set(panel.columns)
+
+def market_return_frame(
+    market_panel: pd.DataFrame,
+    *,
+    close_col: str = "close",
+    out_col: str = "market_log_ret",
+) -> pd.DataFrame:
+    """
+    Build ``date`` + market log-return column from a single-ticker OHLCV panel.
+
+    Parameters
+    ----------
+    market_panel:
+        Long-format frame with ``date`` and ``close`` (e.g. SPY from ``fetch_ohlcv``).
+    """
+    required = {"date", close_col}
+    missing = required - set(market_panel.columns)
     if missing:
-        raise ValueError(f"panel missing columns: {sorted(missing)}")
+        raise ValueError(f"market_panel missing columns: {sorted(missing)}")
+    if market_panel.empty:
+        return pd.DataFrame(columns=["date", out_col])
+
+    out = (
+        market_panel.sort_values("date")
+        .assign(**{out_col: lambda d: log_return(d[close_col])})
+        [["date", out_col]]
+        .reset_index(drop=True)
+    )
+    return out
 
 
-def _sorted_by_ticker_date(panel: pd.DataFrame) -> pd.DataFrame:
-    return panel.sort_values(["ticker", "date"], kind="mergesort")
+def blume_adjust(
+    beta: pd.Series,
+    *,
+    alpha: float = 0.67,
+    beta_prior: float = 1.0,
+) -> pd.Series:
+    """Blume-adjusted beta: ``alpha * beta + (1 - alpha) * beta_prior``."""
+    return alpha * beta.astype(float) + (1.0 - alpha) * beta_prior
 
 
-def _restore_order(result: pd.DataFrame, original_index: pd.Index) -> pd.DataFrame:
-    return result.reindex(original_index)
+def residual_momentum_signal(
+    residuals: pd.Series,
+    formation_window: int,
+    skip: int,
+) -> pd.Series:
+    """
+    Blitz residual-momentum signal: ``mean(e) / std(e)`` over the formation
+    window excluding the most recent ``skip`` bars.
+
+    For each bar ``t``, uses residuals from ``t - formation_window + 1`` to
+    ``t - skip`` (inclusive). Returns NaN when std == 0 or insufficient data.
+
+    Requires ``formation_window > skip >= 0``.
+    """
+    if formation_window < 1:
+        raise ValueError("formation_window must be >= 1")
+    if skip < 0:
+        raise ValueError("skip must be >= 0")
+    if formation_window <= skip:
+        raise ValueError("formation_window must be greater than skip")
+
+    usable_length = formation_window - skip
+    res = residuals.astype(float)
+    n = len(res)
+    out = np.full(n, np.nan)
+    arr = res.to_numpy()
+
+    for i in range(n):
+        start = i - formation_window + 1
+        end = i - skip + 1
+        if start < 0:
+            continue
+        window_vals = arr[start:end]
+        finite = window_vals[np.isfinite(window_vals)]
+        if len(finite) < usable_length:
+            continue
+        std = float(np.std(finite, ddof=1))
+        if std == 0.0:
+            continue
+        out[i] = float(np.mean(finite)) / std
+
+    return pd.Series(out, index=residuals.index, dtype=float)
+
+
+def add_rolling_beta(
+    panel: pd.DataFrame,
+    market_returns: pd.DataFrame,
+    *,
+    windows: int | list[int] | tuple[int, ...] = DEFAULT_BETA_WINDOW,
+    market_col: str = "market_log_ret",
+    include_r2: bool = True,
+) -> pd.DataFrame:
+    """
+    Attach rolling OLS alpha / beta / r2 to a long OHLCV panel.
+
+    Features at date ``t`` use stock and market log returns through the close of
+    ``t`` only. Column names are bare (``alpha``, ``beta``, ``r2``) when
+    ``len(windows)==1``; suffixed (``alpha_{w}``, ...) when multiple windows.
+
+    Parameters
+    ----------
+    panel:
+        Long-format frame with ``date``, ``ticker``, ``close``.
+    market_returns:
+        Frame with ``date`` and ``market_col`` (from ``market_return_frame``).
+    windows:
+        Single int or list of rolling window lengths.
+    market_col:
+        Column name in ``market_returns`` for benchmark log returns.
+    """
+    window_list = normalize_windows(windows)
+    multi_window = len(window_list) > 1
+
+    _require_columns(panel, _REQUIRED_PANEL)
+    if market_col not in market_returns.columns:
+        raise ValueError(f"market_returns missing column: {market_col!r}")
+    if "date" not in market_returns.columns:
+        raise ValueError("market_returns missing column: 'date'")
+
+    if panel.empty:
+        out = panel.copy()
+        metrics = ["alpha", "beta"]
+        if include_r2:
+            metrics.append("r2")
+        for window in window_list:
+            for metric in metrics:
+                out[regression_column_name(metric, window, multi_window=multi_window)] = (
+                    pd.Series(dtype=float)
+                )
+        return out
+
+    original_index = panel.index
+    work = _sorted_by_ticker_date(panel.copy())
+    work["log_ret"] = work.groupby("ticker", sort=False)["close"].transform(log_return)
+    work = work.merge(
+        market_returns[["date", market_col]],
+        on="date",
+        how="left",
+    )
+
+    for window in window_list:
+        alpha_col = regression_column_name("alpha", window, multi_window=multi_window)
+        beta_col = regression_column_name("beta", window, multi_window=multi_window)
+        r2_col = regression_column_name("r2", window, multi_window=multi_window)
+
+        work[alpha_col] = np.nan
+        work[beta_col] = np.nan
+        if include_r2:
+            work[r2_col] = np.nan
+
+        for _, grp in work.groupby("ticker", sort=False):
+            stats = rolling_ols_stats(grp["log_ret"], grp[market_col], window)
+            work.loc[grp.index, alpha_col] = stats["alpha"].to_numpy()
+            work.loc[grp.index, beta_col] = stats["beta"].to_numpy()
+            if include_r2:
+                work.loc[grp.index, r2_col] = stats["r2"].to_numpy()
+
+    drop_cols = ["log_ret", market_col]
+    result = work.drop(columns=[c for c in drop_cols if c in work.columns])
+    return _restore_order(result, original_index)
 
 
 # ---------------------------------------------------------------------------
@@ -297,13 +449,11 @@ def parse_beta_factor_name(col: str) -> dict | None:
     {'feature': 'beta', 'window': None}
     >>> parse_beta_factor_name("obv_mom_signed")  # not H-004
     """
-    # Exact match (single-window, no suffix)
     if col in _SINGLE_WINDOW_FEATURES:
         return {"feature": col, "window": None}
     if col in _DUAL_WINDOW_FEATURES:
         return {"feature": col, "K": None, "S": None}
 
-    # Try dual-window features first (longest stem match)
     for stem in sorted(_DUAL_WINDOW_FEATURES, key=lambda s: -len(s)):
         prefix = stem + "_"
         if col.startswith(prefix):
@@ -312,7 +462,6 @@ def parse_beta_factor_name(col: str) -> dict | None:
             if len(parts) == 2 and all(p.isdigit() for p in parts):
                 return {"feature": stem, "K": int(parts[0]), "S": int(parts[1])}
 
-    # Try single-window features (longest stem match)
     for stem in sorted(_SINGLE_WINDOW_FEATURES, key=lambda s: -len(s)):
         prefix = stem + "_"
         if col.startswith(prefix):

@@ -5,29 +5,19 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from data.processing.feature_implementation.beta import (
-    DEFAULT_BETA_WINDOW,
+from data.processing.feature_implementation.linear_regression import rolling_ols_stats
+from data.processing.feature_implementation.utilities import (
+    _require_columns,
+    _restore_order,
+    _sorted_by_ticker_date,
     log_return,
     normalize_windows,
     regression_column_name,
-    rolling_ols_stats,
 )
 
+DEFAULT_BETA_WINDOW = 20
+
 _REQUIRED_PANEL = frozenset({"date", "ticker", "close"})
-
-
-def _require_columns(panel: pd.DataFrame, required: set[str]) -> None:
-    missing = required - set(panel.columns)
-    if missing:
-        raise ValueError(f"panel missing columns: {sorted(missing)}")
-
-
-def _sorted_by_ticker_date(panel: pd.DataFrame) -> pd.DataFrame:
-    return panel.sort_values(["ticker", "date"], kind="mergesort")
-
-
-def _restore_order(result: pd.DataFrame, original_index: pd.Index) -> pd.DataFrame:
-    return result.reindex(original_index)
 
 
 def idiosyncratic_vol(
@@ -38,7 +28,7 @@ def idiosyncratic_vol(
     """
     Sample std (``ddof=1``) of in-window OLS residuals ``y ~ x``.
 
-    Uses the same rolling OLS as ``beta.rolling_ols_stats`` with
+    Uses the same rolling OLS as ``linear_regression.rolling_ols_stats`` with
     ``include_idio_vol=True``.
     """
     stats = rolling_ols_stats(y, x, window, include_idio_vol=True)

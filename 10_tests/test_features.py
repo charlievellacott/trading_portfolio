@@ -1,4 +1,4 @@
-"""Unit tests for H-001 OBV-confirmed momentum and H-002 GK vol ratio features."""
+"""Unit tests for feature-implementation modules and feature-store entrypoints."""
 
 from __future__ import annotations
 
@@ -23,13 +23,15 @@ from data.processing.feature_implementation.gk_vol_ratio import (
     ratio_from_vols,
     realised_vol,
 )
+from data.processing.feature_implementation.momentum import (
+    add_raw_momentum,
+    raw_momentum,
+)
 from data.processing.feature_implementation.obv_momentum import (
     add_obv,
     add_obv_trend,
-    add_raw_momentum,
     combine_momentum_obv,
     on_balance_volume,
-    raw_momentum,
     signs_agree,
 )
 from data.processing.feature_store import (
@@ -195,7 +197,7 @@ def test_invalid_mode_and_missing_columns() -> None:
 
 
 def test_obv_multi_window_column_names_and_parity() -> None:
-    from data.processing.feature_implementation.beta import windowed_column_name
+    from data.processing.feature_implementation.utilities import windowed_column_name
 
     assert windowed_column_name("obv_mom_signed", 5, 1, 3, multi=False) == "obv_mom_signed"
     assert (
@@ -391,7 +393,7 @@ def test_gk_multi_window_column_names_and_parity() -> None:
 
 
 def test_beta_rolling_ols_hand_check() -> None:
-    from data.processing.feature_implementation.beta import rolling_ols_stats
+    from data.processing.feature_implementation.linear_regression import rolling_ols_stats
 
     rng = np.random.default_rng(0)
     x = pd.Series(rng.normal(0, 0.01, 30))
@@ -407,11 +409,11 @@ def test_beta_rolling_ols_hand_check() -> None:
 
 
 def test_beta_column_naming_single_vs_multi_window() -> None:
-    from data.processing.feature_implementation.beta import (
+    from data.processing.feature_implementation.beta_features import (
         add_rolling_beta,
         market_return_frame,
-        regression_column_name,
     )
+    from data.processing.feature_implementation.utilities import regression_column_name
 
     assert regression_column_name("beta", 20, multi_window=False) == "beta"
     assert regression_column_name("beta", 20, multi_window=True) == "beta_20"
@@ -433,7 +435,8 @@ def test_beta_column_naming_single_vs_multi_window() -> None:
 
 
 def test_idiosyncratic_vol_uses_beta_ols() -> None:
-    from data.processing.feature_implementation.beta import market_return_frame, rolling_ols_stats
+    from data.processing.feature_implementation.beta_features import market_return_frame
+    from data.processing.feature_implementation.linear_regression import rolling_ols_stats
     from data.processing.feature_implementation.idiosyncratic_vol import add_idiosyncratic_vol
 
     panel = _make_panel(n_days=35, tickers=["AAA", "BBB"])
@@ -446,7 +449,7 @@ def test_idiosyncratic_vol_uses_beta_ols() -> None:
     assert "idio_vol_20" not in out.columns
 
     grp = out[out["ticker"] == "AAA"].sort_values("date")
-    from data.processing.feature_implementation.beta import log_return
+    from data.processing.feature_implementation.utilities import log_return
 
     stats = rolling_ols_stats(
         log_return(grp["close"]),
@@ -463,7 +466,7 @@ def test_idiosyncratic_vol_uses_beta_ols() -> None:
 
 
 def _idio_market_frame(panel: pd.DataFrame) -> pd.DataFrame:
-    from data.processing.feature_implementation.beta import market_return_frame
+    from data.processing.feature_implementation.beta_features import market_return_frame
 
     spy = panel[panel["ticker"] == panel["ticker"].iloc[0]][["date", "close"]].copy()
     spy["ticker"] = "SPY"
@@ -553,9 +556,11 @@ def test_idio_store_invalid_inputs() -> None:
 # H-004 beta features
 # ---------------------------------------------------------------------------
 
-from data.processing.feature_implementation.beta import (
+from data.processing.feature_implementation.beta_features import (
     blume_adjust,
     residual_momentum_signal,
+)
+from data.processing.feature_implementation.linear_regression import (
     rolling_conditional_ols_stats,
     rolling_multi_ols_stats,
     rolling_ols_stats,
@@ -605,7 +610,7 @@ def _make_beta_panel(n_days: int = 80, tickers: list[str] | None = None) -> pd.D
 
 
 def _make_market_returns(panel: pd.DataFrame) -> pd.DataFrame:
-    from data.processing.feature_implementation.beta import market_return_frame
+    from data.processing.feature_implementation.beta_features import market_return_frame
     spy = panel[panel["ticker"] == panel["ticker"].iloc[0]][["date", "close"]].copy()
     spy["ticker"] = "SPY"
     return market_return_frame(spy)
@@ -790,7 +795,7 @@ def test_blume_beta_identity() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
     result = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=False)
-    result = add_blume_beta(result, mkt, windows=30, normalize=False)
+    result = add_blume_beta(result, mkt, windows=30)
     both = result["blume_beta"].notna() & result["beta"].notna()
     np.testing.assert_allclose(
         result.loc[both, "blume_beta"].to_numpy(),
@@ -872,7 +877,6 @@ def test_residual_momentum_spy_columns() -> None:
     result = add_residual_momentum(
         panel, mkt, benchmark="spy",
         formation_window=[30, 40], skip=[5, 10],
-        normalize=False,
     )
     assert "residual_mom_30_5" in result.columns
     assert "residual_mom_30_10" in result.columns
@@ -882,7 +886,6 @@ def test_residual_momentum_spy_columns() -> None:
     single = add_residual_momentum(
         panel, mkt, benchmark="spy",
         formation_window=30, skip=5,
-        normalize=False,
     )
     assert "residual_mom" in single.columns
 
@@ -893,7 +896,6 @@ def test_residual_momentum_ff_columns() -> None:
     result = add_residual_momentum(
         panel, ff, benchmark="ff",
         formation_window=30, skip=5,
-        normalize=False,
     )
     assert "smart_residual_mom" in result.columns
 
@@ -1000,4 +1002,236 @@ def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> No
     result2 = ff_shim.fetch_ff_factors_daily(cache_dir=cache_dir)
     assert call_count["n"] == n_after_build
     assert len(result2) == 1
+
+
+# ---------------------------------------------------------------------------
+# H-005 Size & Value features
+# ---------------------------------------------------------------------------
+
+from data.processing.feature_implementation.size_and_valuation_features import (
+    book_yield,
+    earnings_yield,
+    log_market_cap,
+    size_momentum,
+    valuation_roc,
+    value_momentum_distance,
+)
+from data.processing.feature_store import (
+    add_book_yield,
+    add_earnings_yield,
+    add_log_mcap,
+    add_size_momentum,
+    add_valuation_roc,
+    add_value_momentum_distance,
+    add_value_momentum_interaction,
+    add_value_momentum_residual,
+)
+
+
+def _make_sv_panel(
+    n_days: int = 60,
+    tickers: list[str] | None = None,
+) -> pd.DataFrame:
+    """Synthetic panel with market_cap, pe, pb for H-005 tests."""
+    if tickers is None:
+        tickers = ["AAA", "BBB", "CCC"]
+    rng = np.random.default_rng(55)
+    dates = pd.bdate_range("2022-01-03", periods=n_days)
+    frames = []
+    for i, ticker in enumerate(tickers):
+        base = 100.0 + i * 20.0
+        returns = rng.normal(0.0005 * (i + 1), 0.012, n_days)
+        close = base * np.exp(np.cumsum(returns))
+        shares = 1e6 * (1 + i)
+        market_cap = close * shares
+        pe = 15.0 + rng.normal(0, 2, n_days)
+        pb = 2.0 + rng.normal(0, 0.3, n_days)
+        pe = np.clip(pe, 0.5, 50)
+        pb = np.clip(pb, 0.2, 10)
+        frames.append(
+            pd.DataFrame({
+                "date": dates,
+                "ticker": ticker,
+                "open": close * (1 - rng.uniform(0, 0.005, n_days)),
+                "high": close * (1 + rng.uniform(0.001, 0.01, n_days)),
+                "low": close * (1 - rng.uniform(0.001, 0.01, n_days)),
+                "close": close,
+                "volume": rng.uniform(1e5, 1e6, n_days),
+                "market_cap": market_cap,
+                "pe": pe,
+                "pb": pb,
+            })
+        )
+    return (
+        pd.concat(frames, ignore_index=True)
+        .sort_values(["date", "ticker"])
+        .reset_index(drop=True)
+    )
+
+
+def test_book_yield_hand_check() -> None:
+    pb = pd.Series([2.0, 0.5, -1.0, 0.0, 10.0])
+    by = book_yield(pb)
+    assert by.iloc[0] == pytest.approx(0.5)
+    assert by.iloc[1] == pytest.approx(2.0)
+    assert pd.isna(by.iloc[2])
+    assert pd.isna(by.iloc[3])
+    assert by.iloc[4] == pytest.approx(0.1)
+
+
+def test_earnings_yield_hand_check() -> None:
+    pe = pd.Series([20.0, 5.0, -2.0, 0.0])
+    ey = earnings_yield(pe)
+    assert ey.iloc[0] == pytest.approx(0.05)
+    assert ey.iloc[1] == pytest.approx(0.2)
+    assert pd.isna(ey.iloc[2])
+    assert pd.isna(ey.iloc[3])
+
+
+def test_log_market_cap_hand_check() -> None:
+    mcap = pd.Series([1e6, 1e9, -1.0, 0.0])
+    lm = log_market_cap(mcap)
+    assert lm.iloc[0] == pytest.approx(np.log(1e6))
+    assert lm.iloc[1] == pytest.approx(np.log(1e9))
+    assert pd.isna(lm.iloc[2])
+    assert pd.isna(lm.iloc[3])
+
+
+def test_valuation_roc_hand_check() -> None:
+    val = pd.Series([10.0, 12.0, 15.0, 18.0, 20.0])
+    roc = valuation_roc(val, window=2)
+    expected_at_2 = np.log(15.0) - np.log(10.0)
+    expected_at_4 = np.log(20.0) - np.log(15.0)
+    assert pd.isna(roc.iloc[0])
+    assert pd.isna(roc.iloc[1])
+    assert roc.iloc[2] == pytest.approx(expected_at_2)
+    assert roc.iloc[4] == pytest.approx(expected_at_4)
+
+
+def test_size_momentum_hand_check() -> None:
+    mcap = pd.Series([1e6, 1.1e6, 1.2e6, 1.05e6])
+    sm = size_momentum(mcap, window=2)
+    expected_at_2 = np.log(1.2e6 / 1e6)
+    expected_at_3 = np.log(1.05e6 / 1.1e6)
+    assert pd.isna(sm.iloc[0])
+    assert pd.isna(sm.iloc[1])
+    assert sm.iloc[2] == pytest.approx(expected_at_2)
+    assert sm.iloc[3] == pytest.approx(expected_at_3)
+
+
+def test_value_momentum_distance_geometry() -> None:
+    val_rank = pd.Series([1.0, 0.0, 0.5])
+    mom_rank = pd.Series([1.0, 0.0, 0.5])
+    dist = value_momentum_distance(val_rank, mom_rank)
+    assert dist.iloc[0] == pytest.approx(0.0)
+    assert dist.iloc[1] == pytest.approx(np.sqrt(2.0))
+    assert dist.iloc[2] == pytest.approx(np.sqrt(0.5))
+
+
+def test_sv_store_missing_columns() -> None:
+    panel = _make_panel(n_days=20)
+    with pytest.raises(ValueError, match="missing columns"):
+        add_book_yield(panel)
+    with pytest.raises(ValueError, match="missing columns"):
+        add_earnings_yield(panel)
+    with pytest.raises(ValueError, match="missing columns"):
+        add_log_mcap(panel)
+    with pytest.raises(ValueError, match="missing columns"):
+        add_size_momentum(panel)
+
+
+def test_sv_store_invalid_metric() -> None:
+    panel = _make_sv_panel(n_days=20)
+    with pytest.raises(ValueError, match="metric"):
+        add_valuation_roc(panel, metric="bad")
+
+
+def test_sv_store_normalize_bounds() -> None:
+    panel = _make_sv_panel(n_days=60)
+    by_out = add_book_yield(panel, normalize=True)
+    vals = by_out["book_yield"].dropna()
+    assert len(vals) > 0
+    assert vals.between(0.0, 1.0).all()
+
+    ey_out = add_earnings_yield(panel, normalize=True)
+    vals = ey_out["earnings_yield"].dropna()
+    assert len(vals) > 0
+    assert vals.between(0.0, 1.0).all()
+
+    lm_out = add_log_mcap(panel, normalize=True)
+    vals = lm_out["log_mcap"].dropna()
+    assert len(vals) > 0
+    assert vals.between(0.0, 1.0).all()
+
+
+def test_sv_valuation_roc_column_names() -> None:
+    panel = _make_sv_panel(n_days=60)
+    single = add_valuation_roc(panel, metric="pb", window=5)
+    assert "val_roc_pb" in single.columns
+    assert "val_roc_pb_5" not in single.columns
+
+    multi = add_valuation_roc(panel, metric="pb", window=[5, 10])
+    assert "val_roc_pb_5" in multi.columns
+    assert "val_roc_pb_10" in multi.columns
+    assert "val_roc_pb" not in multi.columns
+
+
+def test_sv_size_momentum_multi_window_parity() -> None:
+    panel = _make_sv_panel(n_days=60)
+    multi = add_size_momentum(panel, window=[5, 10])
+    single = add_size_momentum(panel, window=5)
+    both = multi["size_mom_5"].notna() & single["size_mom"].notna()
+    np.testing.assert_allclose(
+        multi.loc[both, "size_mom_5"].to_numpy(),
+        single.loc[both, "size_mom"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_sv_no_lookahead_prefix_stability() -> None:
+    panel = _make_sv_panel(n_days=60)
+    full = add_book_yield(panel, normalize=False)
+    cutoff = panel["date"].sort_values().unique()[-10]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    partial = add_book_yield(truncated, normalize=False)
+    merged = partial[["date", "ticker", "book_yield"]].merge(
+        full[["date", "ticker", "book_yield"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = merged["book_yield_partial"].notna() & merged["book_yield_full"].notna()
+    np.testing.assert_allclose(
+        merged.loc[both, "book_yield_partial"].to_numpy(),
+        merged.loc[both, "book_yield_full"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_sv_value_momentum_interaction_column() -> None:
+    panel = _make_sv_panel(n_days=60)
+    result = add_value_momentum_interaction(
+        panel, mom_lookback=5, mom_skip=1
+    )
+    assert "val_mom_interact" in result.columns
+    assert result["val_mom_interact"].notna().any()
+
+
+def test_sv_value_momentum_distance_column() -> None:
+    panel = _make_sv_panel(n_days=60)
+    result = add_value_momentum_distance(
+        panel, mom_lookback=5, mom_skip=1
+    )
+    assert "val_mom_dist" in result.columns
+    vals = result["val_mom_dist"].dropna()
+    assert len(vals) > 0
+    assert (vals >= 0).all()
+
+
+def test_sv_value_momentum_residual_orthogonality() -> None:
+    panel = _make_sv_panel(n_days=60)
+    result = add_value_momentum_residual(
+        panel, regression_window=20, mom_lookback=5, mom_skip=1
+    )
+    assert "val_mom_resid" in result.columns
+    assert result["val_mom_resid"].notna().any()
 

@@ -5,21 +5,17 @@ from __future__ import annotations
 import itertools
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 
-from data.processing.feature_implementation.beta import (
-    blume_adjust,
-    normalize_windows,
-    regression_column_name,
-    residual_momentum_signal,
-    windowed_column_name,
-)
 from data.processing.feature_implementation.beta_features import (
     _ensure_ff_workspace,
     _ensure_spy_workspace,
     _ws_col,
+    blume_adjust,
     drop_beta_workspace,
     parse_beta_factor_name,
+    residual_momentum_signal,
 )
 from data.processing.feature_implementation.gk_vol_ratio import (
     VALID_MODES as GK_VALID_MODES,
@@ -32,10 +28,27 @@ from data.processing.feature_implementation.idiosyncratic_vol import (
 from data.processing.feature_implementation.obv_momentum import (
     VALID_MODES,
     add_obv_confirmed_combined,
+)
+from data.processing.feature_implementation.size_and_valuation_features import (
+    add_book_yield as _add_book_yield_raw,
+    add_earnings_yield as _add_earnings_yield_raw,
+    add_log_market_cap as _add_log_mcap_raw,
+    add_size_momentum as _add_size_mom_raw,
+    add_valuation_roc as _add_val_roc_raw,
+    add_value_momentum_distance as _add_val_mom_dist_raw,
+    add_value_momentum_interaction as _add_val_mom_interact_raw,
+    add_value_momentum_residual as _add_val_mom_resid_raw,
+)
+from data.processing.feature_implementation.utilities import (
     cross_sectional_pct_rank,
+    normalize_windows,
+    regression_column_name,
+    windowed_column_name,
 )
 
 WindowSpec = int | list[int] | tuple[int, ...] | Sequence[int]
+
+_VALID_VAL_METRICS = frozenset({"pe", "pb"})
 
 
 def _normalize_nonneg_windows(windows: WindowSpec, *, name: str) -> list[int]:
@@ -54,6 +67,11 @@ def _normalize_nonneg_windows(windows: WindowSpec, *, name: str) -> list[int]:
         if not isinstance(w, int) or isinstance(w, bool) or w < 0:
             raise ValueError(f"{name} entries must be non-negative ints, got {w!r}")
     return items
+
+
+# ---------------------------------------------------------------------------
+# H-001 · OBV-confirmed momentum
+# ---------------------------------------------------------------------------
 
 
 def add_obv_confirmed_momentum(
@@ -141,6 +159,11 @@ def add_obv_confirmed_momentum(
     return result
 
 
+# ---------------------------------------------------------------------------
+# H-002 · GK vol ratio
+# ---------------------------------------------------------------------------
+
+
 def add_gk_vol_ratio(
     panel: pd.DataFrame,
     *,
@@ -166,7 +189,7 @@ def add_gk_vol_ratio(
         Long-format frame with ``date``, ``ticker``, ``open``, ``high``,
         ``low``, ``close``.
     gk_window:
-        Short window for the mean of daily Garman–Klass volatility. Int or list.
+        Short window for the mean of daily Garman-Klass volatility. Int or list.
     realised_window:
         Number of log close-to-close returns in the realised-vol std
         (ending at ``t``). Int or list.
@@ -221,6 +244,11 @@ def add_gk_vol_ratio(
     return result
 
 
+# ---------------------------------------------------------------------------
+# H-003 · Idiosyncratic volatility
+# ---------------------------------------------------------------------------
+
+
 def add_idiosyncratic_vol(
     panel: pd.DataFrame,
     market_returns: pd.DataFrame,
@@ -238,7 +266,7 @@ def add_idiosyncratic_vol(
     whatever series is supplied in ``market_returns`` (research notebooks lock
     this to SPY).
 
-    One window → ``idio_vol``; multiple windows → ``idio_vol_{w}``.
+    One window -> ``idio_vol``; multiple windows -> ``idio_vol_{w}``.
 
     Parameters
     ----------
@@ -304,8 +332,8 @@ def add_beta(
     """
     Add H-004 beta column(s).
 
-    ``benchmark='spy'``: univariate β vs SPY → column(s) ``beta`` / ``beta_{W}``.
-    ``benchmark='ff'``: 4-factor loadings → ``smart_beta_smb/hml/mom`` [``_{W}``].
+    ``benchmark='spy'``: univariate beta vs SPY -> column(s) ``beta`` / ``beta_{W}``.
+    ``benchmark='ff'``: 4-factor loadings -> ``smart_beta_smb/hml/mom`` [``_{W}``].
 
     Pass ``windows`` as a list for multi-window Alphalens screening.
     """
@@ -485,13 +513,13 @@ def add_blume_beta(
     market_returns: pd.DataFrame,
     *,
     windows: WindowSpec = 252,
-    normalize: bool = False,
     market_col: str = "market_log_ret",
 ) -> pd.DataFrame:
     """
     Add H-004 Blume-adjusted beta column(s) ``blume_beta`` [``_{W}``].
 
-    Formula: ``0.67 * beta + 0.33``. Default ``normalize=False``.
+    Formula: ``0.67 * beta + 0.33``. Output is never CS-ranked (``normalize``
+    is not offered — ranking would discard Blume shrinkage magnitude).
     """
     window_list = normalize_windows(windows)
     multi = len(window_list) > 1
@@ -503,8 +531,6 @@ def add_blume_beta(
         ws = _ws_col("beta", w)
         out = regression_column_name("blume_beta", w, multi_window=multi)
         result[out] = blume_adjust(result[ws])
-        if normalize:
-            result[out] = cross_sectional_pct_rank(result, out)
     return result
 
 
@@ -515,18 +541,20 @@ def add_residual_momentum(
     benchmark: str = "spy",
     formation_window: WindowSpec = 252,
     skip: WindowSpec = 21,
-    normalize: bool = False,
     market_col: str = "market_log_ret",
 ) -> pd.DataFrame:
     """
     Add H-004 residual-momentum column(s).
 
-    ``benchmark='spy'``: CAPM residuals → ``residual_mom`` [``_{K}_{S}``].
-    ``benchmark='ff'``: 4-factor residuals → ``smart_residual_mom`` [``_{K}_{S}``].
+    ``benchmark='spy'``: CAPM residuals -> ``residual_mom`` [``_{K}_{S}``].
+    ``benchmark='ff'``: 4-factor residuals -> ``smart_residual_mom`` [``_{K}_{S}``].
 
-    Cartesian product of ``formation_window × skip`` → one column per combo.
+    Cartesian product of ``formation_window x skip`` -> one column per combo.
     ``formation_window`` values must be present in the workspace's cached windows.
     ``skip`` does NOT require a separate OLS.
+
+    Output is never CS-ranked (``normalize`` is not offered — ranking would
+    discard residual-momentum magnitude).
     """
     if benchmark not in ("spy", "ff"):
         raise ValueError(f"benchmark must be 'spy' or 'ff', got {benchmark!r}")
@@ -558,7 +586,6 @@ def add_residual_momentum(
         ws = _ws_col(resid_prefix, k)
         out = windowed_column_name(stem, k, s, multi=multi)
 
-        # Compute per-ticker residual momentum signal
         signals = []
         for _, grp in result.groupby("ticker", sort=False):
             sig = residual_momentum_signal(grp[ws], k, s)
@@ -566,7 +593,243 @@ def add_residual_momentum(
         combined = pd.concat(signals)
         result[out] = combined.reindex(result.index)
 
-        if normalize:
-            result[out] = cross_sectional_pct_rank(result, out)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# H-005 · Size & Value store callers
+# ---------------------------------------------------------------------------
+
+
+def add_book_yield(
+    panel: pd.DataFrame,
+    *,
+    normalize: bool = True,
+) -> pd.DataFrame:
+    """
+    Add H-005 book-yield column ``book_yield``.
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    ``book_yield = 1 / pb``; NaN when ``pb <= 0``.
+    """
+    _col = "book_yield"
+    required = {"date", "ticker", "pb"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+    result = _add_book_yield_raw(panel, col=_col)
+    if normalize:
+        result[_col] = cross_sectional_pct_rank(result, _col)
+    return result
+
+
+def add_earnings_yield(
+    panel: pd.DataFrame,
+    *,
+    normalize: bool = True,
+) -> pd.DataFrame:
+    """
+    Add H-005 earnings-yield column ``earnings_yield``.
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    ``earnings_yield = 1 / pe``; NaN when ``pe <= 0``.
+    """
+    _col = "earnings_yield"
+    required = {"date", "ticker", "pe"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+    result = _add_earnings_yield_raw(panel, col=_col)
+    if normalize:
+        result[_col] = cross_sectional_pct_rank(result, _col)
+    return result
+
+
+def add_log_mcap(
+    panel: pd.DataFrame,
+    *,
+    normalize: bool = True,
+) -> pd.DataFrame:
+    """
+    Add H-005 log-market-cap column ``log_mcap``.
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    ``log_mcap = log(market_cap)``; NaN when ``market_cap <= 0``.
+    """
+    _col = "log_mcap"
+    required = {"date", "ticker", "market_cap"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+    result = _add_log_mcap_raw(panel, col=_col)
+    if normalize:
+        result[_col] = cross_sectional_pct_rank(result, _col)
+    return result
+
+
+def add_valuation_roc(
+    panel: pd.DataFrame,
+    *,
+    metric: str = "pb",
+    window: WindowSpec = 63,
+) -> pd.DataFrame:
+    """
+    Add H-005 valuation rate-of-change column(s) ``val_roc_{metric}`` [``_{W}``].
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    Formula: ``log(val_t) - log(val_{t-L})``. Already return-like / ~stationary;
+    output is never CS-ranked (``normalize`` is not offered).
+
+    One window -> ``val_roc_{metric}``; multiple windows -> ``val_roc_{metric}_{W}``.
+    """
+    if metric not in _VALID_VAL_METRICS:
+        raise ValueError(f"metric must be one of {sorted(_VALID_VAL_METRICS)}, got {metric!r}")
+
+    window_list = normalize_windows(window)
+    multi = len(window_list) > 1
+
+    required = {"date", "ticker", metric}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+
+    stem = f"val_roc_{metric}"
+    out_cols = [
+        regression_column_name(stem, w, multi_window=multi) for w in window_list
+    ]
+
+    if panel.empty:
+        out = panel.copy()
+        for col in out_cols:
+            out[col] = pd.Series(dtype=float)
+        return out
+
+    result = panel.copy()
+    for w, out_col in zip(window_list, out_cols):
+        tmp_col = f"_val_roc_tmp_{metric}_{w}"
+        result = _add_val_roc_raw(result, metric=metric, window=w, col=tmp_col)
+        result[out_col] = result[tmp_col]
+        result = result.drop(columns=[tmp_col])
 
     return result
+
+
+def add_size_momentum(
+    panel: pd.DataFrame,
+    *,
+    window: WindowSpec = 63,
+) -> pd.DataFrame:
+    """
+    Add H-005 size-momentum column(s) ``size_mom`` [``_{W}``].
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    Formula: ``log(mcap_t / mcap_{t-L})``. Already return-like / ~stationary;
+    output is never CS-ranked (``normalize`` is not offered).
+
+    One window -> ``size_mom``; multiple windows -> ``size_mom_{W}``.
+    """
+    window_list = normalize_windows(window)
+    multi = len(window_list) > 1
+
+    required = {"date", "ticker", "market_cap"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+
+    out_cols = [
+        regression_column_name("size_mom", w, multi_window=multi) for w in window_list
+    ]
+
+    if panel.empty:
+        out = panel.copy()
+        for col in out_cols:
+            out[col] = pd.Series(dtype=float)
+        return out
+
+    result = panel.copy()
+    for w, out_col in zip(window_list, out_cols):
+        tmp_col = f"_size_mom_tmp_{w}"
+        result = _add_size_mom_raw(result, window=w, col=tmp_col)
+        result[out_col] = result[tmp_col]
+        result = result.drop(columns=[tmp_col])
+
+    return result
+
+
+def add_value_momentum_interaction(
+    panel: pd.DataFrame,
+    *,
+    mom_lookback: int = 252,
+    mom_skip: int = 21,
+) -> pd.DataFrame:
+    """
+    Add H-005 value-momentum interaction column ``val_mom_interact``.
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    ``val_mom_interact = cs_rank(book_yield) * cs_rank(raw_momentum)``.
+    Already in rank-product space; output is never CS-ranked again
+    (``normalize`` is not offered).
+    """
+    _col = "val_mom_interact"
+    required = {"date", "ticker", "close", "pb"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+    return _add_val_mom_interact_raw(
+        panel, mom_lookback=mom_lookback, mom_skip=mom_skip, col=_col,
+    )
+
+
+def add_value_momentum_distance(
+    panel: pd.DataFrame,
+    *,
+    mom_lookback: int = 252,
+    mom_skip: int = 21,
+) -> pd.DataFrame:
+    """
+    Add H-005 value-momentum distance column ``val_mom_dist``.
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    ``val_mom_dist = sqrt((1 - cs_rank(mom))^2 + (1 - cs_rank(book_yield))^2)``.
+
+    The ideal point ``(1.0, 1.0)`` represents top-decile Value and top-decile
+    Momentum. Already in rank-space; output is never CS-ranked again
+    (``normalize`` is not offered).
+    """
+    _col = "val_mom_dist"
+    required = {"date", "ticker", "close", "pb"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+    return _add_val_mom_dist_raw(
+        panel, mom_lookback=mom_lookback, mom_skip=mom_skip, col=_col,
+    )
+
+
+def add_value_momentum_residual(
+    panel: pd.DataFrame,
+    *,
+    regression_window: int = 252,
+    mom_lookback: int = 252,
+    mom_skip: int = 21,
+) -> pd.DataFrame:
+    """
+    Add H-005 value-momentum residual column ``val_mom_resid``.
+
+    Features at date ``t`` use data through ``t``; labels are not added here.
+    Standardised residual from rolling OLS of ``cs_rank(book_yield)`` on
+    ``cs_rank(raw_momentum)``; NaN when ``std == 0``. Already a z-score;
+    output is never CS-ranked (``normalize`` is not offered).
+    """
+    _col = "val_mom_resid"
+    required = {"date", "ticker", "close", "pb"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+    return _add_val_mom_resid_raw(
+        panel,
+        regression_window=regression_window,
+        mom_lookback=mom_lookback,
+        mom_skip=mom_skip,
+        col=_col,
+    )

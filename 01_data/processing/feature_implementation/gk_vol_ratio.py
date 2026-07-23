@@ -5,6 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from data.processing.feature_implementation.utilities import (
+    _require_columns,
+    _restore_order,
+    _sorted_by_ticker_date,
+)
+
 VALID_MODES = frozenset({"ratio", "log_ratio", "reversal"})
 DEFAULT_GK_WINDOW = 5
 DEFAULT_REALISED_WINDOW = 20
@@ -20,7 +26,7 @@ def garman_klass_variance(
     close: pd.Series,
 ) -> pd.Series:
     """
-    Daily Garman–Klass variance:
+    Daily Garman-Klass variance:
 
     ``0.5 * (ln(H/L))^2 - (2*ln(2) - 1) * (ln(C/O))^2``
 
@@ -71,7 +77,7 @@ def realised_vol(
 
 
 def ratio_from_vols(short_gk: pd.Series, realised: pd.Series) -> pd.Series:
-    """``short_gk / realised``; non-positive or non-finite realised → NaN."""
+    """``short_gk / realised``; non-positive or non-finite realised -> NaN."""
     sg = short_gk.astype(float)
     rv = realised.astype(float)
     ok = sg.notna() & rv.notna() & np.isfinite(rv) & (rv > 0)
@@ -90,20 +96,6 @@ def apply_ratio_mode(raw_ratio: pd.Series, mode: str) -> pd.Series:
         return np.log(r.where(r > 0))
     # reversal
     return -r
-
-
-def _require_columns(panel: pd.DataFrame, required: set[str]) -> None:
-    missing = required - set(panel.columns)
-    if missing:
-        raise ValueError(f"panel missing columns: {sorted(missing)}")
-
-
-def _sorted_by_ticker_date(panel: pd.DataFrame) -> pd.DataFrame:
-    return panel.sort_values(["ticker", "date"], kind="mergesort")
-
-
-def _restore_order(result: pd.DataFrame, original_index: pd.Index) -> pd.DataFrame:
-    return result.reindex(original_index)
 
 
 def add_gk_vol(

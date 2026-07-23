@@ -19,7 +19,7 @@ Ask concise questions covering, at minimum:
 
 1. **Data scope.** If the factor requires anything beyond OHLCV (e.g. SPY, market cap, fundamentals, sentiment), **stop and ask for the exact source, schema, PIT semantics, and cache/format** before proceeding. Never fabricate a data path.
 2. **Modes / variants.** What discrete variants (if any) should the store expose? Column name is `<factor>_{mode}` for a single window-combo; when window kwargs are lists with more than one combo, suffix window parts (e.g. `obv_mom_signed_252_21_20`). No free-form `col_name`.
-3. **Tunable parameters and defaults.** Confirm defaults from the hypothesis log; every tunable must be a keyword arg, overridable only via `name=value`. Prefer scalar window kwargs. Use `int | list[int]` multi-window (cartesian product + suffixed column names via `normalize_windows` / `windowed_column_name` from `beta.py`) **only when the hypothesis explicitly requires screening multiple lookbacks in one store call** — do not add list support by default.
+3. **Tunable parameters and defaults.** Confirm defaults from the hypothesis log; every tunable must be a keyword arg, overridable only via `name=value`. Prefer scalar window kwargs. Use `int | list[int]` multi-window (cartesian product + suffixed column names via `normalize_windows` / `windowed_column_name` from `utilities.py`) **only when the hypothesis explicitly requires screening multiple lookbacks in one store call** — do not add list support by default.
 4. **Edge cases.** Denominator floors, bad-bar handling, invalid inputs. Default is **no floor and no winsorize in library code** — bad denom / invalid inputs → NaN.
 5. **Normalization.** Determine cross-sectional vs time-series (see menus below) and confirm the choice with the user.
 
@@ -60,7 +60,7 @@ Lock every open decision from Step 2 concretely: modes, column name pattern, def
 - **Series primitives** first (pure `pd.Series` in / `pd.Series` out), then **panel `add_*` helpers** that call them per ticker.
 - No `include_components` flag. Intermediates are attached only by calling the smaller `add_*` helpers directly.
 - Panel helpers must: `_require_columns` validate; handle empty panel; sort by `["ticker", "date"]` with `kind="mergesort"`; restore original row order via `reindex`.
-- Reuse peers' patterns; do not duplicate `cross_sectional_pct_rank` (import from `obv_momentum` or the store, per H-002).
+- Reuse peers' patterns; do not duplicate `cross_sectional_pct_rank` (import from `utilities.py`).
 
 ### 5.2 Store entrypoint — `01_data/processing/feature_store.py`
 
