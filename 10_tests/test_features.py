@@ -943,7 +943,6 @@ def test_drop_beta_workspace() -> None:
 
 def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> None:
     import data.ingestion.alternative_data.fama_french_fetcher as ff_impl
-    import data.ingestion.fama_french_fetcher as ff_shim
 
     # Two dates of closes per ETF → one simple-return row after dropna
     closes = {
@@ -976,8 +975,7 @@ def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> No
 
     import tempfile
     cache_dir = tempfile.mkdtemp()
-    # Call via compatibility shim (old import path)
-    result = ff_shim.fetch_ff_factors_daily(cache_dir=cache_dir)
+    result = ff_impl.fetch_ff_factors_daily(cache_dir=cache_dir)
     assert set(result.columns) == {"date", "mkt_rf", "smb", "hml", "rf", "mom"}
     assert len(result) == 1
 
@@ -999,7 +997,7 @@ def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> No
     assert n_after_build == 6  # one fetch_ohlcv per ETF
 
     # Second call hits cache
-    result2 = ff_shim.fetch_ff_factors_daily(cache_dir=cache_dir)
+    result2 = ff_impl.fetch_ff_factors_daily(cache_dir=cache_dir)
     assert call_count["n"] == n_after_build
     assert len(result2) == 1
 

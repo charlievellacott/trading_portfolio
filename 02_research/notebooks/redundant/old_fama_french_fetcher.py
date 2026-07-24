@@ -8,7 +8,6 @@ for live / train–serve parity. Kept here for learning and audit — not for
 production imports.
 
 Active path: ``01_data/ingestion/alternative_data/fama_french_fetcher.py``
-Shim: ``01_data/ingestion/fama_french_fetcher.py``
 """
 
 from __future__ import annotations
