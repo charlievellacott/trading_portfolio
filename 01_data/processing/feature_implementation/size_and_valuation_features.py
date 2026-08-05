@@ -14,6 +14,7 @@ from data.processing.feature_implementation.utilities import (
     _restore_order,
     _sorted_by_ticker_date,
     cross_sectional_pct_rank,
+    daily_simple_return,
 )
 
 _REQUIRED_SV = frozenset({"date", "ticker", "close", "market_cap", "pe", "pb"})
@@ -59,6 +60,34 @@ def size_momentum(mcap: pd.Series, window: int) -> pd.Series:
     m = mcap.astype(float)
     log_m = np.log(m).where(m > 0)
     return log_m - log_m.shift(window)
+
+
+def amihud_illiquidity(
+    close: pd.Series,
+    volume: pd.Series,
+    window: int,
+) -> pd.Series:
+    """
+    Mean of ``|r_t| / (close_t * volume_t)`` over ``window`` days.
+
+    Non-positive dollar volume on a day → NaN that day (excluded from mean).
+    Fewer than ``window`` finite daily ratios → NaN.
+    """
+    if window < 1:
+        raise ValueError("window must be >= 1")
+    r = daily_simple_return(close).abs()
+    c = close.astype(float)
+    v = volume.astype(float)
+    dollar_vol = c * v
+    ok = (
+        r.notna()
+        & dollar_vol.notna()
+        & np.isfinite(r)
+        & np.isfinite(dollar_vol)
+        & (dollar_vol > 0)
+    )
+    daily = (r / dollar_vol).where(ok)
+    return daily.rolling(window, min_periods=window).mean()
 
 
 def value_momentum_distance(val_rank: pd.Series, mom_rank: pd.Series) -> pd.Series:
@@ -289,4 +318,28 @@ def add_value_momentum_residual(
         work.loc[grp.index, col] = standardised.to_numpy()
 
     work = work.drop(columns=["_by", "_mom", "_by_rank", "_mom_rank"])
+    return _restore_order(work, original_index)
+
+
+def add_amihud(
+    panel: pd.DataFrame,
+    *,
+    window: int = 21,
+    col: str = "amihud",
+) -> pd.DataFrame:
+    """Return a copy with Amihud illiquidity in ``col`` (raw; no CS rank)."""
+    if window < 1:
+        raise ValueError("window must be >= 1")
+    _require_columns(panel, {"date", "ticker", "close", "volume"})
+    if panel.empty:
+        out = panel.copy()
+        out[col] = pd.Series(dtype=float)
+        return out
+
+    original_index = panel.index
+    work = _sorted_by_ticker_date(panel.copy())
+    parts = []
+    for _, grp in work.groupby("ticker", sort=False):
+        parts.append(amihud_illiquidity(grp["close"], grp["volume"], window))
+    work[col] = pd.concat(parts).reindex(work.index)
     return _restore_order(work, original_index)

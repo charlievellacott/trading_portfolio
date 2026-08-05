@@ -18,39 +18,43 @@ Read, in this order: the target H-XXX entry in `hypothesis_log.md`, [`01_data/pr
 Ask concise questions covering, at minimum:
 
 1. **Data scope.** If the factor requires anything beyond OHLCV (e.g. SPY, market cap, fundamentals, sentiment), **stop and ask for the exact source, schema, PIT semantics, and cache/format** before proceeding. Never fabricate a data path.
-2. **Modes / variants.** What discrete variants (if any) should the store expose? Column name is `<factor>_{mode}` for a single window-combo; when window kwargs are lists with more than one combo, suffix window parts (e.g. `obv_mom_signed_252_21_20`). No free-form `col_name`.
+2. **Feature subset / variants.** What discrete factor IDs should the family dispatcher register under `feature_subset`? IDs are bare stems (no lookback/skip/window params), e.g. `signed`, `blume_beta`, `abnormal_tone`. Column name is `<stem>` / `<factor>_{id}` for a single window-combo; when window kwargs are lists with more than one combo, suffix window parts (e.g. `obv_mom_signed_252_21_20`). No free-form `col_name`.
 3. **Tunable parameters and defaults.** Confirm defaults from the hypothesis log; every tunable must be a keyword arg, overridable only via `name=value`. Prefer scalar window kwargs. Use `int | list[int]` multi-window (cartesian product + suffixed column names via `normalize_windows` / `windowed_column_name` from `utilities.py`) **only when the hypothesis explicitly requires screening multiple lookbacks in one store call** — do not add list support by default.
 4. **Edge cases.** Denominator floors, bad-bar handling, invalid inputs. Default is **no floor and no winsorize in library code** — bad denom / invalid inputs → NaN.
-5. **Normalization.** Determine cross-sectional vs time-series (see menus below) and confirm the choice with the user.
+5. **Normalization (recommend, then confirm).** Use domain knowledge of the factor (units, whether magnitude matters, cross-sectional vs time-series economics, stationarity across names and dates) to decide whether store-side normalization is needed. Prefer **no store-side transform** when the raw factor is already comparable across names and over time (unitless, bounded, return-like, or otherwise scale-stable). A CS transform is for **cross-date / cross-name stability in a pooled CS model** (or classic CS-anomaly lit), **not** because trees “need” ranks — never justify `normalize` as “GBM-ready.” CS pct-rank **discards magnitude** — only recommend it when relative order is the economic object. Prefer **CS z-score** when a CS transform is kept *and* extreme magnitude is part of the signal (heavy tails). **State your recommendation and rationale to the user and get explicit confirmation before planning.** If they confirm no normalization, **omit the `normalize` parameter** from that factor’s store subroutine (do not add a dead `normalize=False` flag). If they confirm normalization *is* needed, then use Step 3 menus (CS vs TS), recommend a variant, and confirm that choice too.
 
-## Step 3 — Normalization menus (present options with pros/cons)
+## Step 3 — Normalization menus (only if Step 2 says normalize is needed)
 
-Feature is **cross-sectional** if predictive information comes from ranking names against each other on the same date; **time-series** if it lives per-ticker and comparing across names would be misleading.
+**Gate:** skip this entire step when the factor needs no store-side normalization — plan and implement with **no** `normalize` kwarg.
 
-### Cross-sectional (`normalize=True`)
+When normalization *is* required: feature is **cross-sectional** if predictive information comes from ranking names against each other on the same date; **time-series** if it lives per-ticker and comparing across names would be misleading.
+
+**Prefer leaving the raw signal** whenever it is already stationary / scale-comparable across assets and dates. Do **not** default to CS pct-rank (or any CS transform) “for GBM readiness” if magnitude carries information or the raw unit is already comparable.
+
+### Cross-sectional (only when `normalize` is exposed)
 
 | Option | How | Pros | Cons |
 |---|---|---|---|
-| CS pct-rank by `date` (default) | `groupby('date').rank(pct=True)` | GBM-ready, scale-free, robust to outliers, comparable across names | Loses magnitude information |
-| CS z-score by `date` | `(x - mean_t) / std_t` on each date | Preserves relative magnitudes | Sensitive to outliers; needs winsorize |
+| CS pct-rank by `date` | `groupby('date').rank(pct=True)` via `cross_sectional_pct_rank` | Scale-free, outlier-robust, comparable across names | **Loses magnitude / scale**; flattens economically meaningful distances |
+| CS z-score by `date` | `(x - mean_t) / std_t` via `cross_sectional_zscore` | Preserves relative magnitudes better than rank; better for heavy-tailed signals fed to a pooled model | Sensitive to outliers; may need research-side winsorize |
 | CS demean by `date` only | `x - mean_t` | Keeps units, removes market level | No scale normalization |
 
-Present all three; **default and recommend CS pct-rank** unless the user says otherwise.
+Present all three when CS is chosen. Recommend CS pct-rank **only** when relative order is the literature object (e.g. IVOL rank, classic value/size levels, betas). Prefer **CS z-score** when magnitude gaps matter (e.g. GK stress ratio, MAX lottery extremes). Prefer **no normalize** when the raw factor is already return-like / bounded / scale-stable.
 
-### Time-series (`normalize=True`)
+### Time-series (only when `normalize` is exposed)
 
 | Option | How | Pros | Cons |
 |---|---|---|---|
-| Per-ticker rolling z-score (recommended default) | `(x - roll_mean) / roll_std` per ticker, `norm_window` kwarg, `min_periods=norm_window`; NaN when `std==0` | Adapts to changing regimes; no lookahead; institutionally standard | Sensitive to window choice; loses long-run level info |
+| Per-ticker rolling z-score (recommended default if TS) | `(x - roll_mean) / roll_std` per ticker, `norm_window` kwarg, `min_periods=norm_window`; NaN when `std==0` | Adapts to changing regimes; no lookahead; institutionally standard | Sensitive to window choice; loses long-run level info |
 | Per-ticker expanding z-score | Uses all history up to `t` | No window choice; stable | Slow to react to regime change; early-sample instability |
-| Per-ticker rolling min-max to `[0,1]` | `(x - roll_min) / (roll_max - roll_min)` | Bounded, GBM-friendly | Extremely sensitive to window extremes; not shift-invariant |
+| Per-ticker rolling min-max to `[0,1]` | `(x - roll_min) / (roll_max - roll_min)` | Bounded | Extremely sensitive to window extremes; not shift-invariant |
 | Per-ticker robust rolling z (median / MAD) | `(x - roll_median) / (1.4826 * roll_MAD)` | Outlier-robust | Slightly biased if data is clean-Gaussian; more compute |
 
-Present all four; **default and recommend rolling z-score** with `norm_window` = the factor's own longest lookback window, unless the user says otherwise.
+Present all four when TS is chosen; **default and recommend rolling z-score** with `norm_window` = the factor's own longest lookback window, unless the user says otherwise.
 
 ## Step 4 — Plan (CreatePlan)
 
-Lock every open decision from Step 2 concretely: modes, column name pattern, defaults, denom handling, normalization type + variant, test list, notes edits, notebook sections. No "optional" or "or" left in the plan.
+Lock every open decision from Step 2 concretely: `feature_subset` IDs, column name pattern, defaults, denom handling, **whether `normalize` exists** (and if so: type + variant + default), test list, notes edits, notebook sections. No "optional" or "or" left in the plan. If no normalization: plan must state explicitly that the store API has **no** `normalize` kwarg.
 
 ## Step 5 — Implement (only after user approves the plan)
 
@@ -60,46 +64,52 @@ Lock every open decision from Step 2 concretely: modes, column name pattern, def
 - **Series primitives** first (pure `pd.Series` in / `pd.Series` out), then **panel `add_*` helpers** that call them per ticker.
 - No `include_components` flag. Intermediates are attached only by calling the smaller `add_*` helpers directly.
 - Panel helpers must: `_require_columns` validate; handle empty panel; sort by `["ticker", "date"]` with `kind="mergesort"`; restore original row order via `reindex`.
-- Reuse peers' patterns; do not duplicate `cross_sectional_pct_rank` (import from `utilities.py`).
+- Reuse peers' patterns; do not duplicate `cross_sectional_pct_rank` or `cross_sectional_zscore` (import from `utilities.py`).
+- Former store-side singular `add_*` bodies for a family live here (same signatures/defaults) so [`feature_store.py`](01_data/processing/feature_store.py) can dispatch without duplicating math. **Do not change formulae or defaults when relocating.**
 
 ### 5.2 Store entrypoint — `01_data/processing/feature_store.py`
 
-- One function per hypothesis: `add_<factor>(panel, *, ...tunables..., mode="...", normalize=True) -> pd.DataFrame`.
-- Kwargs are keyword-only (`*` after `panel`).
-- Validate mode + numeric ranges; require OHLC(V) columns present.
-- Write output column(s): `<factor>_{mode}` when a single window-combo is produced; when window-like kwargs are lists yielding more than one combo, suffix the window parts (e.g. `obv_mom_signed_252_21_20`, `gk_vol_ratio_5_20`) — same rule as beta/idio multi-window naming. No free-form `col_name` unless the user explicitly asks.
-- If `normalize=True`: apply CS or TS normalization per the choice from Step 3.
+- **Keep** `feature_store.py` as the public dispatcher module (do not convert to a package).
+- One public function per hypothesis family: `add_<family>_factors(panel, *, feature_subset=None, ...tunables...) -> pd.DataFrame`.
+- `feature_subset: Sequence[str] | None = None` — `None` or empty → add **all** registered IDs for that family (canonical order); non-empty → only those IDs; unknown ID → `ValueError`. IDs omit window params.
+- Resolve IDs via `resolve_feature_subset` (in `utilities.py` or `feature_store.py`).
+- Internally call the existing helpers in `feature_implementation/` (moved singular `add_*` bodies). Do not reimplement formulae in the dispatcher.
+- Expose `normalize` **only** when Step 2–3 locked store-side normalization. Signature then includes `normalize: bool = ...` with the agreed default. If the factor does not need ranking/normalization, **do not** add a `normalize` parameter — always write the raw signal.
+- Kwargs are keyword-only after required positional args (`*` after `panel` / required frames).
+- Validate IDs + numeric ranges; require needed columns present.
+- Write output column(s): bare stem / `<factor>_{id}` when a single window-combo is produced; when window-like kwargs are lists yielding more than one combo, suffix the window parts (e.g. `obv_mom_signed_252_21_20`, `gk_vol_ratio_5_20`). No free-form `col_name` unless the user explicitly asks.
+- If `normalize` exists and is `True`: apply CS or TS normalization per the choice from Step 3; if `False`, store the unranked value.
 - Drop all temp columns before returning.
-- Docstring states: features at `t` use OHLCV through close of `t`; labels are **not** attached here.
-- Export from [`01_data/processing/__init__.py`](01_data/processing/__init__.py) alphabetically, updating `__all__`.
+- Docstring states: features at `t` use OHLCV through close of `t` (or S1 `feature_date` contract when applicable); labels are **not** attached here; documents `feature_subset` IDs; and either documents `normalize` semantics **or** states that the store does not CS/TS-normalize (raw signal only).
+- Export from [`01_data/processing/__init__.py`](01_data/processing/__init__.py) alphabetically, updating `__all__`. Old singular public names (`add_beta`, `add_book_yield`, …) are **not** re-exported from the store.
 
 ### 5.3 Tests — extend [`10_tests/test_features.py`](10_tests/test_features.py)
 
 Add these tests (mirror the H-002 block):
 
 1. Hand-checked one-bar / small-series formula for each primitive.
-2. Modes → correct auto column names present; relationships between modes hold on `normalize=False`.
-3. Edge cases: bad inputs → NaN (no exception); invalid `mode` and missing columns → `ValueError`.
-4. `normalize=True` bounds: CS pct-rank in `[0, 1]`; TS z-score finite where defined.
-5. **No lookahead:** feature computed on a truncated prefix of the panel equals the full-panel feature on shared dates (`normalize=False`).
+2. `feature_subset` IDs → correct auto column names present; relationships between variants hold on the **raw** (unnormalized) signal. Empty/`None` subset adds all registered IDs; unknown ID → `ValueError`.
+3. Edge cases: bad inputs → NaN (no exception); missing columns → `ValueError`.
+4. **Normalization bounds (only if `normalize` exists on the store API):** `normalize=True` → CS pct-rank in `[0, 1]`, or CS / TS z-score finite where defined (not confined to `[0, 1]`). If the store has **no** `normalize` kwarg, skip this item (do not invent a rank/z test).
+5. **No lookahead:** feature computed on a truncated prefix of the panel equals the full-panel feature on shared dates (use raw / `normalize=False` when the kwarg exists).
 6. **Multi-window (only if the store API accepts list window kwargs):** single-int → bare column names; list kwargs → suffixed columns present and values match the scalar call for the same combo; invalid combos → `ValueError`. Skip this item when the factor is scalar-window only.
 
-Reuse the existing `_make_panel` helper.
+Reuse the existing `_make_panel` helper. Call `add_*_factors(..., feature_subset=[...])` — same windows/defaults as before the dispatcher refactor.
 
 ### 5.4 Hypothesis log — [`02_research/hypothesis_log.md`](02_research/hypothesis_log.md)
 
-Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g. `normalize` default, mode column-name pattern, denominator handling, "no floor / no winsorize in store", monotonic-rank equivalences). Update the **Formulae** block to match the implemented code (windows, std convention, mode names).
+Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g. whether `normalize` exists and its default, `feature_subset` IDs / column-name pattern, denominator handling, "no floor / no winsorize in store", monotonic-rank equivalences). If there is no `normalize` kwarg, state that explicitly and why (raw signal already scale-comparable). Update the **Formulae** block to match the implemented code (windows, std convention, factor IDs).
 
 ### 5.5 Notebook stub — `02_research/notebooks/factor_tests/H-XXX_<factor>.ipynb`
 
 **Markdown-only** (no runnable code cells); code cells are present but empty per the H-001 layout. Follows [notebook-structure](.cursor/rules/notebook-structure.mdc). Sections:
 
-- Title cell: idea / claim / why it might work / data required; mode table; explicit note when the store does not floor/winsorize; point to `add_<factor>`. For **S1 equities** factor tests, note loading `s1_factor_panel_train.parquet` (not the full census) and that Alphalens `periods=(1, 5, 21)` is the S1 default — other strategies may differ.
-- `## 0. Imports & Config` — markdown listing kwargs to configure.
+- Title cell: idea / claim / why it might work / data required; `feature_subset` ID table; explicit note when the store does not floor/winsorize; whether the store exposes `normalize` or always returns the raw signal; point to `add_<family>_factors`. For **S1 equities** factor tests, note loading `s1_factor_panel_train.parquet` (not the full census; trade-date indexed), that Alphalens `periods=(1, 5, 21)` is the S1 default, and that Alphalens prices pivot `open` **without** `shift(-1)` — labels may use panel `fwd_ret_*`.
+- `## 0. Imports & Config` — markdown listing kwargs to configure (omit `normalize` from the list when the store has no such kwarg).
 - `## 1. Data Loading` — for S1 equities factor tests, load `s1_factor_panel_train.parquet` (already the research IS; do not re-split). Use project fetchers only for data the train panel does not carry (e.g. SPY). See [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc).
 - `## 2. Data Cleaning & Engineering` — where any winsorize / floor lives.
-- `## 3. Modeling / Signal Construction` — call `add_<factor>`.
-- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default. When a full (runnable) factor-test notebook is built later, Alphalens full tear sheets must **display and save** a multi-page PDF under `02_research/notebooks/factor_tests/tearsheets/` named `H-XXX_{factor_col}.pdf` — see [notebook-structure](.cursor/rules/notebook-structure.mdc).
+- `## 3. Modeling / Signal Construction` — call `add_<family>_factors`.
+- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default and prices = pivot of `open` (no shift). When a full (runnable) factor-test notebook is built later, Alphalens full tear sheets must **display and save** a multi-page PDF under `02_research/notebooks/factor_tests/tearsheets/` named `H-XXX_{factor_col}.pdf` — see [notebook-structure](.cursor/rules/notebook-structure.mdc).
 
 Do not create an Alphalens or research notebook beyond this stub unless explicitly requested.
 
@@ -107,6 +117,10 @@ Do not create an Alphalens or research notebook beyond this stub unless explicit
 
 - Formula defined inline in a notebook or in a strategy file instead of `feature_implementation/`.
 - Store function exposes `col_name`, `include_components`, `winsorize`, or `floor` kwargs without an explicit user request.
+- Adding `normalize` / CS pct-rank by default when the raw factor is already unitless, bounded, return-like, or otherwise comparable across names and time — especially when magnitude is part of the economic signal.
+- Justifying any store `normalize` as “GBM-ready” (trees do not require ranks; CS transforms are for task alignment / scale issues).
+- Leaving a vestigial `normalize=False`-only API: if ranking/normalization is never wanted, **remove** the parameter.
 - Non-OHLCV data pulled from a vendor without asking for source/schema/PIT semantics first.
 - Any use of `.shift(-1)`, `bfill` on features, or fitting scalers on the full panel (violates [backtest-integrity](.cursor/rules/backtest-integrity.mdc)).
 - `from pathlib import Path` or `import data.foo` in project code (violates [path-style](.cursor/rules/path-style.mdc) / [import-style](.cursor/rules/import-style.mdc)).
+- Changing formulae or default windows when relocating helpers into `feature_implementation` or wrapping them in `add_*_factors`.

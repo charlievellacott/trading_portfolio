@@ -18,13 +18,25 @@ logger = logging.getLogger(__name__)
 OHLCV_COLUMNS = ("open", "high", "low", "close", "volume")
 _YF_FIELDS = frozenset({"Open", "High", "Low", "Close", "Volume"})
 CHUNK_SIZE = 50
-MAX_RETRIES = 3
-RETRY_DELAY_SEC = 2.0
+MAX_RETRIES = 5
+RETRY_DELAY_SEC = 3.0
 
-DEFAULT_CACHE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "cache",
-)
+def _default_cache_dir() -> str:
+    """Resolve ``01_data/cache`` from source or editable hardlink farm."""
+    cur = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        if os.path.isfile(os.path.join(cur, "pyproject.toml")) or os.path.isdir(
+            os.path.join(cur, "01_data")
+        ):
+            return os.path.join(cur, "01_data", "cache")
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+
+
+DEFAULT_CACHE_DIR = _default_cache_dir()
 
 
 def _to_timestamp(value: date | str | pd.Timestamp) -> pd.Timestamp:
@@ -46,13 +58,23 @@ def _cache_key(tickers: list[str], start: pd.Timestamp, end: pd.Timestamp, label
 
 def _read_cache(cache_dir: str, key: str) -> pd.DataFrame | None:
     path = os.path.join(cache_dir, f"{key}.parquet")
-    if os.path.exists(path):
-        logger.debug("Cache hit: %s", os.path.basename(path))
-        return pd.read_parquet(path)
-    return None
+    if not os.path.exists(path):
+        return None
+    cached = pd.read_parquet(path)
+    # Empty frames are usually transient Yahoo misses — do not keep poisoning.
+    if cached.empty:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
+    logger.debug("Cache hit: %s", os.path.basename(path))
+    return cached
 
 
 def _write_cache(cache_dir: str, key: str, df: pd.DataFrame) -> None:
+    if df.empty:
+        return
     os.makedirs(cache_dir, exist_ok=True)
     path = os.path.join(cache_dir, f"{key}.parquet")
     df.to_parquet(path, index=False)
@@ -191,13 +213,25 @@ def _download_ohlcv(
                     threads=True,
                     progress=False,
                 )
-                break
             except Exception as exc:
                 if attempt == MAX_RETRIES:
                     logger.warning("yfinance failed for chunk %s: %s", chunk[:3], exc)
                     raw = pd.DataFrame()
                 else:
                     time.sleep(RETRY_DELAY_SEC * attempt)
+                    continue
+
+            if raw is not None and not raw.empty:
+                break
+            if attempt < MAX_RETRIES:
+                logger.warning(
+                    "yfinance returned empty for chunk %s (attempt %d/%d)",
+                    chunk[:3],
+                    attempt,
+                    MAX_RETRIES,
+                )
+                time.sleep(RETRY_DELAY_SEC * attempt)
+                raw = pd.DataFrame()
 
         if raw is None or raw.empty:
             continue
@@ -212,6 +246,8 @@ def _download_ohlcv(
         result = pd.concat(frames, ignore_index=True)
         result["date"] = pd.to_datetime(result["date"]).dt.normalize()
         result.columns.name = None
+        ohlcv = list(OHLCV_COLUMNS)
+        result = result.loc[~result[ohlcv].isna().all(axis=1)].copy()
 
     if cache_dir is not None:
         _write_cache(cache_dir, key, result)

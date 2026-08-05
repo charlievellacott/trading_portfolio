@@ -21,10 +21,10 @@ Before writing new fetch, feature, clean, or broker logic, **search the codebase
 | Single-ticker or batch equity OHLCV | `fetch_ohlcv`, `fetch_top_n_equities` in `data.ingestion.equity_fetcher` |
 | PIT S&P universe | `data.ingestion.sp500_universe` |
 | Factor / indicator math | `data.processing.feature_implementation.*` (e.g. `obv_momentum`) |
-| Attach a registered factor to a long panel | `data.processing.feature_store` entrypoints (e.g. `add_obv_confirmed_momentum`) |
+| Attach a registered factor to a long panel | `data.processing.feature_store` family dispatchers (e.g. `add_obv_momentum_factors`, `add_beta_factors`) with `feature_subset` |
 | Panel cleaning / winsorize / ffill | `data.processing.cleaner` |
-| S1 equities factor-test panel (train / research IS) | `01_data/data_files/s1_equities/s1_factor_panel_train.parquet` (built by `s1_factor_panel.ipynb`) |
-| S1 equities full census panel | `01_data/data_files/s1_equities/s1_factor_panel_full.parquet` |
+| S1 equities factor-test panel (train / research IS) | `01_data/data_files/s1_equities/s1_factor_panel_train.parquet` (built by `s1_factor_panel.ipynb`; **trade-date indexed** — `date` = fill date, `feature_date` = info cutoff) |
+| S1 equities full census panel | `01_data/data_files/s1_equities/s1_factor_panel_full.parquet` (same trade-date contract) |
 
 Other asset fetchers live under `data.ingestion` (`fx_fetcher`, `crypto_fetcher`, `commodity_fetcher`) — extend those files rather than calling raw vendor APIs from notebooks or strategies.
 
@@ -46,9 +46,9 @@ panel["obv"] = ...  # hand-rolled
 
 # GOOD — modular helpers / store API
 from data.processing.feature_implementation.obv_momentum import add_obv, add_raw_momentum
-from data.processing.feature_store import add_obv_confirmed_momentum
+from data.processing.feature_store import add_obv_momentum_factors
 panel = add_obv(panel)
-panel = add_obv_confirmed_momentum(panel, mode="signed")
+panel = add_obv_momentum_factors(panel, feature_subset=["signed"])
 ```
 
 ## Red flags

@@ -11,6 +11,7 @@ from data.processing.feature_implementation.utilities import (
     _restore_order,
     _sorted_by_ticker_date,
     log_return,
+    merge_info_dated,
     normalize_windows,
     regression_column_name,
 )
@@ -72,11 +73,7 @@ def add_idiosyncratic_vol(
     original_index = panel.index
     work = _sorted_by_ticker_date(panel.copy())
     work["log_ret"] = work.groupby("ticker", sort=False)["close"].transform(log_return)
-    work = work.merge(
-        market_returns[["date", market_col]],
-        on="date",
-        how="left",
-    )
+    work = merge_info_dated(work, market_returns, [market_col], how="left")
 
     for window in window_list:
         col = regression_column_name("idio_vol", window, multi_window=multi_window)

@@ -24,7 +24,12 @@ from data.processing.feature_implementation.gk_vol_ratio import (
     realised_vol,
 )
 from data.processing.feature_implementation.momentum import (
+    add_max_lottery_raw,
+    add_near_52w_raw,
     add_raw_momentum,
+    apply_near_52w_mode,
+    max_lottery,
+    near_52w_high,
     raw_momentum,
 )
 from data.processing.feature_implementation.obv_momentum import (
@@ -34,10 +39,13 @@ from data.processing.feature_implementation.obv_momentum import (
     on_balance_volume,
     signs_agree,
 )
+from data.processing.feature_implementation.utilities import daily_simple_return
 from data.processing.feature_store import (
-    add_gk_vol_ratio,
-    add_idiosyncratic_vol,
-    add_obv_confirmed_momentum,
+    add_gk_vol_factors,
+    add_idio_vol_factors,
+    add_max_lottery_factors,
+    add_near_52w_factors,
+    add_obv_momentum_factors,
 )
 
 
@@ -128,11 +136,11 @@ def test_modular_panel_helpers_add_columns() -> None:
 
 def test_store_auto_column_names_and_modes() -> None:
     panel = _make_panel(n_days=30)
-    signed = add_obv_confirmed_momentum(
-        panel, lookback=5, skip=1, obv_window=3, mode="signed", normalize=False
+    signed = add_obv_momentum_factors(
+        panel, lookback=5, skip=1, obv_window=3, feature_subset=["signed"]
     )
-    strict = add_obv_confirmed_momentum(
-        signed, lookback=5, skip=1, obv_window=3, mode="strict_zero", normalize=False
+    strict = add_obv_momentum_factors(
+        signed, lookback=5, skip=1, obv_window=3, feature_subset=["strict_zero"]
     )
     assert "obv_mom_signed" in strict.columns
     assert "obv_mom_strict_zero" in strict.columns
@@ -158,24 +166,41 @@ def test_store_auto_column_names_and_modes() -> None:
         )
 
 
-def test_normalize_rank_in_unit_interval() -> None:
-    panel = _make_panel(n_days=30, tickers=["AAA", "BBB", "CCC"])
-    out = add_obv_confirmed_momentum(
-        panel, lookback=5, skip=1, obv_window=3, mode="signed", normalize=True
+def test_obv_store_writes_raw_combined_signal() -> None:
+    """H-001 has no normalize kwarg — stored values match the raw combined signal."""
+    import inspect
+
+    from data.processing.feature_implementation.obv_momentum import (
+        add_obv_confirmed_combined,
     )
-    vals = out["obv_mom_signed"].dropna()
-    assert vals.between(0.0, 1.0).all()
+
+    sig = inspect.signature(add_obv_momentum_factors)
+    assert "normalize" not in sig.parameters
+
+    panel = _make_panel(n_days=30, tickers=["AAA", "BBB", "CCC"])
+    out = add_obv_momentum_factors(
+        panel, lookback=5, skip=1, obv_window=3, feature_subset=["signed"]
+    )
+    raw = add_obv_confirmed_combined(
+        panel, lookback=5, skip=1, obv_window=3, mode="signed", col="_raw"
+    )
+    both = out["obv_mom_signed"].notna() & raw["_raw"].notna()
+    np.testing.assert_allclose(
+        out.loc[both, "obv_mom_signed"].to_numpy(),
+        raw.loc[both, "_raw"].to_numpy(),
+        rtol=1e-10,
+    )
 
 
 def test_no_lookahead_prefix_stability() -> None:
     panel = _make_panel(n_days=35)
-    full = add_obv_confirmed_momentum(
-        panel, lookback=5, skip=1, obv_window=3, mode="signed", normalize=False
+    full = add_obv_momentum_factors(
+        panel, lookback=5, skip=1, obv_window=3, feature_subset=["signed"]
     )
     cutoff = panel["date"].sort_values().unique()[-5]
     truncated = panel[panel["date"] <= cutoff].copy()
-    partial = add_obv_confirmed_momentum(
-        truncated, lookback=5, skip=1, obv_window=3, mode="signed", normalize=False
+    partial = add_obv_momentum_factors(
+        truncated, lookback=5, skip=1, obv_window=3, feature_subset=["signed"]
     )
     merged = partial.merge(
         full[["date", "ticker", "obv_mom_signed"]],
@@ -190,10 +215,10 @@ def test_no_lookahead_prefix_stability() -> None:
 
 def test_invalid_mode_and_missing_columns() -> None:
     panel = _make_panel(n_days=20)
-    with pytest.raises(ValueError, match="mode"):
-        add_obv_confirmed_momentum(panel, mode="nope")
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_obv_momentum_factors(panel, feature_subset=["nope"])
     with pytest.raises(ValueError, match="missing columns"):
-        add_obv_confirmed_momentum(panel.drop(columns=["volume"]))
+        add_obv_momentum_factors(panel.drop(columns=["volume"]))
 
 
 def test_obv_multi_window_column_names_and_parity() -> None:
@@ -205,20 +230,19 @@ def test_obv_multi_window_column_names_and_parity() -> None:
     )
 
     panel = _make_panel(n_days=40)
-    multi = add_obv_confirmed_momentum(
+    multi = add_obv_momentum_factors(
         panel,
         lookback=[5, 8],
         skip=1,
         obv_window=3,
-        mode="signed",
-        normalize=False,
+        feature_subset=["signed"],
     )
     assert "obv_mom_signed_5_1_3" in multi.columns
     assert "obv_mom_signed_8_1_3" in multi.columns
     assert "obv_mom_signed" not in multi.columns
 
-    single_5 = add_obv_confirmed_momentum(
-        panel, lookback=5, skip=1, obv_window=3, mode="signed", normalize=False
+    single_5 = add_obv_momentum_factors(
+        panel, lookback=5, skip=1, obv_window=3, feature_subset=["signed"]
     )
     both = multi["obv_mom_signed_5_1_3"].notna() & single_5["obv_mom_signed"].notna()
     np.testing.assert_allclose(
@@ -227,8 +251,19 @@ def test_obv_multi_window_column_names_and_parity() -> None:
         rtol=1e-10,
     )
 
+    mixed = add_obv_momentum_factors(
+        panel,
+        lookback=[5, 10],
+        skip=[5],
+        obv_window=3,
+        feature_subset=["signed"],
+    )
+    assert "obv_mom_signed" in mixed.columns  # sole valid combo (10, 5, 3)
+    assert "obv_mom_signed_5_5_3" not in mixed.columns
+    assert "obv_mom_signed_10_5_3" not in mixed.columns
+
     with pytest.raises(ValueError, match="lookback must be greater than skip"):
-        add_obv_confirmed_momentum(panel, lookback=[5], skip=[5], obv_window=3)
+        add_obv_momentum_factors(panel, lookback=[5], skip=[5], obv_window=3)
 
 
 # ---------------------------------------------------------------------------
@@ -302,14 +337,14 @@ def test_gk_modular_panel_helpers() -> None:
 
 def test_gk_store_modes_and_column_names() -> None:
     panel = _make_panel(n_days=35)
-    ratio = add_gk_vol_ratio(
-        panel, gk_window=3, realised_window=5, mode="ratio", normalize=False
+    ratio = add_gk_vol_factors(
+        panel, gk_window=3, realised_window=5, feature_subset=["ratio"], normalize=False
     )
-    log_r = add_gk_vol_ratio(
-        ratio, gk_window=3, realised_window=5, mode="log_ratio", normalize=False
+    log_r = add_gk_vol_factors(
+        ratio, gk_window=3, realised_window=5, feature_subset=["log_ratio"], normalize=False
     )
-    rev = add_gk_vol_ratio(
-        log_r, gk_window=3, realised_window=5, mode="reversal", normalize=False
+    rev = add_gk_vol_factors(
+        log_r, gk_window=3, realised_window=5, feature_subset=["reversal"], normalize=False
     )
     assert "gk_vol_ratio" in rev.columns
     assert "gk_vol_log_ratio" in rev.columns
@@ -327,24 +362,32 @@ def test_gk_store_modes_and_column_names() -> None:
     )
 
 
-def test_gk_normalize_rank_in_unit_interval() -> None:
+def test_gk_normalize_cs_zscore_finite() -> None:
     panel = _make_panel(n_days=35, tickers=["AAA", "BBB", "CCC"])
-    out = add_gk_vol_ratio(
-        panel, gk_window=3, realised_window=5, mode="ratio", normalize=True
+    out = add_gk_vol_factors(
+        panel, gk_window=3, realised_window=5, feature_subset=["ratio"], normalize=True
     )
     vals = out["gk_vol_ratio"].dropna()
-    assert vals.between(0.0, 1.0).all()
+    assert len(vals) > 0
+    assert np.isfinite(vals).all()
+    # CS z is not confined to [0, 1] like pct-rank
+    assert not vals.between(0.0, 1.0).all()
+    # Within a date with 3 names, mean of finite z ≈ 0
+    late = out["date"].max()
+    day = out.loc[out["date"] == late, "gk_vol_ratio"].dropna()
+    if len(day) >= 2:
+        assert day.mean() == pytest.approx(0.0, abs=1e-10)
 
 
 def test_gk_no_lookahead_prefix_stability() -> None:
     panel = _make_panel(n_days=40)
-    full = add_gk_vol_ratio(
-        panel, gk_window=3, realised_window=5, mode="ratio", normalize=False
+    full = add_gk_vol_factors(
+        panel, gk_window=3, realised_window=5, feature_subset=["ratio"], normalize=False
     )
     cutoff = panel["date"].sort_values().unique()[-5]
     truncated = panel[panel["date"] <= cutoff].copy()
-    partial = add_gk_vol_ratio(
-        truncated, gk_window=3, realised_window=5, mode="ratio", normalize=False
+    partial = add_gk_vol_factors(
+        truncated, gk_window=3, realised_window=5, feature_subset=["ratio"], normalize=False
     )
     merged = partial.merge(
         full[["date", "ticker", "gk_vol_ratio"]],
@@ -359,27 +402,27 @@ def test_gk_no_lookahead_prefix_stability() -> None:
 
 def test_gk_invalid_mode_and_missing_columns() -> None:
     panel = _make_panel(n_days=25)
-    with pytest.raises(ValueError, match="mode"):
-        add_gk_vol_ratio(panel, mode="nope")
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_gk_vol_factors(panel, feature_subset=["nope"])
     with pytest.raises(ValueError, match="missing columns"):
-        add_gk_vol_ratio(panel.drop(columns=["high"]))
+        add_gk_vol_factors(panel.drop(columns=["high"]))
 
 
 def test_gk_multi_window_column_names_and_parity() -> None:
     panel = _make_panel(n_days=45)
-    multi = add_gk_vol_ratio(
+    multi = add_gk_vol_factors(
         panel,
         gk_window=[3, 4],
         realised_window=5,
-        mode="ratio",
+        feature_subset=["ratio"],
         normalize=False,
     )
     assert "gk_vol_ratio_3_5" in multi.columns
     assert "gk_vol_ratio_4_5" in multi.columns
     assert "gk_vol_ratio" not in multi.columns
 
-    single = add_gk_vol_ratio(
-        panel, gk_window=3, realised_window=5, mode="ratio", normalize=False
+    single = add_gk_vol_factors(
+        panel, gk_window=3, realised_window=5, feature_subset=["ratio"], normalize=False
     )
     both = multi["gk_vol_ratio_3_5"].notna() & single["gk_vol_ratio"].notna()
     np.testing.assert_allclose(
@@ -387,6 +430,297 @@ def test_gk_multi_window_column_names_and_parity() -> None:
         single.loc[both, "gk_vol_ratio"].to_numpy(),
         rtol=1e-10,
     )
+
+
+# ---------------------------------------------------------------------------
+# H-006 52-week high proximity
+# ---------------------------------------------------------------------------
+
+
+def test_near_52w_high_series_formula() -> None:
+    close = pd.Series([10.0, 11.0, 12.0, 9.0])
+    high = pd.Series([10.5, 11.5, 13.0, 12.0])
+    out = near_52w_high(close, high, window=3)
+    assert pd.isna(out.iloc[1])  # need 3 bars
+    # At index 2: Hmax = max(10.5, 11.5, 13.0) = 13; close/Hmax = 12/13
+    assert out.iloc[2] == pytest.approx(12.0 / 13.0)
+    # At index 3: Hmax = max(11.5, 13.0, 12.0) = 13; close/Hmax = 9/13 (today included)
+    assert out.iloc[3] == pytest.approx(9.0 / 13.0)
+
+
+def test_apply_near_52w_modes() -> None:
+    raw = pd.Series([1.0, 0.5, 0.0, -0.1])
+    assert list(apply_near_52w_mode(raw, "ratio")) == pytest.approx([1.0, 0.5, 0.0, -0.1])
+    log_m = apply_near_52w_mode(raw, "log_drawdown")
+    assert log_m.iloc[0] == pytest.approx(0.0)
+    assert log_m.iloc[1] == pytest.approx(np.log(0.5))
+    assert pd.isna(log_m.iloc[2])
+    assert pd.isna(log_m.iloc[3])
+
+
+def test_near_52w_bad_inputs_nan() -> None:
+    close = pd.Series([10.0, -1.0, 10.0])
+    high = pd.Series([10.0, 10.0, 0.0])
+    out = near_52w_high(close, high, window=1)
+    assert out.iloc[0] == pytest.approx(1.0)
+    assert pd.isna(out.iloc[1])  # non-positive close
+    assert pd.isna(out.iloc[2])  # non-positive Hmax
+
+
+def test_near_52w_panel_helper() -> None:
+    panel = _make_panel(n_days=30)
+    out = add_near_52w_raw(panel, window=5)
+    assert "near_52w_raw" in out.columns
+    assert out["near_52w_raw"].notna().any()
+
+
+def test_near_52w_store_modes_and_column_names() -> None:
+    panel = _make_panel(n_days=35)
+    ratio = add_near_52w_factors(panel, window=5, feature_subset=["ratio"], normalize=False)
+    log_d = add_near_52w_factors(ratio, window=5, feature_subset=["log_drawdown"], normalize=False)
+    assert "near_52w_ratio" in log_d.columns
+    assert "near_52w_log_drawdown" in log_d.columns
+
+    pos = log_d["near_52w_ratio"] > 0
+    np.testing.assert_allclose(
+        log_d.loc[pos, "near_52w_log_drawdown"].to_numpy(),
+        np.log(log_d.loc[pos, "near_52w_ratio"].to_numpy()),
+    )
+
+
+def test_near_52w_normalize_rank_in_unit_interval() -> None:
+    panel = _make_panel(n_days=40)
+    out = add_near_52w_factors(panel, window=5, feature_subset=["ratio"], normalize=True)
+    vals = out["near_52w_ratio"].dropna()
+    assert (vals >= 0).all() and (vals <= 1).all()
+
+
+def test_near_52w_no_lookahead_prefix_stability() -> None:
+    panel = _make_panel(n_days=50)
+    full = add_near_52w_factors(panel, window=5, feature_subset=["ratio"], normalize=False)
+    cutoff = panel["date"].sort_values().unique()[30]
+    partial = add_near_52w_factors(
+        panel.loc[panel["date"] <= cutoff].copy(),
+        window=5,
+        feature_subset=["ratio"],
+        normalize=False,
+    )
+    merged = full.loc[full["date"] <= cutoff, ["date", "ticker", "near_52w_ratio"]].merge(
+        partial[["date", "ticker", "near_52w_ratio"]],
+        on=["date", "ticker"],
+        suffixes=("_full", "_partial"),
+    )
+    both = merged["near_52w_ratio_full"].notna() & merged["near_52w_ratio_partial"].notna()
+    np.testing.assert_allclose(
+        merged.loc[both, "near_52w_ratio_full"].to_numpy(),
+        merged.loc[both, "near_52w_ratio_partial"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_near_52w_invalid_mode_and_missing_columns() -> None:
+    panel = _make_panel(n_days=25)
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_near_52w_factors(panel, feature_subset=["nope"])
+    with pytest.raises(ValueError, match="missing columns"):
+        add_near_52w_factors(panel.drop(columns=["high"]))
+    with pytest.raises(ValueError, match="window"):
+        near_52w_high(panel["close"], panel["high"], window=0)
+
+
+def test_near_52w_multi_window_column_names_and_parity() -> None:
+    panel = _make_panel(n_days=45)
+    multi = add_near_52w_factors(
+        panel, window=[5, 10], feature_subset=["ratio"], normalize=False
+    )
+    assert "near_52w_ratio_5" in multi.columns
+    assert "near_52w_ratio_10" in multi.columns
+    assert "near_52w_ratio" not in multi.columns
+
+    single = add_near_52w_factors(panel, window=5, feature_subset=["ratio"], normalize=False)
+    both = multi["near_52w_ratio_5"].notna() & single["near_52w_ratio"].notna()
+    np.testing.assert_allclose(
+        multi.loc[both, "near_52w_ratio_5"].to_numpy(),
+        single.loc[both, "near_52w_ratio"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+# --- H-007 MAX (lottery demand) ---
+
+
+def test_max_lottery_series_formula() -> None:
+    # returns: idx 0 unused by first full window; window=3 ending at last bar
+    rets = pd.Series([0.01, 0.05, -0.02, 0.03, 0.04])
+    out = max_lottery(rets, n_extreme=2, window=3)
+    # at index 3: window [-0.02, 0.03, 0.04]? wait indices: 1,2,3 = 0.05,-0.02,0.03 → top2 mean (0.05+0.03)/2
+    # at index 4:  -0.02, 0.03, 0.04 → top2 (0.03+0.04)/2 = 0.035
+    assert np.isnan(out.iloc[0])
+    assert np.isnan(out.iloc[1])
+    assert out.iloc[2] == pytest.approx((0.01 + 0.05) / 2)  # window [0.01, 0.05, -0.02]
+    assert out.iloc[3] == pytest.approx((0.05 + 0.03) / 2)
+    assert out.iloc[4] == pytest.approx((0.03 + 0.04) / 2)
+
+    n1 = max_lottery(rets, n_extreme=1, window=3)
+    assert n1.iloc[4] == pytest.approx(0.04)
+
+
+def test_max_lottery_panel_helper() -> None:
+    panel = _make_panel(n_days=30)
+    out = add_max_lottery_raw(panel, n_extreme=2, window=5, mode="simple")
+    assert "max_lottery_raw" in out.columns
+    assert out["max_lottery_raw"].notna().any()
+
+
+def test_max_lottery_store_modes_and_column_names() -> None:
+    panel = _make_panel(n_days=30)
+    simple = add_max_lottery_factors(
+        panel, n_extreme=2, window=5, feature_subset=["simple"], normalize=False
+    )
+    log_m = add_max_lottery_factors(
+        simple, n_extreme=2, window=5, feature_subset=["log"], normalize=False
+    )
+    assert "max_lottery_simple" in log_m.columns
+    assert "max_lottery_log" in log_m.columns
+    # log and simple extremes differ but both finite where defined
+    both = log_m["max_lottery_simple"].notna() & log_m["max_lottery_log"].notna()
+    assert both.any()
+    # for small positive returns, log ret < simple ret so MAX(log) typically <= MAX(simple)
+    assert (
+        log_m.loc[both, "max_lottery_log"] <= log_m.loc[both, "max_lottery_simple"] + 1e-12
+    ).all()
+
+
+def test_max_lottery_bad_inputs_nan() -> None:
+    close = pd.Series([100.0, np.nan, 102.0, 0.0, 103.0, 104.0])
+    rets = daily_simple_return(close)
+    assert np.isnan(rets.iloc[1])
+    assert np.isnan(rets.iloc[3])  # non-positive close
+    out = max_lottery(rets, n_extreme=2, window=3)
+    # windows that lack 2 finite returns → NaN
+    assert out.isna().any()
+
+
+def test_max_lottery_normalize_cs_zscore_finite() -> None:
+    panel = _make_panel(n_days=30, tickers=["AAA", "BBB", "CCC"])
+    out = add_max_lottery_factors(
+        panel, n_extreme=2, window=5, feature_subset=["simple"], normalize=True
+    )
+    vals = out["max_lottery_simple"].dropna()
+    assert len(vals) > 0
+    assert np.isfinite(vals).all()
+    # CS z is not confined to [0, 1] like pct-rank
+    assert not ((vals >= 0) & (vals <= 1)).all()
+    late = out["date"].max()
+    day = out.loc[out["date"] == late, "max_lottery_simple"].dropna()
+    if len(day) >= 2:
+        assert day.mean() == pytest.approx(0.0, abs=1e-10)
+
+
+def test_max_lottery_no_lookahead_prefix_stability() -> None:
+    panel = _make_panel(n_days=35)
+    full = add_max_lottery_factors(
+        panel, n_extreme=2, window=5, feature_subset=["simple"], normalize=False
+    )
+    cutoff = panel["date"].sort_values().unique()[20]
+    partial = add_max_lottery_factors(
+        panel.loc[panel["date"] <= cutoff].copy(),
+        n_extreme=2,
+        window=5,
+        feature_subset=["simple"],
+        normalize=False,
+    )
+    merged = full.loc[
+        full["date"] <= cutoff, ["date", "ticker", "max_lottery_simple"]
+    ].merge(
+        partial[["date", "ticker", "max_lottery_simple"]],
+        on=["date", "ticker"],
+        suffixes=("_full", "_partial"),
+    )
+    both = (
+        merged["max_lottery_simple_full"].notna()
+        & merged["max_lottery_simple_partial"].notna()
+    )
+    np.testing.assert_allclose(
+        merged.loc[both, "max_lottery_simple_full"].to_numpy(),
+        merged.loc[both, "max_lottery_simple_partial"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_max_lottery_invalid_mode_and_missing_columns() -> None:
+    panel = _make_panel(n_days=20)
+    with pytest.raises(ValueError):
+        add_max_lottery_factors(panel, feature_subset=["nope"])
+    with pytest.raises(ValueError):
+        add_max_lottery_factors(panel.drop(columns=["close"]))
+    with pytest.raises(ValueError):
+        add_max_lottery_factors(panel, n_extreme=5, window=3)
+    with pytest.raises(ValueError):
+        add_max_lottery_factors(panel, add_residuals=True)
+    with pytest.raises(ValueError):
+        max_lottery(panel["close"], n_extreme=0, window=5)
+
+
+def test_max_lottery_multi_window_column_names_and_parity() -> None:
+    panel = _make_panel(n_days=40)
+    multi = add_max_lottery_factors(
+        panel,
+        n_extreme=[1, 2],
+        window=[5, 8],
+        feature_subset=["simple"],
+        normalize=False,
+    )
+    assert "max_lottery_simple_1_5" in multi.columns
+    assert "max_lottery_simple_2_8" in multi.columns
+    assert "max_lottery_simple" not in multi.columns
+
+    single = add_max_lottery_factors(
+        panel, n_extreme=2, window=5, feature_subset=["simple"], normalize=False
+    )
+    both = multi["max_lottery_simple_2_5"].notna() & single["max_lottery_simple"].notna()
+    np.testing.assert_allclose(
+        multi.loc[both, "max_lottery_simple_2_5"].to_numpy(),
+        single.loc[both, "max_lottery_simple"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_max_lottery_residuals_orthogonal_to_idio_rank() -> None:
+    panel = _make_panel(n_days=35, tickers=["AAA", "BBB", "CCC", "DDD"])
+    # Fake idio_vol correlated with but not identical to a return-scale proxy
+    panel = panel.copy()
+    panel["idio_vol"] = (
+        panel.groupby("ticker", sort=False)["close"].pct_change().abs().fillna(0.01)
+        + panel["ticker"].map({"AAA": 0.01, "BBB": 0.02, "CCC": 0.03, "DDD": 0.04})
+    )
+    out = add_max_lottery_factors(
+        panel,
+        n_extreme=2,
+        window=5,
+        feature_subset=["simple"],
+        normalize=True,
+        add_residuals=True,
+        idio_vol_col="idio_vol",
+    )
+    assert "max_lottery_simple" in out.columns
+    assert "max_lottery_simple_resid" in out.columns
+
+    from data.processing.feature_implementation.utilities import (
+        cross_sectional_pct_rank,
+    )
+
+    # On a late date with all names finite, resid should be ~orthogonal to idio rank
+    late = out["date"].max()
+    day = out.loc[out["date"] == late].copy()
+    day["_idio_rank"] = cross_sectional_pct_rank(day, "idio_vol")
+    mask = day["max_lottery_simple_resid"].notna() & day["_idio_rank"].notna()
+    if mask.sum() >= 3:
+        corr = np.corrcoef(
+            day.loc[mask, "max_lottery_simple_resid"].to_numpy(),
+            day.loc[mask, "_idio_rank"].to_numpy(),
+        )[0, 1]
+        assert abs(corr) < 1e-8
 
 
 # --- H-003 / beta regression primitives ---
@@ -444,7 +778,9 @@ def test_idiosyncratic_vol_uses_beta_ols() -> None:
     spy["ticker"] = "SPY"
     mkt = market_return_frame(spy)
 
-    out = add_idiosyncratic_vol(panel, mkt, windows=20)
+    out = add_idio_vol_factors(
+        panel, mkt, windows=20, normalize=False, feature_subset=["idio_vol"]
+    )
     assert "idio_vol" in out.columns
     assert "idio_vol_20" not in out.columns
 
@@ -477,12 +813,12 @@ def test_idio_store_single_vs_multi_window_parity() -> None:
     panel = _make_panel(n_days=40, tickers=["AAA", "BBB", "CCC"])
     mkt = _idio_market_frame(panel)
 
-    multi = add_idiosyncratic_vol(panel, mkt, windows=[15, 20], normalize=False)
+    multi = add_idio_vol_factors(panel, mkt, windows=[15, 20], normalize=False, feature_subset=["idio_vol"])
     assert "idio_vol_15" in multi.columns
     assert "idio_vol_20" in multi.columns
     assert "idio_vol" not in multi.columns
 
-    single = add_idiosyncratic_vol(panel, mkt, windows=20, normalize=False)
+    single = add_idio_vol_factors(panel, mkt, windows=20, normalize=False, feature_subset=["idio_vol"])
     assert "idio_vol" in single.columns
     both = multi["idio_vol_20"].notna() & single["idio_vol"].notna()
     np.testing.assert_allclose(
@@ -495,7 +831,7 @@ def test_idio_store_single_vs_multi_window_parity() -> None:
 def test_idio_store_normalize_rank_in_unit_interval() -> None:
     panel = _make_panel(n_days=40, tickers=["AAA", "BBB", "CCC"])
     mkt = _idio_market_frame(panel)
-    out = add_idiosyncratic_vol(panel, mkt, windows=20, normalize=True)
+    out = add_idio_vol_factors(panel, mkt, windows=20, normalize=True, feature_subset=["idio_vol"])
     vals = out["idio_vol"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
@@ -508,7 +844,7 @@ def test_idio_store_normalize_false_matches_raw() -> None:
 
     panel = _make_panel(n_days=40, tickers=["AAA", "BBB"])
     mkt = _idio_market_frame(panel)
-    store = add_idiosyncratic_vol(panel, mkt, windows=20, normalize=False)
+    store = add_idio_vol_factors(panel, mkt, windows=20, normalize=False, feature_subset=["idio_vol"])
     raw = add_idiosyncratic_vol_raw(panel, mkt, windows=20)
     both = store["idio_vol"].notna() & raw["idio_vol"].notna()
     np.testing.assert_allclose(
@@ -521,12 +857,12 @@ def test_idio_store_normalize_false_matches_raw() -> None:
 def test_idio_store_no_lookahead_prefix_stability() -> None:
     panel = _make_panel(n_days=50, tickers=["AAA", "BBB"])
     mkt = _idio_market_frame(panel)
-    full = add_idiosyncratic_vol(panel, mkt, windows=20, normalize=False)
+    full = add_idio_vol_factors(panel, mkt, windows=20, normalize=False, feature_subset=["idio_vol"])
 
     cutoff = panel["date"].sort_values().unique()[35]
     prefix = panel.loc[panel["date"] <= cutoff].copy()
     mkt_prefix = mkt.loc[mkt["date"] <= cutoff].copy()
-    partial = add_idiosyncratic_vol(prefix, mkt_prefix, windows=20, normalize=False)
+    partial = add_idio_vol_factors(prefix, mkt_prefix, windows=20, normalize=False, feature_subset=["idio_vol"])
 
     merged = partial[["date", "ticker", "idio_vol"]].merge(
         full[["date", "ticker", "idio_vol"]],
@@ -545,11 +881,11 @@ def test_idio_store_invalid_inputs() -> None:
     panel = _make_panel(n_days=30)
     mkt = _idio_market_frame(panel)
     with pytest.raises(ValueError, match="missing columns"):
-        add_idiosyncratic_vol(panel.drop(columns=["close"]), mkt)
+        add_idio_vol_factors(panel.drop(columns=["close"]), mkt, feature_subset=["idio_vol"])
     with pytest.raises(ValueError, match="market_returns missing column"):
-        add_idiosyncratic_vol(panel, mkt.drop(columns=["market_log_ret"]))
+        add_idio_vol_factors(panel, mkt.drop(columns=["market_log_ret"]), feature_subset=["idio_vol"])
     with pytest.raises(ValueError, match="market_returns missing column"):
-        add_idiosyncratic_vol(panel, mkt.drop(columns=["date"]))
+        add_idio_vol_factors(panel, mkt.drop(columns=["date"]), feature_subset=["idio_vol"])
 
 
 # ---------------------------------------------------------------------------
@@ -572,16 +908,7 @@ from data.processing.feature_implementation.beta_features import (
     drop_beta_workspace,
     parse_beta_factor_name,
 )
-from data.processing.feature_store import (
-    add_beta,
-    add_blume_beta,
-    add_downside_beta,
-    add_net_beta_spread,
-    add_relative_downside_beta,
-    add_relative_upside_beta,
-    add_residual_momentum,
-    add_upside_beta,
-)
+from data.processing.feature_store import add_beta_factors
 
 
 def _make_beta_panel(n_days: int = 80, tickers: list[str] | None = None) -> pd.DataFrame:
@@ -731,11 +1058,11 @@ def test_ff_workspace_idempotency() -> None:
 def test_beta_store_spy_column_naming() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
-    single = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=False)
+    single = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
     assert "beta" in single.columns
     assert "beta_30" not in single.columns
 
-    multi = add_beta(panel, mkt, benchmark="spy", windows=[30, 40], normalize=False)
+    multi = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=[30, 40], normalize=False)
     assert "beta_30" in multi.columns
     assert "beta_40" in multi.columns
     assert "beta" not in multi.columns
@@ -744,12 +1071,12 @@ def test_beta_store_spy_column_naming() -> None:
 def test_beta_store_ff_column_naming() -> None:
     panel = _make_beta_panel(n_days=60)
     ff = _make_ff_factors(panel)
-    single = add_beta(panel, ff, benchmark="ff", windows=30, normalize=False)
+    single = add_beta_factors(panel, ff_factors=ff, feature_subset=["smart_beta_smb", "smart_beta_hml", "smart_beta_mom"], windows=30, normalize=False)
     assert "smart_beta_smb" in single.columns
     assert "smart_beta_hml" in single.columns
     assert "smart_beta_mom" in single.columns
 
-    multi = add_beta(panel, ff, benchmark="ff", windows=[30, 40], normalize=False)
+    multi = add_beta_factors(panel, ff_factors=ff, feature_subset=["smart_beta_smb", "smart_beta_hml", "smart_beta_mom"], windows=[30, 40], normalize=False)
     assert "smart_beta_smb_30" in multi.columns
     assert "smart_beta_hml_40" in multi.columns
 
@@ -757,9 +1084,9 @@ def test_beta_store_ff_column_naming() -> None:
 def test_net_beta_spread_identity() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
-    result = add_upside_beta(panel, mkt, windows=30, normalize=False)
-    result = add_downside_beta(result, mkt, windows=30, normalize=False)
-    result = add_net_beta_spread(result, mkt, windows=30, normalize=False)
+    result = add_beta_factors(panel, market_returns=mkt, feature_subset=["upside_beta"], windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["downside_beta"], windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["net_beta_spread"], windows=30, normalize=False)
     both = result["net_beta_spread"].notna()
     np.testing.assert_allclose(
         result.loc[both, "net_beta_spread"].to_numpy(),
@@ -771,11 +1098,11 @@ def test_net_beta_spread_identity() -> None:
 def test_relative_beta_identities() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
-    result = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=False)
-    result = add_downside_beta(result, mkt, windows=30, normalize=False)
-    result = add_upside_beta(result, mkt, windows=30, normalize=False)
-    result = add_relative_downside_beta(result, mkt, windows=30, normalize=False)
-    result = add_relative_upside_beta(result, mkt, windows=30, normalize=False)
+    result = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["downside_beta"], windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["upside_beta"], windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["rel_downside_beta"], windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["rel_upside_beta"], windows=30, normalize=False)
 
     both_down = result["rel_downside_beta"].notna() & result["downside_beta"].notna() & result["beta"].notna()
     np.testing.assert_allclose(
@@ -794,8 +1121,8 @@ def test_relative_beta_identities() -> None:
 def test_blume_beta_identity() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
-    result = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=False)
-    result = add_blume_beta(result, mkt, windows=30)
+    result = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
+    result = add_beta_factors(result, market_returns=mkt, feature_subset=["blume_beta"], windows=30)
     both = result["blume_beta"].notna() & result["beta"].notna()
     np.testing.assert_allclose(
         result.loc[both, "blume_beta"].to_numpy(),
@@ -809,7 +1136,7 @@ def test_blume_beta_identity() -> None:
 def test_beta_normalize_bounds() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
-    result = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=True)
+    result = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=True)
     vals = result["beta"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
@@ -821,14 +1148,50 @@ def test_beta_invalid_benchmark() -> None:
     panel = _make_beta_panel(n_days=40)
     mkt = _make_market_returns(panel)
     with pytest.raises(ValueError, match="benchmark"):
-        add_beta(panel, mkt, benchmark="bad")
+        add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="bad")
+    with pytest.raises(ValueError, match="benchmark"):
+        add_beta_factors(
+            panel,
+            market_returns=mkt,
+            feature_subset=["residual_mom"],
+            benchmark="bad",
+            formation_window=20,
+            skip=5,
+        )
+
+
+def test_beta_store_rsp_matches_spy_contract() -> None:
+    """benchmark='rsp' shares the univariate workspace / column contract with 'spy'."""
+    panel = _make_beta_panel(n_days=60)
+    mkt = _make_market_returns(panel)
+    spy = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
+    rsp = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="rsp", windows=30, normalize=False)
+    assert "beta" in rsp.columns
+    assert "beta_30" not in rsp.columns
+    both = spy["beta"].notna() & rsp["beta"].notna()
+    np.testing.assert_allclose(
+        spy.loc[both, "beta"].to_numpy(),
+        rsp.loc[both, "beta"].to_numpy(),
+        rtol=1e-12,
+    )
+
+    spy_mom = add_beta_factors(panel, market_returns=mkt, feature_subset=["residual_mom"], formation_window=30, skip=5)
+    rsp_mom = add_beta_factors(panel, market_returns=mkt, feature_subset=["residual_mom"], formation_window=30, skip=5)
+    assert "residual_mom" in rsp_mom.columns
+    assert "smart_residual_mom" not in rsp_mom.columns
+    both_m = spy_mom["residual_mom"].notna() & rsp_mom["residual_mom"].notna()
+    np.testing.assert_allclose(
+        spy_mom.loc[both_m, "residual_mom"].to_numpy(),
+        rsp_mom.loc[both_m, "residual_mom"].to_numpy(),
+        rtol=1e-12,
+    )
 
 
 def test_residual_momentum_invalid_formation_skip() -> None:
     panel = _make_beta_panel(n_days=60)
     mkt = _make_market_returns(panel)
     with pytest.raises(ValueError, match="formation_window must be > skip"):
-        add_residual_momentum(panel, mkt, benchmark="spy", formation_window=10, skip=10)
+        add_beta_factors(panel, market_returns=mkt, feature_subset=["residual_mom"], formation_window=10, skip=10)
 
 
 # --- No-lookahead prefix parity ---
@@ -836,11 +1199,11 @@ def test_residual_momentum_invalid_formation_skip() -> None:
 def test_beta_no_lookahead() -> None:
     panel = _make_beta_panel(n_days=80)
     mkt = _make_market_returns(panel)
-    full = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=False)
+    full = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
     cutoff = panel["date"].sort_values().unique()[50]
     prefix = panel[panel["date"] <= cutoff].copy()
     mkt_prefix = mkt[mkt["date"] <= cutoff].copy()
-    partial = add_beta(prefix, mkt_prefix, benchmark="spy", windows=30, normalize=False)
+    partial = add_beta_factors(prefix, market_returns=mkt_prefix, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
     merged = partial[["date", "ticker", "beta"]].merge(
         full[["date", "ticker", "beta"]],
         on=["date", "ticker"],
@@ -859,8 +1222,8 @@ def test_beta_no_lookahead() -> None:
 def test_beta_multi_window_parity() -> None:
     panel = _make_beta_panel(n_days=80)
     mkt = _make_market_returns(panel)
-    multi = add_beta(panel, mkt, benchmark="spy", windows=[30, 40], normalize=False)
-    single = add_beta(panel, mkt, benchmark="spy", windows=30, normalize=False)
+    multi = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=[30, 40], normalize=False)
+    single = add_beta_factors(panel, market_returns=mkt, feature_subset=["beta"], benchmark="spy", windows=30, normalize=False)
     both = multi["beta_30"].notna() & single["beta"].notna()
     np.testing.assert_allclose(
         multi.loc[both, "beta_30"].to_numpy(),
@@ -874,29 +1237,20 @@ def test_beta_multi_window_parity() -> None:
 def test_residual_momentum_spy_columns() -> None:
     panel = _make_beta_panel(n_days=80)
     mkt = _make_market_returns(panel)
-    result = add_residual_momentum(
-        panel, mkt, benchmark="spy",
-        formation_window=[30, 40], skip=[5, 10],
-    )
+    result = add_beta_factors(panel, market_returns=mkt, feature_subset=["residual_mom"], formation_window=[30, 40], skip=[5, 10])
     assert "residual_mom_30_5" in result.columns
     assert "residual_mom_30_10" in result.columns
     assert "residual_mom_40_5" in result.columns
     assert "residual_mom_40_10" in result.columns
 
-    single = add_residual_momentum(
-        panel, mkt, benchmark="spy",
-        formation_window=30, skip=5,
-    )
+    single = add_beta_factors(panel, market_returns=mkt, feature_subset=["residual_mom"], formation_window=30, skip=5)
     assert "residual_mom" in single.columns
 
 
 def test_residual_momentum_ff_columns() -> None:
     panel = _make_beta_panel(n_days=80)
     ff = _make_ff_factors(panel)
-    result = add_residual_momentum(
-        panel, ff, benchmark="ff",
-        formation_window=30, skip=5,
-    )
+    result = add_beta_factors(panel, ff_factors=ff, feature_subset=["smart_residual_mom"], formation_window=30, skip=5)
     assert "smart_residual_mom" in result.columns
 
 
@@ -954,23 +1308,33 @@ def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> No
         "BIL": (100.0, 100.02),
     }
     dates = [pd.Timestamp("2023-01-02"), pd.Timestamp("2023-01-03")]
-    call_count = {"n": 0}
+    call_count = {"batch": 0, "single": 0}
+
+    def mock_download_ohlcv(tickers, start, end, *, cache_dir=None, cache_label=""):
+        call_count["batch"] += 1
+        frames = []
+        for ticker in tickers:
+            c0, c1 = closes[str(ticker).strip().upper()]
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "date": dates,
+                        "ticker": str(ticker).strip().upper(),
+                        "open": [c0, c1],
+                        "high": [c0, c1],
+                        "low": [c0, c1],
+                        "close": [c0, c1],
+                        "volume": [1_000_000, 1_000_000],
+                    }
+                )
+            )
+        return pd.concat(frames, ignore_index=True)
 
     def mock_fetch_ohlcv(ticker, start_date, end_date=None, *, cache_dir=None):
-        call_count["n"] += 1
-        c0, c1 = closes[ticker.strip().upper()]
-        return pd.DataFrame(
-            {
-                "date": dates,
-                "ticker": ticker.strip().upper(),
-                "open": [c0, c1],
-                "high": [c0, c1],
-                "low": [c0, c1],
-                "close": [c0, c1],
-                "volume": [1_000_000, 1_000_000],
-            }
-        )
+        call_count["single"] += 1
+        raise AssertionError("single-ticker fallback should not run when batch succeeds")
 
+    monkeypatch.setattr(ff_impl, "_download_ohlcv", mock_download_ohlcv)
     monkeypatch.setattr(ff_impl, "fetch_ohlcv", mock_fetch_ohlcv)
 
     import tempfile
@@ -993,12 +1357,12 @@ def test_ff_fetcher_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: str) -> No
     assert result["mom"].iloc[0] == pytest.approx(mtum_r - spy_r)
     assert result["date"].is_monotonic_increasing
 
-    n_after_build = call_count["n"]
-    assert n_after_build == 6  # one fetch_ohlcv per ETF
+    assert call_count["batch"] == 1
+    assert call_count["single"] == 0
 
     # Second call hits cache
     result2 = ff_impl.fetch_ff_factors_daily(cache_dir=cache_dir)
-    assert call_count["n"] == n_after_build
+    assert call_count["batch"] == 1
     assert len(result2) == 1
 
 
@@ -1014,16 +1378,7 @@ from data.processing.feature_implementation.size_and_valuation_features import (
     valuation_roc,
     value_momentum_distance,
 )
-from data.processing.feature_store import (
-    add_book_yield,
-    add_earnings_yield,
-    add_log_mcap,
-    add_size_momentum,
-    add_valuation_roc,
-    add_value_momentum_distance,
-    add_value_momentum_interaction,
-    add_value_momentum_residual,
-)
+from data.processing.feature_store import add_size_value_factors
 
 
 def _make_sv_panel(
@@ -1129,34 +1484,34 @@ def test_value_momentum_distance_geometry() -> None:
 def test_sv_store_missing_columns() -> None:
     panel = _make_panel(n_days=20)
     with pytest.raises(ValueError, match="missing columns"):
-        add_book_yield(panel)
+        add_size_value_factors(panel, feature_subset=["book_yield"])
     with pytest.raises(ValueError, match="missing columns"):
-        add_earnings_yield(panel)
+        add_size_value_factors(panel, feature_subset=["earnings_yield"])
     with pytest.raises(ValueError, match="missing columns"):
-        add_log_mcap(panel)
+        add_size_value_factors(panel, feature_subset=["log_mcap"])
     with pytest.raises(ValueError, match="missing columns"):
-        add_size_momentum(panel)
+        add_size_value_factors(panel, feature_subset=["size_mom"])
 
 
 def test_sv_store_invalid_metric() -> None:
     panel = _make_sv_panel(n_days=20)
-    with pytest.raises(ValueError, match="metric"):
-        add_valuation_roc(panel, metric="bad")
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_size_value_factors(panel, feature_subset=["val_roc_bad"])
 
 
 def test_sv_store_normalize_bounds() -> None:
     panel = _make_sv_panel(n_days=60)
-    by_out = add_book_yield(panel, normalize=True)
+    by_out = add_size_value_factors(panel, normalize=True, feature_subset=["book_yield"])
     vals = by_out["book_yield"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
 
-    ey_out = add_earnings_yield(panel, normalize=True)
+    ey_out = add_size_value_factors(panel, normalize=True, feature_subset=["earnings_yield"])
     vals = ey_out["earnings_yield"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
 
-    lm_out = add_log_mcap(panel, normalize=True)
+    lm_out = add_size_value_factors(panel, normalize=True, feature_subset=["log_mcap"])
     vals = lm_out["log_mcap"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
@@ -1164,11 +1519,11 @@ def test_sv_store_normalize_bounds() -> None:
 
 def test_sv_valuation_roc_column_names() -> None:
     panel = _make_sv_panel(n_days=60)
-    single = add_valuation_roc(panel, metric="pb", window=5)
+    single = add_size_value_factors(panel, window=5, feature_subset=["val_roc_pb"])
     assert "val_roc_pb" in single.columns
     assert "val_roc_pb_5" not in single.columns
 
-    multi = add_valuation_roc(panel, metric="pb", window=[5, 10])
+    multi = add_size_value_factors(panel, window=[5, 10], feature_subset=["val_roc_pb"])
     assert "val_roc_pb_5" in multi.columns
     assert "val_roc_pb_10" in multi.columns
     assert "val_roc_pb" not in multi.columns
@@ -1176,8 +1531,8 @@ def test_sv_valuation_roc_column_names() -> None:
 
 def test_sv_size_momentum_multi_window_parity() -> None:
     panel = _make_sv_panel(n_days=60)
-    multi = add_size_momentum(panel, window=[5, 10])
-    single = add_size_momentum(panel, window=5)
+    multi = add_size_value_factors(panel, window=[5, 10], feature_subset=["size_mom"])
+    single = add_size_value_factors(panel, window=5, feature_subset=["size_mom"])
     both = multi["size_mom_5"].notna() & single["size_mom"].notna()
     np.testing.assert_allclose(
         multi.loc[both, "size_mom_5"].to_numpy(),
@@ -1188,10 +1543,10 @@ def test_sv_size_momentum_multi_window_parity() -> None:
 
 def test_sv_no_lookahead_prefix_stability() -> None:
     panel = _make_sv_panel(n_days=60)
-    full = add_book_yield(panel, normalize=False)
+    full = add_size_value_factors(panel, normalize=False, feature_subset=["book_yield"])
     cutoff = panel["date"].sort_values().unique()[-10]
     truncated = panel[panel["date"] <= cutoff].copy()
-    partial = add_book_yield(truncated, normalize=False)
+    partial = add_size_value_factors(truncated, normalize=False, feature_subset=["book_yield"])
     merged = partial[["date", "ticker", "book_yield"]].merge(
         full[["date", "ticker", "book_yield"]],
         on=["date", "ticker"],
@@ -1207,8 +1562,8 @@ def test_sv_no_lookahead_prefix_stability() -> None:
 
 def test_sv_value_momentum_interaction_column() -> None:
     panel = _make_sv_panel(n_days=60)
-    result = add_value_momentum_interaction(
-        panel, mom_lookback=5, mom_skip=1
+    result = add_size_value_factors(
+        panel, mom_lookback=5, mom_skip=1, feature_subset=["val_mom_interact"]
     )
     assert "val_mom_interact" in result.columns
     assert result["val_mom_interact"].notna().any()
@@ -1216,8 +1571,8 @@ def test_sv_value_momentum_interaction_column() -> None:
 
 def test_sv_value_momentum_distance_column() -> None:
     panel = _make_sv_panel(n_days=60)
-    result = add_value_momentum_distance(
-        panel, mom_lookback=5, mom_skip=1
+    result = add_size_value_factors(
+        panel, mom_lookback=5, mom_skip=1, feature_subset=["val_mom_dist"]
     )
     assert "val_mom_dist" in result.columns
     vals = result["val_mom_dist"].dropna()
@@ -1227,9 +1582,810 @@ def test_sv_value_momentum_distance_column() -> None:
 
 def test_sv_value_momentum_residual_orthogonality() -> None:
     panel = _make_sv_panel(n_days=60)
-    result = add_value_momentum_residual(
-        panel, regression_window=20, mom_lookback=5, mom_skip=1
+    result = add_size_value_factors(
+        panel,
+        regression_window=20,
+        mom_lookback=5,
+        mom_skip=1,
+        feature_subset=["val_mom_resid"],
     )
     assert "val_mom_resid" in result.columns
     assert result["val_mom_resid"].notna().any()
 
+
+# ---------------------------------------------------------------------------
+# H-008 Gross Profitability
+# ---------------------------------------------------------------------------
+
+from data.processing.feature_implementation.gross_profitability import (
+    gross_profitability,
+)
+from data.processing.feature_store import add_gross_profitability_factors
+
+
+def _make_gp_panel(
+    n_days: int = 40,
+    tickers: list[str] | None = None,
+) -> pd.DataFrame:
+    """Synthetic panel with ``gp_asset`` for H-008 tests."""
+    if tickers is None:
+        tickers = ["AAA", "BBB", "CCC"]
+    rng = np.random.default_rng(88)
+    dates = pd.bdate_range("2022-01-03", periods=n_days)
+    frames = []
+    for i, ticker in enumerate(tickers):
+        base = 100.0 + i * 20.0
+        returns = rng.normal(0.0005 * (i + 1), 0.012, n_days)
+        close = base * np.exp(np.cumsum(returns))
+        gp_asset = 0.1 + 0.05 * i + rng.normal(0, 0.01, n_days)
+        frames.append(
+            pd.DataFrame({
+                "date": dates,
+                "ticker": ticker,
+                "close": close,
+                "gp_asset": gp_asset,
+            })
+        )
+    return (
+        pd.concat(frames, ignore_index=True)
+        .sort_values(["date", "ticker"])
+        .reset_index(drop=True)
+    )
+
+
+def test_gross_profitability_hand_check() -> None:
+    gp = pd.Series([0.25, 0.5, np.nan, np.inf, -0.1])
+    out = gross_profitability(gp)
+    assert out.iloc[0] == pytest.approx(0.25)
+    assert out.iloc[1] == pytest.approx(0.5)
+    assert pd.isna(out.iloc[2])
+    assert pd.isna(out.iloc[3])
+    assert out.iloc[4] == pytest.approx(-0.1)
+
+
+def test_gp_store_column_name() -> None:
+    panel = _make_gp_panel(n_days=20)
+    result = add_gross_profitability_factors(panel, normalize=False, feature_subset=["gross_profitability"])
+    assert "gross_profitability" in result.columns
+    both = result["gross_profitability"].notna() & result["gp_asset"].notna()
+    np.testing.assert_allclose(
+        result.loc[both, "gross_profitability"].to_numpy(),
+        result.loc[both, "gp_asset"].to_numpy(),
+        rtol=1e-12,
+    )
+
+
+def test_gp_store_missing_columns() -> None:
+    panel = _make_panel(n_days=20)
+    with pytest.raises(ValueError, match="missing columns"):
+        add_gross_profitability_factors(panel, feature_subset=["gross_profitability"])
+
+
+def test_gp_store_normalize_bounds() -> None:
+    panel = _make_gp_panel(n_days=40)
+    out = add_gross_profitability_factors(panel, normalize=True, feature_subset=["gross_profitability"])
+    vals = out["gross_profitability"].dropna()
+    assert len(vals) > 0
+    assert vals.between(0.0, 1.0).all()
+
+
+def test_gp_no_lookahead_prefix_stability() -> None:
+    panel = _make_gp_panel(n_days=40)
+    full = add_gross_profitability_factors(panel, normalize=False, feature_subset=["gross_profitability"])
+    cutoff = panel["date"].sort_values().unique()[-10]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    partial = add_gross_profitability_factors(truncated, normalize=False, feature_subset=["gross_profitability"])
+    merged = partial[["date", "ticker", "gross_profitability"]].merge(
+        full[["date", "ticker", "gross_profitability"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = (
+        merged["gross_profitability_partial"].notna()
+        & merged["gross_profitability_full"].notna()
+    )
+    np.testing.assert_allclose(
+        merged.loc[both, "gross_profitability_partial"].to_numpy(),
+        merged.loc[both, "gross_profitability_full"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+# ---------------------------------------------------------------------------
+# H-010 short-selling pressure
+# ---------------------------------------------------------------------------
+
+from data.processing.feature_implementation.filing_clock import (
+    days_since_filing,
+    expected_days_until_filing,
+)
+from data.processing.feature_implementation.short_flow import (
+    abnormal_short_flow,
+    short_volume_ratio,
+)
+from data.processing.feature_store import add_short_flow_factors
+
+
+def _make_short_flow_panel(
+    n_days: int = 80,
+    tickers: list[str] | None = None,
+) -> pd.DataFrame:
+    """Synthetic panel with FINRA short-volume columns for H-010 tests."""
+    if tickers is None:
+        tickers = ["AAA", "BBB"]
+    rng = np.random.default_rng(101)
+    dates = pd.bdate_range("2022-01-03", periods=n_days)
+    frames = []
+    for i, ticker in enumerate(tickers):
+        total = rng.uniform(1e5, 5e5, n_days)
+        short = total * (0.3 + 0.1 * i + 0.05 * rng.normal(0, 1, n_days))
+        short = np.clip(short, 0, total)
+        exempt = short * 0.05
+        frames.append(
+            pd.DataFrame(
+                {
+                    "date": dates,
+                    "ticker": ticker,
+                    "short_volume": short,
+                    "short_exempt_volume": exempt,
+                    "total_volume": total,
+                }
+            )
+        )
+    return (
+        pd.concat(frames, ignore_index=True)
+        .sort_values(["date", "ticker"])
+        .reset_index(drop=True)
+    )
+
+
+def test_short_volume_ratio_hand_check() -> None:
+    short = pd.Series([10.0, 20.0, 5.0, 1.0])
+    total = pd.Series([100.0, 50.0, 0.0, -10.0])
+    ratio = short_volume_ratio(short, total)
+    assert ratio.iloc[0] == pytest.approx(0.1)
+    assert ratio.iloc[1] == pytest.approx(0.4)
+    assert pd.isna(ratio.iloc[2])
+    assert pd.isna(ratio.iloc[3])
+
+
+def test_abnormal_short_flow_hand_check_baseline_excludes_current() -> None:
+    # smooth=2, baseline=2 on svr = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    # sm = [nan, 0.15, 0.25, 0.35, 0.45, 0.55]
+    # lagged sm = [nan, nan, 0.15, 0.25, 0.35, 0.45]
+    # at idx 3: base = [0.15, 0.25], mean=0.2, std(ddof=0)=0.05
+    # z = (0.35 - 0.2) / 0.05 = 3.0  (current sm excluded from base)
+    svr = pd.Series([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    z = abnormal_short_flow(svr, smooth_window=2, baseline_window=2)
+    assert pd.isna(z.iloc[2])
+    assert z.iloc[3] == pytest.approx(3.0)
+    # at idx 4: base = [0.25, 0.35], mean=0.3, std=0.05; z=(0.45-0.3)/0.05=3.0
+    assert z.iloc[4] == pytest.approx(3.0)
+
+
+def test_abnormal_short_flow_zero_variance_nan() -> None:
+    svr = pd.Series([0.25] * 20)
+    z = abnormal_short_flow(svr, smooth_window=3, baseline_window=5)
+    # Constant series → rolling std == 0 → NaN (not 0 or inf)
+    assert z.isna().all()
+    assert not np.isinf(z.to_numpy(dtype=float)).any()
+
+
+def test_short_flow_store_modes_and_columns() -> None:
+    panel = _make_short_flow_panel(n_days=80)
+    abn = add_short_flow_factors(panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"])
+    assert "short_flow_abnormal" in abn.columns
+    assert abn["short_flow_abnormal"].notna().any()
+
+    ratio = add_short_flow_factors(panel, feature_subset=["ratio"])
+    assert "short_flow_ratio" in ratio.columns
+    both = ratio["short_flow_ratio"].notna()
+    expected = short_volume_ratio(panel["short_volume"], panel["total_volume"])
+    np.testing.assert_allclose(
+        ratio.loc[both, "short_flow_ratio"].to_numpy(),
+        expected.loc[both].to_numpy(),
+        rtol=1e-12,
+    )
+
+    exempt = add_short_flow_factors(panel, feature_subset=["exempt_ratio"])
+    assert "short_flow_exempt_ratio" in exempt.columns
+    assert exempt["short_flow_exempt_ratio"].notna().any()
+
+
+def test_short_flow_multi_window_parity() -> None:
+    panel = _make_short_flow_panel(n_days=80)
+    multi = add_short_flow_factors(
+        panel,
+        smooth_window=[3, 5],
+        baseline_window=[10, 20],
+        feature_subset=["abnormal"],
+    )
+    assert "short_flow_abnormal_3_10" in multi.columns
+    assert "short_flow_abnormal_5_20" in multi.columns
+    assert "short_flow_abnormal" not in multi.columns
+
+    single = add_short_flow_factors(
+        panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"]
+    )
+    both = (
+        multi["short_flow_abnormal_5_20"].notna()
+        & single["short_flow_abnormal"].notna()
+    )
+    np.testing.assert_allclose(
+        multi.loc[both, "short_flow_abnormal_5_20"].to_numpy(),
+        single.loc[both, "short_flow_abnormal"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_short_flow_invalid_mode_and_missing_cols() -> None:
+    panel = _make_short_flow_panel(n_days=30)
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_short_flow_factors(panel, feature_subset=["bad"])
+    bare = _make_panel(n_days=20)
+    with pytest.raises(ValueError, match="missing columns"):
+        add_short_flow_factors(bare, feature_subset=["abnormal"])
+    with pytest.raises(ValueError, match="missing columns"):
+        add_short_flow_factors(bare, feature_subset=["exempt_ratio"])
+
+
+def test_short_flow_no_lookahead_prefix_stability() -> None:
+    panel = _make_short_flow_panel(n_days=80)
+    full = add_short_flow_factors(panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"])
+    cutoff = panel["date"].sort_values().unique()[-15]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    partial = add_short_flow_factors(
+        truncated, smooth_window=5, baseline_window=20, feature_subset=["abnormal"]
+    )
+    merged = partial[["date", "ticker", "short_flow_abnormal"]].merge(
+        full[["date", "ticker", "short_flow_abnormal"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = (
+        merged["short_flow_abnormal_partial"].notna()
+        & merged["short_flow_abnormal_full"].notna()
+    )
+    np.testing.assert_allclose(
+        merged.loc[both, "short_flow_abnormal_partial"].to_numpy(),
+        merged.loc[both, "short_flow_abnormal_full"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_filing_clock_hand_checks_including_overdue() -> None:
+    dates = pd.Series(pd.to_datetime(["2023-01-10", "2023-02-10", "2023-04-10"]))
+    last_filed = pd.Series(pd.to_datetime(["2023-01-01", "2023-01-01", "2023-01-01"]))
+    since = days_since_filing(dates, last_filed)
+    assert since.iloc[0] == pytest.approx(9.0)
+    assert since.iloc[1] == pytest.approx(40.0)
+
+    expected_next = pd.Series(
+        pd.to_datetime(["2023-02-01", "2023-02-01", "2023-02-01"])
+    )
+    until = expected_days_until_filing(dates, expected_next)
+    assert until.iloc[0] == pytest.approx(22.0)  # Jan 10 → Feb 1
+    assert until.iloc[1] == pytest.approx(-9.0)  # overdue
+    assert until.iloc[2] < 0
+
+
+def test_filing_event_clock_store_modes() -> None:
+    dates = pd.bdate_range("2023-01-02", periods=10)
+    panel = pd.DataFrame(
+        {
+            "date": dates,
+            "ticker": "AAA",
+            "last_filed": pd.Timestamp("2022-12-15"),
+            "expected_next_filed": pd.Timestamp("2023-01-20"),
+        }
+    )
+    since = add_short_flow_factors(panel, feature_subset=["filing_since"])
+    assert "filing_clock_since" in since.columns
+    assert since["filing_clock_since"].iloc[0] == pytest.approx(
+        (dates[0] - pd.Timestamp("2022-12-15")).days
+    )
+
+    until = add_short_flow_factors(panel, feature_subset=["filing_expected_until"])
+    assert "filing_clock_expected_until" in until.columns
+    # After 2023-01-20 the signed days go negative (overdue)
+    late = until[until["date"] > pd.Timestamp("2023-01-20")]
+    assert (late["filing_clock_expected_until"] < 0).all()
+
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_short_flow_factors(panel, feature_subset=["nope"])
+    with pytest.raises(ValueError, match="missing columns"):
+        add_short_flow_factors(
+            pd.DataFrame({"date": dates, "ticker": "AAA"}),
+            feature_subset=["filing_since"],
+        )
+
+def test_expected_next_filed_pit_no_lookahead() -> None:
+    """Forecast at event i uses only filings 0..i (primary: filed[i-3]+365)."""
+    from data.ingestion.alternative_data.sec_companyfacts import (
+        _extract_filing_clock_events,
+        _forecast_expected_next_filed,
+    )
+
+    filed = [
+        pd.Timestamp("2020-01-15"),
+        pd.Timestamp("2020-04-15"),
+        pd.Timestamp("2020-07-15"),
+        pd.Timestamp("2020-10-15"),
+        pd.Timestamp("2021-01-20"),
+    ]
+    # i=0 → NaT
+    assert pd.isna(_forecast_expected_next_filed(filed, 0))
+    # i=1 → median of 1 gap = 91 days (approx Jan→Apr)
+    fb1 = _forecast_expected_next_filed(filed, 1)
+    assert fb1 == filed[1] + pd.Timedelta(days=(filed[1] - filed[0]).days)
+    # i=3 → primary: filed[0] + 365
+    assert _forecast_expected_next_filed(filed, 3) == filed[0] + pd.Timedelta(
+        days=365
+    )
+    # i=4 → primary: filed[1] + 365
+    assert _forecast_expected_next_filed(filed, 4) == filed[1] + pd.Timedelta(
+        days=365
+    )
+
+    facts = {
+        "facts": {
+            "us-gaap": {
+                "Assets": {
+                    "units": {
+                        "USD": [
+                            {
+                                "filed": ts.strftime("%Y-%m-%d"),
+                                "val": 1.0,
+                                "form": "10-Q",
+                                "end": ts.strftime("%Y-%m-%d"),
+                            }
+                            for ts in filed
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    events = _extract_filing_clock_events(facts, ("10-Q", "10-K", "10-Q/A", "10-K/A"))
+    assert len(events) == 5
+    assert pd.isna(events["expected_next_filed"].iloc[0])
+    assert events["expected_next_filed"].iloc[3] == filed[0] + pd.Timedelta(days=365)
+    # Later forecasts must not equal a future filed date that wasn't available
+    # at i=3 (filed[4] was unknown): primary uses filed[0]+365 only.
+    assert events["expected_next_filed"].iloc[3] != filed[4]
+
+
+# ---------------------------------------------------------------------------
+# feature_subset dispatcher smoke tests
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_feature_subset_empty_adds_all_near_52w():
+    from data.processing.feature_store import NEAR_52W_FEATURES
+
+    panel = _make_panel(n_days=30)
+    out = add_near_52w_factors(panel, window=5, feature_subset=None, normalize=False)
+    for mode in NEAR_52W_FEATURES:
+        assert f"near_52w_{mode}" in out.columns
+
+
+def test_feature_subset_unknown_id_raises():
+    panel = _make_panel(n_days=20)
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_obv_momentum_factors(panel, feature_subset=["not_a_real_id"])
+
+
+# ---------------------------------------------------------------------------
+# H-009 GDELT sentiment
+# ---------------------------------------------------------------------------
+
+
+def _make_gdelt_panel(n_days: int = 80) -> pd.DataFrame:
+    panel = _make_panel(n_days=n_days, tickers=["AAA", "BBB"])
+    rng = np.random.default_rng(7)
+    panel = panel.copy()
+    panel["median_tone"] = rng.normal(0.0, 2.0, len(panel))
+    panel["n_articles"] = rng.integers(0, 20, len(panel)).astype(float)
+    return panel
+
+
+def test_gdelt_tone_primitive_and_store_columns() -> None:
+    from data.processing.feature_implementation.gdelt_sentiment import (
+        rolling_median_tone,
+        tone_momentum,
+    )
+    from data.processing.feature_store import add_gdelt_sentiment_factors
+
+    s = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    assert rolling_median_tone(s, window=3).iloc[2] == pytest.approx(2.0)
+    mom = tone_momentum(s, short_window=2, long_window=4)
+    assert mom.iloc[3] == pytest.approx(
+        s.rolling(2).median().iloc[3] - s.rolling(4).median().iloc[3]
+    )
+
+    panel = _make_gdelt_panel()
+    out = add_gdelt_sentiment_factors(
+        panel,
+        feature_subset=["tone", "attention"],
+        window=5,
+        sentiment_data_exists=True,
+    )
+    assert "gdelt_tone" in out.columns
+    assert "gdelt_attention" in out.columns
+    assert out["gdelt_tone"].notna().any()
+
+
+def test_gdelt_abnormal_and_multi_window() -> None:
+    from data.processing.feature_store import add_gdelt_sentiment_factors
+
+    panel = _make_gdelt_panel(n_days=100)
+    single = add_gdelt_sentiment_factors(
+        panel,
+        feature_subset=["abnormal_tone"],
+        smooth_window=5,
+        baseline_window=20,
+        sentiment_data_exists=True,
+    )
+    assert "gdelt_abnormal_tone" in single.columns
+
+    multi = add_gdelt_sentiment_factors(
+        panel,
+        feature_subset=["tone"],
+        window=[3, 5],
+        sentiment_data_exists=True,
+    )
+    assert "gdelt_tone_3" in multi.columns
+    assert "gdelt_tone_5" in multi.columns
+    assert "gdelt_tone" not in multi.columns
+
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_gdelt_sentiment_factors(
+            panel, feature_subset=["nope"], sentiment_data_exists=True
+        )
+    with pytest.raises(ValueError, match="missing columns"):
+        add_gdelt_sentiment_factors(
+            panel.drop(columns=["median_tone"]),
+            feature_subset=["tone"],
+            sentiment_data_exists=True,
+        )
+
+
+def test_gdelt_store_fetches_and_merges_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from data.processing.feature_store import add_gdelt_sentiment_factors
+
+    panel = _make_panel(n_days=40, tickers=["AAA", "BBB"])
+    panel = panel.copy()
+    panel["feature_date"] = pd.to_datetime(panel["date"]) - pd.Timedelta(days=1)
+
+    def _fake_fetch(tickers, start_date=None, end_date=None, **kwargs):
+        assert set(tickers) == {"AAA", "BBB"}
+        rows = []
+        for t in tickers:
+            for fd in panel.loc[panel["ticker"] == t, "feature_date"].unique():
+                rows.append(
+                    {
+                        "date": pd.Timestamp(fd),
+                        "ticker": t,
+                        "median_tone": 0.5,
+                        "n_articles": 4,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.sentiment.gdelt_fetcher.fetch_gdelt_sentiment_daily",
+        _fake_fetch,
+    )
+    out = add_gdelt_sentiment_factors(
+        panel, feature_subset=["tone"], window=5, sentiment_data_exists=False
+    )
+    assert "median_tone" in out.columns
+    assert out["median_tone"].notna().all()
+    assert "gdelt_tone" in out.columns
+    assert out["gdelt_tone"].notna().any()
+
+
+def test_gdelt_no_lookahead_prefix_stability() -> None:
+    from data.processing.feature_store import add_gdelt_sentiment_factors
+
+    panel = _make_gdelt_panel(n_days=90)
+    full = add_gdelt_sentiment_factors(
+        panel, feature_subset=["tone"], window=5, sentiment_data_exists=True
+    )
+    cutoff = panel["date"].sort_values().unique()[-20]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    partial = add_gdelt_sentiment_factors(
+        truncated, feature_subset=["tone"], window=5, sentiment_data_exists=True
+    )
+    merged = partial[["date", "ticker", "gdelt_tone"]].merge(
+        full[["date", "ticker", "gdelt_tone"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = merged["gdelt_tone_partial"].notna() & merged["gdelt_tone_full"].notna()
+    np.testing.assert_allclose(
+        merged.loc[both, "gdelt_tone_partial"].to_numpy(),
+        merged.loc[both, "gdelt_tone_full"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Complementary beta / Amihud / volume / TA-Lib
+# ---------------------------------------------------------------------------
+
+
+def _make_spy_ohlcv(panel: pd.DataFrame) -> pd.DataFrame:
+    spy = panel[panel["ticker"] == panel["ticker"].iloc[0]][
+        ["date", "open", "high", "low", "close", "volume"]
+    ].copy()
+    spy["ticker"] = "SPY"
+    return spy.reset_index(drop=True)
+
+
+def test_market_corr_from_beta_r2_identity() -> None:
+    from data.processing.feature_implementation.beta_features import (
+        market_corr_from_beta_r2,
+    )
+
+    beta = pd.Series([1.0, -0.5, 0.0])
+    r2 = pd.Series([0.25, 0.81, 0.49])
+    corr = market_corr_from_beta_r2(beta, r2)
+    assert corr.iloc[0] == pytest.approx(0.5)
+    assert corr.iloc[1] == pytest.approx(-0.9)
+    assert corr.iloc[2] == pytest.approx(0.0)
+
+
+def test_beta_complements_columns_and_corr_r2() -> None:
+    panel = _make_beta_panel(n_days=80)
+    mkt = _make_market_returns(panel)
+    spy = _make_spy_ohlcv(panel)
+    out = add_beta_factors(
+        panel,
+        market_returns=mkt,
+        market_ohlcv=spy,
+        feature_subset=[
+            "market_corr",
+            "r_squared",
+            "rel_strength",
+            "beta_mkt_interact",
+            "mkt_ret",
+            "mkt_vol",
+            "mkt_near_52w",
+        ],
+        windows=30,
+        mkt_horizon=5,
+        mkt_ret_windows=5,
+        mkt_vol_windows=10,
+        mkt_near_windows=20,
+    )
+    for col in (
+        "market_corr",
+        "r_squared",
+        "rel_strength",
+        "beta_mkt_interact",
+        "mkt_ret",
+        "mkt_vol",
+        "mkt_near_52w",
+    ):
+        assert col in out.columns
+        assert out[col].notna().any()
+
+    both = out["market_corr"].notna() & out["r_squared"].notna()
+    # |corr| == sqrt(r2) when r2 >= 0
+    np.testing.assert_allclose(
+        out.loc[both, "market_corr"].abs().to_numpy(),
+        np.sqrt(out.loc[both, "r_squared"].clip(lower=0).to_numpy()),
+        rtol=1e-10,
+    )
+    assert out["r_squared"].dropna().between(0.0, 1.0).all()
+    # Market-level features identical within each date
+    for col in ("mkt_ret", "mkt_vol", "mkt_near_52w"):
+        nunique = out.groupby("date")[col].nunique(dropna=True)
+        assert (nunique <= 1).all()
+
+
+def test_beta_mkt_interact_multi_window_naming() -> None:
+    panel = _make_beta_panel(n_days=80)
+    mkt = _make_market_returns(panel)
+    out = add_beta_factors(
+        panel,
+        market_returns=mkt,
+        feature_subset=["beta_mkt_interact"],
+        windows=[30, 40],
+        mkt_horizon=[1, 5],
+    )
+    assert "beta_mkt_interact_30_1" in out.columns
+    assert "beta_mkt_interact_40_5" in out.columns
+    assert "beta_mkt_interact" not in out.columns
+
+
+def test_beta_complements_require_frames() -> None:
+    panel = _make_beta_panel(n_days=40)
+    with pytest.raises(ValueError, match="market_returns"):
+        add_beta_factors(panel, feature_subset=["market_corr"], windows=20)
+    with pytest.raises(ValueError, match="market_ohlcv"):
+        add_beta_factors(
+            panel,
+            market_returns=_make_market_returns(panel),
+            feature_subset=["mkt_near_52w"],
+            mkt_near_windows=20,
+        )
+
+
+def test_beta_complements_no_lookahead() -> None:
+    panel = _make_beta_panel(n_days=90)
+    mkt = _make_market_returns(panel)
+    full = add_beta_factors(
+        panel, market_returns=mkt, feature_subset=["rel_strength"], windows=20
+    )
+    cutoff = panel["date"].sort_values().unique()[-15]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    mkt_t = mkt[mkt["date"] <= cutoff].copy()
+    partial = add_beta_factors(
+        truncated, market_returns=mkt_t, feature_subset=["rel_strength"], windows=20
+    )
+    merged = partial[["date", "ticker", "rel_strength"]].merge(
+        full[["date", "ticker", "rel_strength"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = merged["rel_strength_partial"].notna() & merged["rel_strength_full"].notna()
+    np.testing.assert_allclose(
+        merged.loc[both, "rel_strength_partial"].to_numpy(),
+        merged.loc[both, "rel_strength_full"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_amihud_hand_check_and_normalize() -> None:
+    from data.processing.feature_implementation.size_and_valuation_features import (
+        amihud_illiquidity,
+    )
+    from data.processing.feature_store import add_size_value_factors
+
+    close = pd.Series([10.0, 11.0, 12.0, 13.0])
+    volume = pd.Series([100.0, 100.0, 100.0, 100.0])
+    # day1: |0.1|/(11*100)=1e-4; day2: |0.0909|/(12*100)≈7.576e-5
+    am = amihud_illiquidity(close, volume, window=2)
+    r1 = abs(11 / 10 - 1) / (11 * 100)
+    r2 = abs(12 / 11 - 1) / (12 * 100)
+    assert am.iloc[2] == pytest.approx((r1 + r2) / 2)
+
+    panel = _make_panel(n_days=40)
+    # Vary volume so Amihud is defined
+    panel = panel.copy()
+    panel["volume"] = panel["volume"] * (1.0 + 0.1 * np.arange(len(panel)) % 7)
+    ranked = add_size_value_factors(
+        panel, feature_subset=["amihud"], amihud_window=5, normalize=True
+    )
+    assert "amihud" in ranked.columns
+    vals = ranked["amihud"].dropna()
+    assert len(vals) > 0
+    assert vals.between(0.0, 1.0).all()
+
+    multi = add_size_value_factors(
+        panel, feature_subset=["amihud"], amihud_window=[5, 10], normalize=False
+    )
+    assert "amihud_5" in multi.columns
+    assert "amihud_10" in multi.columns
+
+
+def test_abnormal_volume_store() -> None:
+    from data.processing.feature_store import add_volume_factors
+
+    panel = _make_panel(n_days=80)
+    rng = np.random.default_rng(0)
+    panel = panel.copy()
+    panel["volume"] = rng.uniform(1e4, 5e4, len(panel))
+    out = add_volume_factors(
+        panel,
+        feature_subset=["abnormal_volume"],
+        smooth_window=5,
+        baseline_window=20,
+    )
+    assert "abnormal_volume" in out.columns
+    assert out["abnormal_volume"].notna().any()
+
+    multi = add_volume_factors(
+        panel,
+        feature_subset=["abnormal_volume"],
+        smooth_window=[3, 5],
+        baseline_window=20,
+    )
+    assert "abnormal_volume_3_20" in multi.columns
+    assert "abnormal_volume_5_20" in multi.columns
+
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_volume_factors(panel, feature_subset=["nope"])
+
+
+def test_abnormal_volume_no_lookahead() -> None:
+    from data.processing.feature_store import add_volume_factors
+
+    panel = _make_panel(n_days=90)
+    rng = np.random.default_rng(1)
+    panel = panel.copy()
+    panel["volume"] = rng.uniform(1e4, 5e4, len(panel))
+    full = add_volume_factors(
+        panel, feature_subset=["abnormal_volume"], smooth_window=5, baseline_window=20
+    )
+    cutoff = panel["date"].sort_values().unique()[-15]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    partial = add_volume_factors(
+        truncated,
+        feature_subset=["abnormal_volume"],
+        smooth_window=5,
+        baseline_window=20,
+    )
+    merged = partial[["date", "ticker", "abnormal_volume"]].merge(
+        full[["date", "ticker", "abnormal_volume"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = (
+        merged["abnormal_volume_partial"].notna()
+        & merged["abnormal_volume_full"].notna()
+    )
+    np.testing.assert_allclose(
+        merged.loc[both, "abnormal_volume_partial"].to_numpy(),
+        merged.loc[both, "abnormal_volume_full"].to_numpy(),
+        rtol=1e-10,
+    )
+
+
+def test_talib_factors_columns_and_multi() -> None:
+    from data.processing.feature_store import add_talib_factors
+
+    panel = _make_panel(n_days=60)
+    single = add_talib_factors(
+        panel, feature_subset=["rsi", "adx", "mfi", "bb_percent_b"], timeperiod=14
+    )
+    assert "rsi" in single.columns
+    assert "adx" in single.columns
+    assert "mfi" in single.columns
+    assert "bb_percent_b" in single.columns
+    assert single["rsi"].notna().any()
+    assert single["rsi"].dropna().between(0.0, 100.0).all()
+
+    multi = add_talib_factors(
+        panel, feature_subset=["rsi"], timeperiod=[7, 14]
+    )
+    assert "rsi_7" in multi.columns
+    assert "rsi_14" in multi.columns
+
+    bb = add_talib_factors(
+        panel,
+        feature_subset=["bb_percent_b"],
+        bb_timeperiod=[10, 20],
+    )
+    assert "bb_percent_b_10" in bb.columns
+    assert "bb_percent_b_20" in bb.columns
+
+    with pytest.raises(ValueError, match="unknown feature_subset"):
+        add_talib_factors(panel, feature_subset=["macd"])
+    with pytest.raises(ValueError, match="missing columns"):
+        add_talib_factors(panel.drop(columns=["high"]), feature_subset=["adx"])
+
+
+def test_talib_no_lookahead() -> None:
+    from data.processing.feature_store import add_talib_factors
+
+    panel = _make_panel(n_days=80)
+    full = add_talib_factors(panel, feature_subset=["rsi"], timeperiod=14)
+    cutoff = panel["date"].sort_values().unique()[-15]
+    truncated = panel[panel["date"] <= cutoff].copy()
+    partial = add_talib_factors(truncated, feature_subset=["rsi"], timeperiod=14)
+    merged = partial[["date", "ticker", "rsi"]].merge(
+        full[["date", "ticker", "rsi"]],
+        on=["date", "ticker"],
+        suffixes=("_partial", "_full"),
+    )
+    both = merged["rsi_partial"].notna() & merged["rsi_full"].notna()
+    np.testing.assert_allclose(
+        merged.loc[both, "rsi_partial"].to_numpy(),
+        merged.loc[both, "rsi_full"].to_numpy(),
+        rtol=1e-10,
+    )

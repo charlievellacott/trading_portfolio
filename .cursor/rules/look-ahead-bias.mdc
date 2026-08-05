@@ -16,7 +16,7 @@ A value used for a **decision or feature** at time `t` must depend only on infor
 
 Forward-looking values are allowed **only** as isolated **labels / prediction targets** for training and evaluation — never as features, signals, or inputs to rolling stats at the same row.
 
-## Decision timeline (default)
+## Decision timeline (default — close fill)
 
 Align every row to one decision timestamp `t` (bar close). Matches [backtest-integrity](.cursor/rules/backtest-integrity.mdc):
 
@@ -29,12 +29,24 @@ Align every row to one decision timestamp `t` (bar close). Matches [backtest-int
 
 Row `t` therefore answers: *given everything known at close `t`, should we enter now to capture what happens over `t+1`?*
 
+## Decision timeline — S1 equities GBM only (trade-date panel)
+
+| Role | Timestamp | Meaning |
+|------|-----------|---------|
+| Info cutoff | close of `feature_date` | Last completed bar before trade |
+| Overnight alt data | after that close, before open `date` | Allowed if it references `feature_date` or earlier (e.g. FINRA same-day file at 18:00 ET) |
+| Decision | pre-open `date` | Scores / ranks |
+| Fill | open `date` | Entry |
+| Label | `Open_{date+h} / Open_date - 1` | Exit at open `date+h` (panel columns `fwd_ret_{h}`) |
+
+Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/factor_tests/*`, S1 pooled GBM). All other strategies use the default close-fill timeline above. Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`.
+
 ## Rules
 
 - Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly.
 - **Never** use `shift(-n)`, `lead`, `bfill`, or forward-looking joins to build **features, signals, or cross-row derived inputs**.
-- **Labels / targets only:** `shift(-n)` on price or forward returns is allowed in dedicated target columns (e.g. `close.shift(-1)` for the value at `t+1`). Keep targets in separate columns; never feed them into feature engineering on the same row.
-- Merge auxiliary data with `merge_asof(..., direction='backward')` (or equivalent), never forward-fill from the future.
+- **Labels / targets only:** `shift(-n)` on price or forward returns is allowed in dedicated target columns (e.g. `open.shift(-h) / open - 1` for S1 `fwd_ret_h`, or `close.shift(-1)` under the default close-fill convention). Keep targets in separate columns; never feed them into feature engineering on the same row.
+- Merge auxiliary data with `merge_asof(..., direction='backward')` (or equivalent), never forward-fill from the future. On the S1 trade-date panel, merge alt data on `feature_date` (not trade `date`) so same-morning filings cannot leak.
 - Cross-sectional ranks/z-scores at `t` use only the cross-section available at `t` (no full-sample mean/std).
 - ML: fit preprocessors, selectors, and models on train only; `transform` val/test. No `fit` on full history. Drop or exclude label columns before `predict` at inference.
 - Backtest loop: update portfolio state **after** the fill bar, not using that bar's outcome to decide the same bar.
@@ -52,10 +64,14 @@ signal = (close.shift(1) > close.shift(1).rolling(20).mean())
 df["fwd_ret"] = close.pct_change(5).shift(-5)
 df["feature"] = df["fwd_ret"].rolling(10).mean()
 
-# GOOD — label is forward-looking; features use only past data at t
-df["target"] = close.shift(-1)                    # prediction column: close at t+1
-df["label"] = close.shift(-1) / close - 1         # or forward return t → t+1
+# GOOD (default close-fill) — label forward-looking; features use only past data at t
+df["target"] = close.shift(-1)
+df["label"] = close.shift(-1) / close - 1
 df["feature"] = close.shift(1).pct_change().rolling(10).mean()
+
+# GOOD (S1 trade-date panel) — open-to-open labels; hlcv already lagged to feature_date
+df["fwd_ret_5"] = open.groupby(ticker).shift(-5) / open - 1
+# Alphalens: pivot values="open" (no shift)
 
 # GOOD — decide at close t, enter at t; model trained on target, infers from features only
 X = df[["feature"]]                               # no target/label columns

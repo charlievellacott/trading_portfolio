@@ -32,10 +32,13 @@ packages = [
   "data",
   "data.ingestion",
   "data.ingestion.alternative_data",
+  "data.ingestion.alternative_data.sentiment",
   "data.processing",
   "data.processing.feature_implementation",
   "models",
+  "models.s1_equities",
   "backtest",
+  "backtest.s1_equities",
   "strategies",
   "strategies.base",
   "risk",
@@ -45,3 +48,6 @@ packages = [
   "portfolio",
   "performance",
 ]
+
+[tool.setuptools.package-data]
+"data.ingestion.alternative_data.sentiment" = ["*.csv"]

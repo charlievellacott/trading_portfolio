@@ -6,10 +6,28 @@ from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Any
 
+import sys
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
-import vectorbt  # registers pandas .vbt accessor
+
+
+def _ensure_vectorbt() -> None:
+    """Import vectorbt after a full numba init; recover from a partial Jupyter import."""
+    try:
+        import numba  # noqa: F401 — fully initialize before vectorbt touches registry
+        import vectorbt  # noqa: F401 — registers pandas .vbt accessor
+        return
+    except ImportError:
+        for key in list(sys.modules):
+            if key == "numba" or key.startswith("numba."):
+                del sys.modules[key]
+        import numba  # noqa: F401
+        import vectorbt  # noqa: F401
+
+
+_ensure_vectorbt()
 
 _RATIO_COLOR = "#1f4e79"
 _DRAWDOWN_COLOR = "#a01313"
