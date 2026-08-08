@@ -22,6 +22,8 @@ Before writing new fetch, feature, clean, or broker logic, **search the codebase
 | PIT S&P universe | `data.ingestion.sp500_universe` |
 | Factor / indicator math | `data.processing.feature_implementation.*` (e.g. `obv_momentum`) |
 | Attach a registered factor to a long panel | `data.processing.feature_store` family dispatchers (e.g. `add_obv_momentum_factors`, `add_beta_factors`) with `feature_subset` |
+| Panel-merged alt data (FINRA / SEC / GDELT) | Same store dispatchers — they fetch+merge unless the matching `*_data_exists` flag is True (`short_volume_data_exists`, `filing_clock_data_exists`, `size_value_data_exists`, `gross_profitability_data_exists`, `sentiment_data_exists`). Raw alt columns remain on the panel for later calls. |
+| Market returns / Fama–French for beta & idio | Still caller-supplied: `fetch_ohlcv` + `market_return_frame`, and/or `fetch_ff_factors_daily`, then pass into `add_beta_factors` / `add_idio_vol_factors` (no store auto-fetch / no exists flag) |
 | Panel cleaning / winsorize / ffill | `data.processing.cleaner` |
 | S1 equities factor-test panel (train / research IS) | `01_data/data_files/s1_equities/s1_factor_panel_train.parquet` (built by `s1_factor_panel.ipynb`; **trade-date indexed** — `date` = fill date, `feature_date` = info cutoff) |
 | S1 equities full census panel | `01_data/data_files/s1_equities/s1_factor_panel_full.parquet` (same trade-date contract) |
@@ -49,6 +51,21 @@ from data.processing.feature_implementation.obv_momentum import add_obv, add_raw
 from data.processing.feature_store import add_obv_momentum_factors
 panel = add_obv(panel)
 panel = add_obv_momentum_factors(panel, feature_subset=["signed"])
+```
+
+```python
+# BAD — fetch FINRA/SEC then drop raw cols before every feature call
+from data.ingestion.alternative_data.finra_short_volume import fetch_short_volume_daily
+sf = fetch_short_volume_daily(...)
+panel = panel.merge(sf, ...)
+panel = add_short_flow_factors(panel, feature_subset=["ratio"])
+
+# GOOD — store fetches+merges; keep raw cols for later calls
+from data.processing.feature_store import add_short_flow_factors
+panel = add_short_flow_factors(panel, feature_subset=["ratio"])  # short_volume_data_exists=False
+panel = add_short_flow_factors(
+    panel, feature_subset=["abnormal"], short_volume_data_exists=True
+)
 ```
 
 ## Red flags

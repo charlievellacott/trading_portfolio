@@ -851,9 +851,11 @@ def add_gross_profitability(
     Add H-008 gross-profitability column ``gross_profitability``.
 
     Features at date ``t`` use fundamentals known by filing date ``<= t``
-    (already asof-joined onto the panel as ``gp_asset``); labels are not
-    added here. ``gp_asset = gross_profit_ttm / assets``; NaN when assets
-    missing or ``<= 0``. No floor and no winsorize in the store.
+    (as ``gp_asset`` on the panel). Prefer
+    ``add_gross_profitability_factors`` (fetches SEC GP unless
+    ``gross_profitability_data_exists=True``); labels are not added here.
+    ``gp_asset = gross_profit_ttm / assets``; NaN when assets missing or
+    ``<= 0``. No floor and no winsorize in the store.
 
     If ``normalize=True`` (default), store the cross-sectional percentile
     rank of ``gp_asset`` within each date.
@@ -1164,8 +1166,8 @@ def add_short_flow(
     Add H-010 short-flow column(s) ``short_flow_{mode}`` [``_{S}_{B}``].
 
     Features use FINRA short volume through ``feature_date`` on the S1
-    trade-date panel (merge FINRA on ``feature_date`` before calling). Labels
-    are not added here. Modes:
+    trade-date panel. Prefer ``add_short_flow_factors`` (fetches FINRA unless
+    ``short_volume_data_exists=True``). Labels are not added here. Modes:
 
     - ``abnormal``: smoothed short-volume ratio z-scored vs own-history
       baseline (baseline excludes the current obs via ``shift(1)``).
@@ -1246,8 +1248,8 @@ def add_filing_event_clock(
     Add H-010 supporting filing-clock column ``filing_clock_{mode}``.
 
     Features use SEC filing anchors through ``feature_date`` on the S1
-    trade-date panel (merge ``fetch_filing_clock_daily`` on ``feature_date``
-    before calling). Labels are not added here. Modes:
+    trade-date panel. Prefer ``add_short_flow_factors`` (fetches filing clock
+    unless ``filing_clock_data_exists=True``). Labels are not added here. Modes:
 
     - ``since``: calendar days since ``last_filed`` → ``filing_clock_since``.
     - ``expected_until``: signed calendar days until ``expected_next_filed``
@@ -1329,6 +1331,23 @@ SHORT_FLOW_FEATURES: tuple[str, ...] = (
     "filing_expected_until",
 )
 
+_SHORT_VOLUME_FEATURE_IDS = frozenset({"abnormal", "ratio", "exempt_ratio"})
+_FILING_CLOCK_FEATURE_IDS = frozenset({"filing_since", "filing_expected_until"})
+_SHORT_VOLUME_RAW_COLS = ("short_volume", "short_exempt_volume", "total_volume")
+_FILING_CLOCK_RAW_COLS = ("last_filed", "expected_next_filed")
+_SIZE_VALUE_RAW_COLS = (
+    "shares_outstanding",
+    "book_equity",
+    "eps_ttm",
+    "market_cap",
+    "pe",
+    "pb",
+)
+_SIZE_VALUE_REQUIRED_COLS = ("market_cap", "pe", "pb")
+_SIZE_VALUE_SEC_IDS = frozenset(SIZE_VALUE_FEATURES) - {"amihud"}
+_GP_RAW_COLS = ("gross_profit_ttm", "assets", "gp_asset")
+_GP_REQUIRED_COLS = ("gp_asset",)
+
 _SPY_BETA_IDS = frozenset({
     "beta",
     "downside_beta",
@@ -1352,6 +1371,222 @@ _SMART_BETA_IDS = frozenset({
     "smart_residual_mom",
 })
 _MKT_OHLCV_IDS = frozenset({"mkt_near_52w"})
+
+
+def _require_panel_base(panel: pd.DataFrame) -> None:
+    missing = {"date", "ticker"} - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing columns: {sorted(missing)}")
+
+
+def _panel_info_col(panel: pd.DataFrame) -> str:
+    return "feature_date" if "feature_date" in panel.columns else "date"
+
+
+def _panel_tickers(panel: pd.DataFrame) -> list[str]:
+    return sorted(
+        {str(t).strip().upper() for t in panel["ticker"].tolist() if str(t).strip()}
+    )
+
+
+def _panel_date_bounds(
+    panel: pd.DataFrame,
+    *,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    info = pd.to_datetime(panel[_panel_info_col(panel)])
+    start = pd.Timestamp(start_date) if start_date is not None else info.min()
+    end = pd.Timestamp(end_date) if end_date is not None else info.max()
+    return start, end
+
+
+def _price_panel_for_alt_fetch(panel: pd.DataFrame) -> pd.DataFrame:
+    """OHLCV-like frame keyed by info date for SEC/FINRA ``price_panel``."""
+    if "feature_date" in panel.columns and "close" in panel.columns:
+        out = (
+            panel[["feature_date", "ticker", "close"]]
+            .rename(columns={"feature_date": "date"})
+            .dropna(subset=["date"])
+        )
+        return out
+    cols = [c for c in ("date", "ticker", "close") if c in panel.columns]
+    return panel[cols].copy()
+
+
+def _merge_alt_daily(
+    panel: pd.DataFrame,
+    alt: pd.DataFrame,
+    value_cols: Sequence[str],
+) -> pd.DataFrame:
+    """
+    Left-merge alt daily columns onto ``panel``.
+
+    S1 trade-date panels (with ``feature_date``): rename fetch ``date`` →
+    ``feature_date`` and merge on ``[feature_date, ticker]``. Otherwise merge
+    on ``[date, ticker]``. Existing overlapping ``value_cols`` are dropped
+    before merge. Raw alt columns remain on the returned panel.
+    """
+    result = panel.copy()
+    drop_cols = [c for c in value_cols if c in result.columns]
+    if drop_cols:
+        result = result.drop(columns=drop_cols)
+
+    if alt is None or alt.empty:
+        for c in value_cols:
+            result[c] = np.nan
+        return result
+
+    alt = alt.copy()
+    alt["ticker"] = alt["ticker"].astype(str).str.upper()
+    result["ticker"] = result["ticker"].astype(str).str.upper()
+
+    if "feature_date" in result.columns:
+        if "date" in alt.columns:
+            alt = alt.rename(columns={"date": "feature_date"})
+        alt["feature_date"] = pd.to_datetime(alt["feature_date"])
+        result["feature_date"] = pd.to_datetime(result["feature_date"])
+        merge_keys = ["feature_date", "ticker"]
+    else:
+        alt["date"] = pd.to_datetime(alt["date"])
+        result["date"] = pd.to_datetime(result["date"])
+        merge_keys = ["date", "ticker"]
+
+    merge_cols = merge_keys + [c for c in value_cols if c in alt.columns]
+    for c in value_cols:
+        if c not in alt.columns:
+            alt[c] = np.nan
+            merge_cols.append(c)
+    return result.merge(alt[merge_cols], on=merge_keys, how="left")
+
+
+def _attach_short_volume_daily(
+    panel: pd.DataFrame,
+    *,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    facilities: tuple[str, ...] | None = None,
+    price_panel: pd.DataFrame | None = None,
+    max_workers: int | None = None,
+) -> pd.DataFrame:
+    """Fetch FINRA short volume and left-merge onto ``panel``."""
+    from data.ingestion.alternative_data.finra_short_volume import (
+        DEFAULT_CACHE_DIR,
+        DEFAULT_FACILITIES,
+        DEFAULT_MAX_WORKERS,
+        fetch_short_volume_daily,
+    )
+
+    _require_panel_base(panel)
+    start, end = _panel_date_bounds(panel, start_date=start_date, end_date=end_date)
+    kwargs: dict = {
+        "start_date": start,
+        "end_date": end,
+        "cache_dir": cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR,
+        "facilities": facilities if facilities is not None else DEFAULT_FACILITIES,
+        "price_panel": (
+            price_panel if price_panel is not None else _price_panel_for_alt_fetch(panel)
+        ),
+        "max_workers": (
+            max_workers if max_workers is not None else DEFAULT_MAX_WORKERS
+        ),
+    }
+    alt = fetch_short_volume_daily(_panel_tickers(panel), **kwargs)
+    return _merge_alt_daily(panel, alt, _SHORT_VOLUME_RAW_COLS)
+
+
+def _attach_filing_clock_daily(
+    panel: pd.DataFrame,
+    *,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    forms: tuple[str, ...] | None = None,
+    price_panel: pd.DataFrame | None = None,
+    user_agent: str | None = None,
+) -> pd.DataFrame:
+    """Fetch SEC filing-clock anchors and left-merge onto ``panel``."""
+    from data.ingestion.alternative_data.sec_companyfacts import (
+        DEFAULT_CACHE_DIR,
+        fetch_filing_clock_daily,
+    )
+
+    _require_panel_base(panel)
+    start, end = _panel_date_bounds(panel, start_date=start_date, end_date=end_date)
+    kwargs: dict = {
+        "start_date": start,
+        "end_date": end,
+        "cache_dir": cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR,
+        "price_panel": (
+            price_panel if price_panel is not None else _price_panel_for_alt_fetch(panel)
+        ),
+        "user_agent": user_agent,
+    }
+    if forms is not None:
+        kwargs["forms"] = forms
+    alt = fetch_filing_clock_daily(_panel_tickers(panel), **kwargs)
+    return _merge_alt_daily(panel, alt, _FILING_CLOCK_RAW_COLS)
+
+
+def _attach_size_value_daily(
+    panel: pd.DataFrame,
+    *,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    price_panel: pd.DataFrame | None = None,
+    user_agent: str | None = None,
+) -> pd.DataFrame:
+    """Fetch SEC size/value fields and left-merge onto ``panel``."""
+    from data.ingestion.alternative_data.sec_companyfacts import (
+        DEFAULT_CACHE_DIR,
+        fetch_size_value_daily,
+    )
+
+    _require_panel_base(panel)
+    start, end = _panel_date_bounds(panel, start_date=start_date, end_date=end_date)
+    alt = fetch_size_value_daily(
+        _panel_tickers(panel),
+        start_date=start,
+        end_date=end,
+        cache_dir=cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR,
+        price_panel=(
+            price_panel if price_panel is not None else _price_panel_for_alt_fetch(panel)
+        ),
+        user_agent=user_agent,
+    )
+    return _merge_alt_daily(panel, alt, _SIZE_VALUE_RAW_COLS)
+
+
+def _attach_gross_profitability_daily(
+    panel: pd.DataFrame,
+    *,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    price_panel: pd.DataFrame | None = None,
+    user_agent: str | None = None,
+) -> pd.DataFrame:
+    """Fetch SEC gross-profitability fields and left-merge onto ``panel``."""
+    from data.ingestion.alternative_data.sec_companyfacts import (
+        DEFAULT_CACHE_DIR,
+        fetch_gross_profitability_daily,
+    )
+
+    _require_panel_base(panel)
+    start, end = _panel_date_bounds(panel, start_date=start_date, end_date=end_date)
+    alt = fetch_gross_profitability_daily(
+        _panel_tickers(panel),
+        start_date=start,
+        end_date=end,
+        cache_dir=cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR,
+        price_panel=(
+            price_panel if price_panel is not None else _price_panel_for_alt_fetch(panel)
+        ),
+        user_agent=user_agent,
+    )
+    return _merge_alt_daily(panel, alt, _GP_RAW_COLS)
 
 
 def add_obv_momentum_factors(
@@ -1615,19 +1850,58 @@ def add_size_value_factors(
     panel: pd.DataFrame,
     *,
     feature_subset: Sequence[str] | None = None,
+    size_value_data_exists: bool = False,
     normalize: bool = True,
     window: WindowSpec = 63,
     mom_lookback: int = 252,
     mom_skip: int = 21,
     regression_window: int = 252,
     amihud_window: WindowSpec = 21,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    price_panel: pd.DataFrame | None = None,
+    user_agent: str | None = None,
 ) -> pd.DataFrame:
-    """Add H-005 size/value columns selected by ``feature_subset``."""
+    """
+    Add H-005 size/value columns selected by ``feature_subset``.
+
+    ``size_value_data_exists``:
+        Applies when the subset needs SEC size/value inputs (anything other
+        than amihud-only). If False (default), call
+        ``fetch_size_value_daily`` and merge raw columns onto the panel
+        (S1: on ``feature_date`` when present; else on ``date``). If True,
+        require ``market_cap`` / ``pe`` / ``pb`` already on the panel.
+        Amihud-only requests skip the SEC fetch entirely.
+
+    Raw SEC columns (``shares_outstanding``, ``book_equity``, ``eps_ttm``,
+    ``market_cap``, ``pe``, ``pb``) remain on the returned panel so later
+    calls can pass ``size_value_data_exists=True``.
+    """
     ids = resolve_feature_subset(
         feature_subset, SIZE_VALUE_FEATURES, name="add_size_value_factors"
     )
-    result = panel
     id_set = set(ids)
+    need_sec = bool(id_set & _SIZE_VALUE_SEC_IDS)
+
+    if need_sec:
+        if size_value_data_exists:
+            missing = set(_SIZE_VALUE_REQUIRED_COLS) - set(panel.columns)
+            if missing:
+                raise ValueError(f"panel missing columns: {sorted(missing)}")
+            result = panel.copy()
+        else:
+            result = _attach_size_value_daily(
+                panel,
+                start_date=start_date,
+                end_date=end_date,
+                cache_dir=cache_dir,
+                price_panel=price_panel,
+                user_agent=user_agent,
+            )
+    else:
+        result = panel
+
     if "book_yield" in id_set:
         result = add_book_yield(result, normalize=normalize)
     if "earnings_yield" in id_set:
@@ -1713,9 +1987,26 @@ def add_gross_profitability_factors(
     panel: pd.DataFrame,
     *,
     feature_subset: Sequence[str] | None = None,
+    gross_profitability_data_exists: bool = False,
     normalize: bool = True,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    price_panel: pd.DataFrame | None = None,
+    user_agent: str | None = None,
 ) -> pd.DataFrame:
-    """Add H-008 gross-profitability column when selected in ``feature_subset``."""
+    """
+    Add H-008 gross-profitability column when selected in ``feature_subset``.
+
+    ``gross_profitability_data_exists``:
+        If False (default), call ``fetch_gross_profitability_daily`` and merge
+        ``gross_profit_ttm`` / ``assets`` / ``gp_asset`` onto the panel
+        (S1: on ``feature_date`` when present; else on ``date``). If True,
+        require ``gp_asset`` already on the panel.
+
+    Raw SEC columns remain on the returned panel so later calls can pass
+    ``gross_profitability_data_exists=True``.
+    """
     ids = resolve_feature_subset(
         feature_subset,
         GROSS_PROFITABILITY_FEATURES,
@@ -1723,6 +2014,20 @@ def add_gross_profitability_factors(
     )
     result = panel
     if "gross_profitability" in ids:
+        if gross_profitability_data_exists:
+            missing = set(_GP_REQUIRED_COLS) - set(panel.columns)
+            if missing:
+                raise ValueError(f"panel missing columns: {sorted(missing)}")
+            result = panel.copy()
+        else:
+            result = _attach_gross_profitability_daily(
+                panel,
+                start_date=start_date,
+                end_date=end_date,
+                cache_dir=cache_dir,
+                price_panel=price_panel,
+                user_agent=user_agent,
+            )
         result = add_gross_profitability(result, normalize=normalize)
     return result
 
@@ -1731,25 +2036,93 @@ def add_short_flow_factors(
     panel: pd.DataFrame,
     *,
     feature_subset: Sequence[str] | None = None,
+    short_volume_data_exists: bool = False,
+    filing_clock_data_exists: bool = False,
     smooth_window: WindowSpec = 5,
     baseline_window: WindowSpec = 60,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    cache_dir: str | None = None,
+    price_panel: pd.DataFrame | None = None,
+    facilities: tuple[str, ...] | None = None,
+    forms: tuple[str, ...] | None = None,
+    user_agent: str | None = None,
+    max_workers: int | None = None,
 ) -> pd.DataFrame:
-    """Add H-010 short-flow / filing-clock columns selected by ``feature_subset``."""
+    """
+    Add H-010 short-flow / filing-clock columns selected by ``feature_subset``.
+
+    ``short_volume_data_exists``:
+        Applies when the subset needs FINRA short volume
+        (``abnormal`` / ``ratio`` / ``exempt_ratio``). If False (default),
+        call ``fetch_short_volume_daily`` and merge raw volume columns onto
+        the panel. If True, require those columns already present.
+
+    ``filing_clock_data_exists``:
+        Applies when the subset needs filing anchors
+        (``filing_since`` / ``filing_expected_until``). If False (default),
+        call ``fetch_filing_clock_daily`` and merge ``last_filed`` /
+        ``expected_next_filed``. If True, require those columns already
+        present.
+
+    Fetches only what the requested subset needs. Raw alt columns remain on
+    the returned panel so later calls can pass the matching exists flag.
+    S1 panels merge on ``feature_date`` when present; else on ``date``.
+    """
     ids = resolve_feature_subset(
         feature_subset, SHORT_FLOW_FEATURES, name="add_short_flow_factors"
     )
+    id_set = set(ids)
+    need_short = bool(id_set & _SHORT_VOLUME_FEATURE_IDS)
+    need_filing = bool(id_set & _FILING_CLOCK_FEATURE_IDS)
+
     result = panel
+    if need_short:
+        if short_volume_data_exists:
+            missing = set(_SHORT_VOLUME_RAW_COLS) - set(result.columns)
+            if missing:
+                raise ValueError(f"panel missing columns: {sorted(missing)}")
+            result = result.copy()
+        else:
+            result = _attach_short_volume_daily(
+                result,
+                start_date=start_date,
+                end_date=end_date,
+                cache_dir=cache_dir,
+                facilities=facilities,
+                price_panel=price_panel,
+                max_workers=max_workers,
+            )
+
+    if need_filing:
+        if filing_clock_data_exists:
+            missing = set(_FILING_CLOCK_RAW_COLS) - set(result.columns)
+            if missing:
+                raise ValueError(f"panel missing columns: {sorted(missing)}")
+            if result is panel:
+                result = result.copy()
+        else:
+            result = _attach_filing_clock_daily(
+                result,
+                start_date=start_date,
+                end_date=end_date,
+                cache_dir=cache_dir,
+                forms=forms,
+                price_panel=price_panel,
+                user_agent=user_agent,
+            )
+
     for mode in ("abnormal", "ratio", "exempt_ratio"):
-        if mode in ids:
+        if mode in id_set:
             result = add_short_flow(
                 result,
                 smooth_window=smooth_window,
                 baseline_window=baseline_window,
                 mode=mode,
             )
-    if "filing_since" in ids:
+    if "filing_since" in id_set:
         result = add_filing_event_clock(result, mode="since")
-    if "filing_expected_until" in ids:
+    if "filing_expected_until" in id_set:
         result = add_filing_event_clock(result, mode="expected_until")
     return result
 

@@ -1484,34 +1484,42 @@ def test_value_momentum_distance_geometry() -> None:
 def test_sv_store_missing_columns() -> None:
     panel = _make_panel(n_days=20)
     with pytest.raises(ValueError, match="missing columns"):
-        add_size_value_factors(panel, feature_subset=["book_yield"])
+        add_size_value_factors(
+            panel, feature_subset=["book_yield"], size_value_data_exists=True
+        )
     with pytest.raises(ValueError, match="missing columns"):
-        add_size_value_factors(panel, feature_subset=["earnings_yield"])
+        add_size_value_factors(
+            panel, feature_subset=["earnings_yield"], size_value_data_exists=True
+        )
     with pytest.raises(ValueError, match="missing columns"):
-        add_size_value_factors(panel, feature_subset=["log_mcap"])
+        add_size_value_factors(
+            panel, feature_subset=["log_mcap"], size_value_data_exists=True
+        )
     with pytest.raises(ValueError, match="missing columns"):
-        add_size_value_factors(panel, feature_subset=["size_mom"])
+        add_size_value_factors(
+            panel, feature_subset=["size_mom"], size_value_data_exists=True
+        )
 
 
 def test_sv_store_invalid_metric() -> None:
     panel = _make_sv_panel(n_days=20)
     with pytest.raises(ValueError, match="unknown feature_subset"):
-        add_size_value_factors(panel, feature_subset=["val_roc_bad"])
+        add_size_value_factors(panel, feature_subset=["val_roc_bad"], size_value_data_exists=True)
 
 
 def test_sv_store_normalize_bounds() -> None:
     panel = _make_sv_panel(n_days=60)
-    by_out = add_size_value_factors(panel, normalize=True, feature_subset=["book_yield"])
+    by_out = add_size_value_factors(panel, normalize=True, feature_subset=["book_yield"], size_value_data_exists=True)
     vals = by_out["book_yield"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
 
-    ey_out = add_size_value_factors(panel, normalize=True, feature_subset=["earnings_yield"])
+    ey_out = add_size_value_factors(panel, normalize=True, feature_subset=["earnings_yield"], size_value_data_exists=True)
     vals = ey_out["earnings_yield"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
 
-    lm_out = add_size_value_factors(panel, normalize=True, feature_subset=["log_mcap"])
+    lm_out = add_size_value_factors(panel, normalize=True, feature_subset=["log_mcap"], size_value_data_exists=True)
     vals = lm_out["log_mcap"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
@@ -1519,11 +1527,11 @@ def test_sv_store_normalize_bounds() -> None:
 
 def test_sv_valuation_roc_column_names() -> None:
     panel = _make_sv_panel(n_days=60)
-    single = add_size_value_factors(panel, window=5, feature_subset=["val_roc_pb"])
+    single = add_size_value_factors(panel, window=5, feature_subset=["val_roc_pb"], size_value_data_exists=True)
     assert "val_roc_pb" in single.columns
     assert "val_roc_pb_5" not in single.columns
 
-    multi = add_size_value_factors(panel, window=[5, 10], feature_subset=["val_roc_pb"])
+    multi = add_size_value_factors(panel, window=[5, 10], feature_subset=["val_roc_pb"], size_value_data_exists=True)
     assert "val_roc_pb_5" in multi.columns
     assert "val_roc_pb_10" in multi.columns
     assert "val_roc_pb" not in multi.columns
@@ -1531,8 +1539,8 @@ def test_sv_valuation_roc_column_names() -> None:
 
 def test_sv_size_momentum_multi_window_parity() -> None:
     panel = _make_sv_panel(n_days=60)
-    multi = add_size_value_factors(panel, window=[5, 10], feature_subset=["size_mom"])
-    single = add_size_value_factors(panel, window=5, feature_subset=["size_mom"])
+    multi = add_size_value_factors(panel, window=[5, 10], feature_subset=["size_mom"], size_value_data_exists=True)
+    single = add_size_value_factors(panel, window=5, feature_subset=["size_mom"], size_value_data_exists=True)
     both = multi["size_mom_5"].notna() & single["size_mom"].notna()
     np.testing.assert_allclose(
         multi.loc[both, "size_mom_5"].to_numpy(),
@@ -1543,10 +1551,10 @@ def test_sv_size_momentum_multi_window_parity() -> None:
 
 def test_sv_no_lookahead_prefix_stability() -> None:
     panel = _make_sv_panel(n_days=60)
-    full = add_size_value_factors(panel, normalize=False, feature_subset=["book_yield"])
+    full = add_size_value_factors(panel, normalize=False, feature_subset=["book_yield"], size_value_data_exists=True)
     cutoff = panel["date"].sort_values().unique()[-10]
     truncated = panel[panel["date"] <= cutoff].copy()
-    partial = add_size_value_factors(truncated, normalize=False, feature_subset=["book_yield"])
+    partial = add_size_value_factors(truncated, normalize=False, feature_subset=["book_yield"], size_value_data_exists=True)
     merged = partial[["date", "ticker", "book_yield"]].merge(
         full[["date", "ticker", "book_yield"]],
         on=["date", "ticker"],
@@ -1563,8 +1571,8 @@ def test_sv_no_lookahead_prefix_stability() -> None:
 def test_sv_value_momentum_interaction_column() -> None:
     panel = _make_sv_panel(n_days=60)
     result = add_size_value_factors(
-        panel, mom_lookback=5, mom_skip=1, feature_subset=["val_mom_interact"]
-    )
+        panel, mom_lookback=5, mom_skip=1, feature_subset=["val_mom_interact"],
+        size_value_data_exists=True)
     assert "val_mom_interact" in result.columns
     assert result["val_mom_interact"].notna().any()
 
@@ -1572,8 +1580,8 @@ def test_sv_value_momentum_interaction_column() -> None:
 def test_sv_value_momentum_distance_column() -> None:
     panel = _make_sv_panel(n_days=60)
     result = add_size_value_factors(
-        panel, mom_lookback=5, mom_skip=1, feature_subset=["val_mom_dist"]
-    )
+        panel, mom_lookback=5, mom_skip=1, feature_subset=["val_mom_dist"],
+        size_value_data_exists=True)
     assert "val_mom_dist" in result.columns
     vals = result["val_mom_dist"].dropna()
     assert len(vals) > 0
@@ -1588,9 +1596,74 @@ def test_sv_value_momentum_residual_orthogonality() -> None:
         mom_lookback=5,
         mom_skip=1,
         feature_subset=["val_mom_resid"],
-    )
+        size_value_data_exists=True)
     assert "val_mom_resid" in result.columns
     assert result["val_mom_resid"].notna().any()
+
+
+def test_sv_store_fetches_and_merges_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panel = _make_panel(n_days=40, tickers=["AAA", "BBB"])
+    panel = panel.copy()
+    panel["feature_date"] = pd.to_datetime(panel["date"]) - pd.Timedelta(days=1)
+    calls = {"n": 0}
+
+    def _fake_fetch(tickers, start_date=None, end_date=None, **kwargs):
+        calls["n"] += 1
+        assert set(tickers) == {"AAA", "BBB"}
+        rows = []
+        for t in tickers:
+            for fd in panel.loc[panel["ticker"] == t, "feature_date"].unique():
+                rows.append(
+                    {
+                        "date": pd.Timestamp(fd),
+                        "ticker": t,
+                        "shares_outstanding": 1e6,
+                        "book_equity": 1e8,
+                        "eps_ttm": 2.0,
+                        "market_cap": 1e9,
+                        "pe": 15.0,
+                        "pb": 2.0,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.sec_companyfacts.fetch_size_value_daily",
+        _fake_fetch,
+    )
+    out = add_size_value_factors(
+        panel, feature_subset=["book_yield"], size_value_data_exists=False
+    )
+    assert calls["n"] == 1
+    assert "pb" in out.columns
+    assert "book_yield" in out.columns
+    assert out["pb"].notna().all()
+
+    out2 = add_size_value_factors(
+        out, feature_subset=["log_mcap"], size_value_data_exists=True
+    )
+    assert calls["n"] == 1
+    assert "log_mcap" in out2.columns
+
+
+def test_sv_amihud_only_skips_sec_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    panel = _make_panel(n_days=40)
+    panel = panel.copy()
+    panel["volume"] = panel["volume"] * (1.0 + 0.1 * np.arange(len(panel)) % 7)
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("fetch_size_value_daily should not be called")
+
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.sec_companyfacts.fetch_size_value_daily",
+        _boom,
+    )
+    out = add_size_value_factors(
+        panel, feature_subset=["amihud"], amihud_window=5, normalize=False
+    )
+    assert "amihud" in out.columns
 
 
 # ---------------------------------------------------------------------------
@@ -1645,7 +1718,7 @@ def test_gross_profitability_hand_check() -> None:
 
 def test_gp_store_column_name() -> None:
     panel = _make_gp_panel(n_days=20)
-    result = add_gross_profitability_factors(panel, normalize=False, feature_subset=["gross_profitability"])
+    result = add_gross_profitability_factors(panel, normalize=False, feature_subset=["gross_profitability"], gross_profitability_data_exists=True)
     assert "gross_profitability" in result.columns
     both = result["gross_profitability"].notna() & result["gp_asset"].notna()
     np.testing.assert_allclose(
@@ -1658,12 +1731,12 @@ def test_gp_store_column_name() -> None:
 def test_gp_store_missing_columns() -> None:
     panel = _make_panel(n_days=20)
     with pytest.raises(ValueError, match="missing columns"):
-        add_gross_profitability_factors(panel, feature_subset=["gross_profitability"])
+        add_gross_profitability_factors(panel, feature_subset=["gross_profitability"], gross_profitability_data_exists=True)
 
 
 def test_gp_store_normalize_bounds() -> None:
     panel = _make_gp_panel(n_days=40)
-    out = add_gross_profitability_factors(panel, normalize=True, feature_subset=["gross_profitability"])
+    out = add_gross_profitability_factors(panel, normalize=True, feature_subset=["gross_profitability"], gross_profitability_data_exists=True)
     vals = out["gross_profitability"].dropna()
     assert len(vals) > 0
     assert vals.between(0.0, 1.0).all()
@@ -1671,10 +1744,10 @@ def test_gp_store_normalize_bounds() -> None:
 
 def test_gp_no_lookahead_prefix_stability() -> None:
     panel = _make_gp_panel(n_days=40)
-    full = add_gross_profitability_factors(panel, normalize=False, feature_subset=["gross_profitability"])
+    full = add_gross_profitability_factors(panel, normalize=False, feature_subset=["gross_profitability"], gross_profitability_data_exists=True)
     cutoff = panel["date"].sort_values().unique()[-10]
     truncated = panel[panel["date"] <= cutoff].copy()
-    partial = add_gross_profitability_factors(truncated, normalize=False, feature_subset=["gross_profitability"])
+    partial = add_gross_profitability_factors(truncated, normalize=False, feature_subset=["gross_profitability"], gross_profitability_data_exists=True)
     merged = partial[["date", "ticker", "gross_profitability"]].merge(
         full[["date", "ticker", "gross_profitability"]],
         on=["date", "ticker"],
@@ -1689,6 +1762,55 @@ def test_gp_no_lookahead_prefix_stability() -> None:
         merged.loc[both, "gross_profitability_full"].to_numpy(),
         rtol=1e-10,
     )
+
+
+def test_gp_store_fetches_and_merges_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panel = _make_panel(n_days=30, tickers=["AAA", "BBB"])
+    panel = panel.copy()
+    panel["feature_date"] = pd.to_datetime(panel["date"]) - pd.Timedelta(days=1)
+    calls = {"n": 0}
+
+    def _fake_fetch(tickers, start_date=None, end_date=None, **kwargs):
+        calls["n"] += 1
+        rows = []
+        for t in tickers:
+            for fd in panel.loc[panel["ticker"] == t, "feature_date"].unique():
+                rows.append(
+                    {
+                        "date": pd.Timestamp(fd),
+                        "ticker": t,
+                        "gross_profit_ttm": 1e8,
+                        "assets": 5e8,
+                        "gp_asset": 0.2,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.sec_companyfacts.fetch_gross_profitability_daily",
+        _fake_fetch,
+    )
+    out = add_gross_profitability_factors(
+        panel,
+        feature_subset=["gross_profitability"],
+        normalize=False,
+        gross_profitability_data_exists=False,
+    )
+    assert calls["n"] == 1
+    assert "gp_asset" in out.columns
+    assert "gross_profitability" in out.columns
+    assert out["gp_asset"].notna().all()
+
+    out2 = add_gross_profitability_factors(
+        out,
+        feature_subset=["gross_profitability"],
+        normalize=True,
+        gross_profitability_data_exists=True,
+    )
+    assert calls["n"] == 1
+    assert out2["gross_profitability"].between(0.0, 1.0).all()
 
 
 # ---------------------------------------------------------------------------
@@ -1773,11 +1895,11 @@ def test_abnormal_short_flow_zero_variance_nan() -> None:
 
 def test_short_flow_store_modes_and_columns() -> None:
     panel = _make_short_flow_panel(n_days=80)
-    abn = add_short_flow_factors(panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"])
+    abn = add_short_flow_factors(panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"], short_volume_data_exists=True)
     assert "short_flow_abnormal" in abn.columns
     assert abn["short_flow_abnormal"].notna().any()
 
-    ratio = add_short_flow_factors(panel, feature_subset=["ratio"])
+    ratio = add_short_flow_factors(panel, feature_subset=["ratio"], short_volume_data_exists=True)
     assert "short_flow_ratio" in ratio.columns
     both = ratio["short_flow_ratio"].notna()
     expected = short_volume_ratio(panel["short_volume"], panel["total_volume"])
@@ -1787,7 +1909,7 @@ def test_short_flow_store_modes_and_columns() -> None:
         rtol=1e-12,
     )
 
-    exempt = add_short_flow_factors(panel, feature_subset=["exempt_ratio"])
+    exempt = add_short_flow_factors(panel, feature_subset=["exempt_ratio"], short_volume_data_exists=True)
     assert "short_flow_exempt_ratio" in exempt.columns
     assert exempt["short_flow_exempt_ratio"].notna().any()
 
@@ -1799,14 +1921,14 @@ def test_short_flow_multi_window_parity() -> None:
         smooth_window=[3, 5],
         baseline_window=[10, 20],
         feature_subset=["abnormal"],
-    )
+        short_volume_data_exists=True)
     assert "short_flow_abnormal_3_10" in multi.columns
     assert "short_flow_abnormal_5_20" in multi.columns
     assert "short_flow_abnormal" not in multi.columns
 
     single = add_short_flow_factors(
-        panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"]
-    )
+        panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"],
+        short_volume_data_exists=True)
     both = (
         multi["short_flow_abnormal_5_20"].notna()
         & single["short_flow_abnormal"].notna()
@@ -1821,22 +1943,22 @@ def test_short_flow_multi_window_parity() -> None:
 def test_short_flow_invalid_mode_and_missing_cols() -> None:
     panel = _make_short_flow_panel(n_days=30)
     with pytest.raises(ValueError, match="unknown feature_subset"):
-        add_short_flow_factors(panel, feature_subset=["bad"])
+        add_short_flow_factors(panel, feature_subset=["bad"], short_volume_data_exists=True)
     bare = _make_panel(n_days=20)
     with pytest.raises(ValueError, match="missing columns"):
-        add_short_flow_factors(bare, feature_subset=["abnormal"])
+        add_short_flow_factors(bare, feature_subset=["abnormal"], short_volume_data_exists=True)
     with pytest.raises(ValueError, match="missing columns"):
-        add_short_flow_factors(bare, feature_subset=["exempt_ratio"])
+        add_short_flow_factors(bare, feature_subset=["exempt_ratio"], short_volume_data_exists=True)
 
 
 def test_short_flow_no_lookahead_prefix_stability() -> None:
     panel = _make_short_flow_panel(n_days=80)
-    full = add_short_flow_factors(panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"])
+    full = add_short_flow_factors(panel, smooth_window=5, baseline_window=20, feature_subset=["abnormal"], short_volume_data_exists=True)
     cutoff = panel["date"].sort_values().unique()[-15]
     truncated = panel[panel["date"] <= cutoff].copy()
     partial = add_short_flow_factors(
-        truncated, smooth_window=5, baseline_window=20, feature_subset=["abnormal"]
-    )
+        truncated, smooth_window=5, baseline_window=20, feature_subset=["abnormal"],
+        short_volume_data_exists=True)
     merged = partial[["date", "ticker", "short_flow_abnormal"]].merge(
         full[["date", "ticker", "short_flow_abnormal"]],
         on=["date", "ticker"],
@@ -1879,13 +2001,13 @@ def test_filing_event_clock_store_modes() -> None:
             "expected_next_filed": pd.Timestamp("2023-01-20"),
         }
     )
-    since = add_short_flow_factors(panel, feature_subset=["filing_since"])
+    since = add_short_flow_factors(panel, feature_subset=["filing_since"], filing_clock_data_exists=True)
     assert "filing_clock_since" in since.columns
     assert since["filing_clock_since"].iloc[0] == pytest.approx(
         (dates[0] - pd.Timestamp("2022-12-15")).days
     )
 
-    until = add_short_flow_factors(panel, feature_subset=["filing_expected_until"])
+    until = add_short_flow_factors(panel, feature_subset=["filing_expected_until"], filing_clock_data_exists=True)
     assert "filing_clock_expected_until" in until.columns
     # After 2023-01-20 the signed days go negative (overdue)
     late = until[until["date"] > pd.Timestamp("2023-01-20")]
@@ -1897,6 +2019,7 @@ def test_filing_event_clock_store_modes() -> None:
         add_short_flow_factors(
             pd.DataFrame({"date": dates, "ticker": "AAA"}),
             feature_subset=["filing_since"],
+            filing_clock_data_exists=True,
         )
 
 def test_expected_next_filed_pit_no_lookahead() -> None:
@@ -1953,6 +2076,102 @@ def test_expected_next_filed_pit_no_lookahead() -> None:
     # Later forecasts must not equal a future filed date that wasn't available
     # at i=3 (filed[4] was unknown): primary uses filed[0]+365 only.
     assert events["expected_next_filed"].iloc[3] != filed[4]
+
+
+def test_short_flow_store_fetches_finra_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panel = _make_panel(n_days=40, tickers=["AAA", "BBB"])
+    panel = panel.copy()
+    panel["feature_date"] = pd.to_datetime(panel["date"]) - pd.Timedelta(days=1)
+    calls = {"finra": 0, "filing": 0}
+
+    def _fake_finra(tickers, start_date=None, end_date=None, **kwargs):
+        calls["finra"] += 1
+        rows = []
+        for t in tickers:
+            for fd in panel.loc[panel["ticker"] == t, "feature_date"].unique():
+                rows.append(
+                    {
+                        "date": pd.Timestamp(fd),
+                        "ticker": t,
+                        "short_volume": 1e5,
+                        "short_exempt_volume": 1e3,
+                        "total_volume": 4e5,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    def _boom_filing(*args, **kwargs):
+        calls["filing"] += 1
+        raise AssertionError("filing clock should not be fetched for ratio-only")
+
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.finra_short_volume.fetch_short_volume_daily",
+        _fake_finra,
+    )
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.sec_companyfacts.fetch_filing_clock_daily",
+        _boom_filing,
+    )
+    out = add_short_flow_factors(
+        panel, feature_subset=["ratio"], short_volume_data_exists=False
+    )
+    assert calls["finra"] == 1
+    assert calls["filing"] == 0
+    assert "short_volume" in out.columns
+    assert "short_flow_ratio" in out.columns
+
+    out2 = add_short_flow_factors(
+        out, feature_subset=["abnormal"], short_volume_data_exists=True,
+        smooth_window=5, baseline_window=20,
+    )
+    assert calls["finra"] == 1
+    assert "short_flow_abnormal" in out2.columns
+
+
+def test_short_flow_store_fetches_filing_only_when_needed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panel = _make_panel(n_days=20, tickers=["AAA"])
+    panel = panel.copy()
+    panel["feature_date"] = pd.to_datetime(panel["date"]) - pd.Timedelta(days=1)
+    calls = {"finra": 0, "filing": 0}
+
+    def _boom_finra(*args, **kwargs):
+        calls["finra"] += 1
+        raise AssertionError("FINRA should not be fetched for filing-only subset")
+
+    def _fake_filing(tickers, start_date=None, end_date=None, **kwargs):
+        calls["filing"] += 1
+        rows = []
+        for t in tickers:
+            for fd in panel.loc[panel["ticker"] == t, "feature_date"].unique():
+                rows.append(
+                    {
+                        "date": pd.Timestamp(fd),
+                        "ticker": t,
+                        "last_filed": pd.Timestamp(fd) - pd.Timedelta(days=30),
+                        "expected_next_filed": pd.Timestamp(fd) + pd.Timedelta(days=60),
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.finra_short_volume.fetch_short_volume_daily",
+        _boom_finra,
+    )
+    monkeypatch.setattr(
+        "data.ingestion.alternative_data.sec_companyfacts.fetch_filing_clock_daily",
+        _fake_filing,
+    )
+    out = add_short_flow_factors(
+        panel, feature_subset=["filing_since"], filing_clock_data_exists=False
+    )
+    assert calls["finra"] == 0
+    assert calls["filing"] == 1
+    assert "last_filed" in out.columns
+    assert "filing_clock_since" in out.columns
 
 
 # ---------------------------------------------------------------------------

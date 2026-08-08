@@ -41,13 +41,16 @@ packages = [
   "backtest.s1_equities",
   "strategies",
   "strategies.base",
+  "strategies.s1_equities",
   "risk",
   "risk.monte_carlo",
   "execution",
   "execution.brokers",
+  "execution.s1_equities",
   "portfolio",
   "performance",
 ]
 
 [tool.setuptools.package-data]
 "data.ingestion.alternative_data.sentiment" = ["*.csv"]
+"strategies.s1_equities" = ["*.csv"]

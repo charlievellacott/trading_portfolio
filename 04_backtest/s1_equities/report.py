@@ -787,6 +787,67 @@ def plot_concentration(
     return fig
 
 
+def plot_feature_attrition(
+    summary: dict,
+    *,
+    title: str = "Universe feature attrition",
+):
+    """
+    Two-panel attrition diagnostic from ``feature_attrition_summary``.
+
+    Top: stacked n_complete vs n_dropped over time.
+    Bottom: horizontal bars of exclusive vs total blame per feature.
+    """
+    by_date = summary["by_date"]
+    total_blame = summary["total_blame"]
+    exclusive_blame = summary["exclusive_blame"]
+
+    fig, axes = plt.subplots(
+        2,
+        1,
+        figsize=(11, 8),
+        gridspec_kw={"height_ratios": [1.1, 1.4]},
+    )
+
+    ax0 = axes[0]
+    if by_date is not None and not by_date.empty:
+        ax0.stackplot(
+            by_date.index,
+            by_date["n_complete"].to_numpy(dtype=float),
+            by_date["n_dropped"].to_numpy(dtype=float),
+            labels=["complete (traded-eligible)", "dropped (NaN feature)"],
+            colors=["#4C78A8", "#E45756"],
+            alpha=0.85,
+        )
+        ax0.legend(loc="upper right", fontsize=8)
+        ax0.set_ylabel("# names")
+        ax0.set_title(f"{title} — names over time")
+    else:
+        ax0.axis("off")
+        ax0.set_title(f"{title} — no by_date rows")
+
+    ax1 = axes[1]
+    feats = list(total_blame.index) if total_blame is not None else []
+    if feats:
+        y = np.arange(len(feats))
+        tot = total_blame.reindex(feats).fillna(0.0).to_numpy(dtype=float)
+        exc = exclusive_blame.reindex(feats).fillna(0.0).to_numpy(dtype=float)
+        ax1.barh(y, tot, color="#F58518", alpha=0.55, label="total blame")
+        ax1.barh(y, exc, color="#E45756", alpha=0.9, label="exclusive blame")
+        ax1.set_yticks(y)
+        ax1.set_yticklabels(feats, fontsize=8)
+        ax1.invert_yaxis()
+        ax1.set_xlabel("share of rows")
+        ax1.legend(loc="lower right", fontsize=8)
+        ax1.set_title(f"{title} — feature blame")
+    else:
+        ax1.axis("off")
+        ax1.set_title(f"{title} — no blame rows")
+
+    fig.tight_layout()
+    return fig
+
+
 def write_tearsheet_pdf(
     path: str,
     *,
@@ -797,11 +858,13 @@ def write_tearsheet_pdf(
     preds: pd.DataFrame | None = None,
     features_path: str | None = None,
     label_col: str = LABEL_COL,
+    attrition: dict | None = None,
 ) -> None:
     """
     Multi-page PDF: metrics, equity/risk overview, then underperformance diagnostics.
 
     Diagnostic pages fail soft (skip with a note) when SPY/labels are unavailable.
+    Optional ``attrition`` dict from ``feature_attrition_summary`` adds one page.
     """
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     is_r, oos_r = split_period_returns(result.period_returns, is_dates)
@@ -980,6 +1043,20 @@ def write_tearsheet_pdf(
             fig, ax = plt.subplots(figsize=(8, 2))
             ax.axis("off")
             ax.set_title(f"Concentration skipped: {exc}")
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        try:
+            if attrition is not None:
+                fig = plot_feature_attrition(
+                    attrition, title=f"{title} — feature attrition"
+                )
+                pdf.savefig(fig)
+                plt.close(fig)
+        except Exception as exc:
+            fig, ax = plt.subplots(figsize=(8, 2))
+            ax.axis("off")
+            ax.set_title(f"Attrition skipped: {exc}")
             pdf.savefig(fig)
             plt.close(fig)
 

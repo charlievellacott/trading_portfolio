@@ -3,7 +3,7 @@
 Run:
     python 10_tests/broker_tests/alpaca_tests.py
 
-API keys are read from config/credentials.env (line 1 = key, line 2 = secret).
+API keys are read from config/credentials.env (ALPACA_API_KEY= / ALPACA_SECRET_KEY=).
 Uses paper trading by default; pass --live to hit the live endpoint (not recommended).
 """
 from __future__ import annotations
@@ -21,6 +21,7 @@ if ROOT not in sys.path:
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, OrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest
+from execution.brokers.alpaca_broker import load_alpaca_credentials
 
 CREDENTIALS_PATH = os.path.join(ROOT, "config", "credentials.env")
 DEFAULT_SYMBOL = "SPY"
@@ -42,16 +43,8 @@ class CheckResult:
 
 
 def load_credentials(path: str = CREDENTIALS_PATH) -> tuple[str, str]:
-    """Return (api_key, secret_key) from the first two non-empty lines."""
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"Credentials file not found: {path}")
-
-    with open(path, encoding="utf-8") as f:
-        lines = [ln.strip() for ln in f if ln.strip()]
-    if len(lines) < 2:
-        raise ValueError(f"Expected key and secret on lines 1-2 of {path}")
-
-    return lines[0], lines[1]
+    """Return (api_key, secret_key) from ALPACA_API_KEY= / ALPACA_SECRET_KEY= lines."""
+    return load_alpaca_credentials(path)
 
 
 def make_client(*, paper: bool = True) -> TradingClient:

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk.live_sizing import monday_gross_leverage
+from risk.position_sizing import monday_gross_leverage, monday_inv_vol_weights
 from risk.signal_conviction import (
     ICScaleConfig,
     bayes_ic_series,
@@ -185,6 +185,28 @@ def test_monday_gross_leverage_helper() -> None:
     out = monday_gross_leverage(r, vt, ic_cfg=ICScaleConfig(enabled=False))
     assert "leverage" in out and out["leverage"] > 0
     assert abs(out["m_ic"] - 1.0) < 1e-12
+
+
+def test_monday_inv_vol_weights_signed_sleeves() -> None:
+    rng = np.random.default_rng(7)
+    day_cal = pd.bdate_range("2020-01-01", periods=80)
+    tickers = [f"T{i}" for i in range(40)]
+    opens = pd.DataFrame(
+        100
+        * np.exp(
+            np.cumsum(rng.normal(0, 0.01, size=(len(day_cal), len(tickers))), axis=0)
+        ),
+        index=day_cal,
+        columns=tickers,
+    )
+    decision = day_cal[60]
+    scores = pd.Series(rng.normal(size=len(tickers)), index=tickers)
+    w = monday_inv_vol_weights(
+        scores, opens, decision_date=decision, n=15, window=42
+    )
+    assert not w.empty
+    assert float(w[w > 0].sum()) == pytest.approx(0.5, abs=1e-9)
+    assert float(w[w < 0].sum()) == pytest.approx(-0.5, abs=1e-9)
 
 
 def test_runner_none_overlay_matches_baseline() -> None:

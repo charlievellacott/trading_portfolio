@@ -1,0 +1,10 @@
+- Yet to implement correlation into the model.
+- Over 1/3 of tickers in the training dataset are removed because they have only NANs for gross_profitability and gdelt_tone_x_attention. Tested if removal of gross_profitability ~ result: KEEP.
+- Monthly reshuffle backtest does not include any gdelt features. This is because I ran out of BigQuery tokens for the month - set USE_GDELT_FEATURES true to add the features.
+- Performs badly on bearish market regimes - might be worth while adding a regmine filter. Win rate drops to 30% when SPY is down.
+- Survivourship Bias is high in the backtest.
+- Live universe (`s1_universe.csv`) is the 2015 frozen top-100 minus three 2018 delists Yahoo no longer serves in a ~550d window: AET (Aetna → CVS), ESRX (Express Scripts → Cigna), TWX (Time Warner → AT&T). Train/backtest panels still include them. `EXPECTED_N_TICKERS = 97`.
+- The monthly resample did show slight improvements on the IC for a small test - however did not seem worth the effort after looking at the backtesting statistics.
+- The top 100 could be increased further? Perhaps a further test could be run here.
+- Might be worth exploring the 21 day look-a-head period.
+- Given the performance of the linear model in the validation period (a negative IC) vs the GBM (a positive IC) there is reason to suggest the GBM can be improved upon. Perhaps the smaller feature set would be useful?

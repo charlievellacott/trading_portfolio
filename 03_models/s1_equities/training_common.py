@@ -316,6 +316,143 @@ def chronological_is_split(
     )
 
 
+@dataclass(frozen=True)
+class WalkForwardFold:
+    """One expanding purged IS fold for hyperparameter selection."""
+
+    fold_id: int
+    train_dates: pd.DatetimeIndex
+    val_dates: pd.DatetimeIndex
+    embargo_dates: pd.DatetimeIndex
+
+
+def purged_is_walk_forward_folds(
+    is_dates: pd.DatetimeIndex | pd.Series,
+    *,
+    n_folds: int = 3,
+    embargo_weeks: int = 1,
+) -> list[WalkForwardFold]:
+    """
+    Expanding chronological folds on research-IS week-starts.
+
+    Split ``is_dates`` into ``n_folds + 1`` contiguous blocks. Fold ``k``
+    validates on block ``k + 1`` and trains on all earlier dates, dropping an
+    embargo gap of ``embargo_weeks`` immediately before the val window
+    (covers overlapping ``fwd_ret_5`` labels).
+    """
+    if n_folds < 2:
+        raise ValueError(f"n_folds must be >= 2, got {n_folds}")
+    if embargo_weeks < 0:
+        raise ValueError(f"embargo_weeks must be >= 0, got {embargo_weeks}")
+
+    dates = pd.DatetimeIndex(pd.to_datetime(is_dates)).sort_values().unique()
+    n = len(dates)
+    n_blocks = n_folds + 1
+    min_needed = n_blocks * max(embargo_weeks + 5, 8)
+    if n < min_needed:
+        raise ValueError(
+            f"IS week-starts={n} too short for n_folds={n_folds} "
+            f"+ embargo_weeks={embargo_weeks} (need ~{min_needed})"
+        )
+
+    edges = np.linspace(0, n, n_blocks + 1, dtype=int)
+    blocks = [dates[edges[i] : edges[i + 1]] for i in range(n_blocks)]
+    for i, blk in enumerate(blocks):
+        if len(blk) == 0:
+            raise ValueError(f"empty date block {i} in walk-forward split")
+
+    folds: list[WalkForwardFold] = []
+    for k in range(n_folds):
+        val_dates = pd.DatetimeIndex(blocks[k + 1])
+        train_pool = dates[dates < val_dates.min()]
+        if len(train_pool) <= embargo_weeks:
+            raise ValueError(
+                f"fold {k + 1}: train pool length {len(train_pool)} "
+                f"<= embargo_weeks={embargo_weeks}"
+            )
+        if embargo_weeks > 0:
+            embargo_dates = pd.DatetimeIndex(train_pool[-embargo_weeks:])
+            train_dates = pd.DatetimeIndex(train_pool[:-embargo_weeks])
+        else:
+            embargo_dates = pd.DatetimeIndex([])
+            train_dates = pd.DatetimeIndex(train_pool)
+        if len(train_dates) == 0 or len(val_dates) == 0:
+            raise ValueError(f"fold {k + 1}: empty train or val dates")
+        folds.append(
+            WalkForwardFold(
+                fold_id=k + 1,
+                train_dates=train_dates,
+                val_dates=val_dates,
+                embargo_dates=embargo_dates,
+            )
+        )
+    return folds
+
+
+def selection_score(
+    mean_ic: float,
+    std_ic: float,
+    *,
+    penalty: float = 0.5,
+) -> float:
+    """
+    Trial score: ``mean_ic - penalty * std_ic``.
+
+    Prefers high average fold IC with a penalty on cross-fold dispersion.
+    """
+    if mean_ic != mean_ic:
+        return float("nan")
+    sd = 0.0 if std_ic != std_ic else float(std_ic)
+    return float(mean_ic) - float(penalty) * sd
+
+
+def summarize_fold_trials(
+    fold_results: pd.DataFrame,
+    *,
+    hp_cols: list[str],
+    penalty: float = 0.5,
+) -> pd.DataFrame:
+    """
+    Aggregate long ``(trial_id, fold_id)`` rows into one row per trial.
+
+    Expects columns: ``trial_id``, ``fold_ic``, ``best_iteration``, plus
+    ``hp_cols``. Adds ``mean_ic``, ``std_ic``, ``worst_ic``,
+    ``median_best_iteration``, ``selection_score``.
+    """
+    required = {"trial_id", "fold_ic", "best_iteration"}
+    missing = required - set(fold_results.columns)
+    if missing:
+        raise ValueError(f"fold_results missing columns: {sorted(missing)}")
+
+    rows: list[dict] = []
+    for trial_id, g in fold_results.groupby("trial_id", sort=True):
+        ics = g["fold_ic"].astype(float)
+        mu = float(ics.mean())
+        sd = float(ics.std(ddof=1)) if len(ics) > 1 else 0.0
+        row: dict = {
+            "trial_id": int(trial_id),
+            "mean_ic": mu,
+            "std_ic": sd,
+            "worst_ic": float(ics.min()),
+            "median_best_iteration": int(
+                np.median(g["best_iteration"].astype(float).to_numpy())
+            ),
+            "selection_score": selection_score(mu, sd, penalty=penalty),
+            "n_folds": int(len(g)),
+        }
+        for c in hp_cols:
+            if c in g.columns:
+                row[c] = g[c].iloc[0]
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+    return out.sort_values(
+        ["selection_score", "mean_ic", "worst_ic"],
+        ascending=False,
+    ).reset_index(drop=True)
+
+
 def group_sizes(frame: pd.DataFrame) -> list[int]:
     """Per-date row counts for LightGBM ranking ``group``."""
     return frame.groupby("date", sort=True).size().tolist()
@@ -425,3 +562,98 @@ def attach_scores(
     out["score"] = np.asarray(scores, dtype=float)
     out["cs_rank"] = out.groupby("date")["score"].rank(method="average", pct=True)
     return out
+
+
+def feature_attrition_summary(
+    panel: pd.DataFrame,
+    feature_cols: list[str],
+    *,
+    candidate_mask: pd.Series | None = None,
+    ffill: bool = True,
+) -> dict[str, pd.DataFrame | pd.Series]:
+    """
+    Diagnose how many candidate names survive complete-case feature coverage.
+
+    Parameters
+    ----------
+    panel :
+        Long panel with ``date``, ``ticker``, and ``feature_cols``.
+    feature_cols :
+        Model feature columns (pre CS-rank).
+    candidate_mask :
+        Optional boolean mask over ``panel.index`` restricting the candidate set
+        (e.g. universe members). Default: all rows.
+    ffill :
+        If True, within-ticker unlimited forward-fill on ``feature_cols`` before
+        scoring NaNs (matches slim-ffill training).
+
+    Returns
+    -------
+    dict with
+        ``by_date`` : DataFrame indexed by date with n_candidates / n_complete /
+            n_dropped
+        ``total_blame`` : Series, share of candidate rows NaN on each feature
+        ``exclusive_blame`` : Series, share of *dropped* rows where the feature
+            is the only NaN among ``feature_cols``
+    """
+    if "date" not in panel.columns or "ticker" not in panel.columns:
+        raise ValueError("panel requires date and ticker columns")
+    missing = [c for c in feature_cols if c not in panel.columns]
+    if missing:
+        raise ValueError(f"feature_cols missing from panel: {missing}")
+
+    work = panel.copy()
+    if candidate_mask is not None:
+        work = work.loc[candidate_mask].copy()
+    if work.empty:
+        empty_dates = pd.DataFrame(
+            columns=["n_candidates", "n_complete", "n_dropped"]
+        )
+        z = pd.Series(dtype=float, name="blame")
+        return {
+            "by_date": empty_dates,
+            "total_blame": z,
+            "exclusive_blame": z,
+        }
+
+    work["date"] = pd.to_datetime(work["date"])
+    if ffill:
+        work = forward_fill_panel(work, columns=list(feature_cols), limit=None)
+
+    feat = work[feature_cols]
+    nan_mat = feat.isna()
+    complete = ~nan_mat.any(axis=1)
+
+    by_date = (
+        work.assign(_complete=complete.to_numpy())
+        .groupby("date", sort=True)
+        .agg(
+            n_candidates=("ticker", "size"),
+            n_complete=("_complete", "sum"),
+        )
+    )
+    by_date["n_complete"] = by_date["n_complete"].astype(int)
+    by_date["n_dropped"] = by_date["n_candidates"] - by_date["n_complete"]
+
+    n_cand = max(len(work), 1)
+    total_blame = (nan_mat.sum(axis=0) / n_cand).sort_values(ascending=False)
+    total_blame.name = "total_blame"
+
+    dropped = nan_mat.loc[~complete]
+    if dropped.empty:
+        exclusive_blame = pd.Series(0.0, index=feature_cols, name="exclusive_blame")
+    else:
+        n_nan = dropped.sum(axis=1)
+        exclusive_counts = {}
+        for c in feature_cols:
+            exclusive_counts[c] = int(((n_nan == 1) & dropped[c]).sum())
+        exclusive_blame = (
+            pd.Series(exclusive_counts, dtype=float) / max(len(dropped), 1)
+        ).sort_values(ascending=False)
+        exclusive_blame.name = "exclusive_blame"
+
+    return {
+        "by_date": by_date,
+        "total_blame": total_blame,
+        "exclusive_blame": exclusive_blame,
+    }
