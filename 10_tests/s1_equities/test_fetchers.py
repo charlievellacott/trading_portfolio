@@ -1,5 +1,5 @@
 """Integration tests for equity data fetchers (live Yahoo Finance).
-Uses pytest to test the equity fetcher, to test run: python -m pytest 10_tests/test_fetchers.py -v"""
+Uses pytest to test the equity fetcher, to test run: python -m pytest 10_tests/s1_equities/test_fetchers.py -v"""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

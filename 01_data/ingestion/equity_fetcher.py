@@ -12,6 +12,7 @@ import pandas as pd
 import yfinance as yf
 
 from data.ingestion.sp500_universe import constituents_on_or_before
+from data.repo_paths import data_cache_dir
 
 logger = logging.getLogger(__name__)
 
@@ -21,22 +22,7 @@ CHUNK_SIZE = 50
 MAX_RETRIES = 5
 RETRY_DELAY_SEC = 3.0
 
-def _default_cache_dir() -> str:
-    """Resolve ``01_data/cache`` from source or editable hardlink farm."""
-    cur = os.path.dirname(os.path.abspath(__file__))
-    while True:
-        if os.path.isfile(os.path.join(cur, "pyproject.toml")) or os.path.isdir(
-            os.path.join(cur, "01_data")
-        ):
-            return os.path.join(cur, "01_data", "cache")
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
-
-
-DEFAULT_CACHE_DIR = _default_cache_dir()
+DEFAULT_CACHE_DIR = data_cache_dir()
 
 
 def _to_timestamp(value: date | str | pd.Timestamp) -> pd.Timestamp:

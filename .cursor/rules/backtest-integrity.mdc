@@ -12,7 +12,7 @@ Every simulation must answer: **what could this strategy have known and traded a
 1. **Time order** — Train, validate, and test on chronological splits only. Never shuffle bars or random-split time series.
 2. **Decision vs execution** — Convention is **per strategy**; document it and never mix.
    - **Default (all strategies unless listed below):** features/signals known at close of bar `t`; decision and fill at close `t` (after the close of `t`). The prediction target is the next bar (`t+1`, e.g. next-close return).
-   - **S1 equities GBM only** (`01_data/data_files/s1_equities/*`, `02_research/notebooks/factor_tests/*`, and the S1 pooled-GBM strategy):
+   - **S1 equities GBM only** (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, and the S1 pooled-GBM strategy):
      - Panel `date` = trade / fill date.
      - Features on that row use only information known before the open of `date` (stored OHLCV bars are from `feature_date`; alt data merges on `feature_date`).
      - Decision pre-open of `date`; fill at `open` of `date`.

@@ -1,11 +1,11 @@
 """S1 strategy + runner + AlpacaBroker pipeline tester.
 
 Run:
-    python 10_tests/s1_pipeline_tester.py
-    python 10_tests/s1_pipeline_tester.py --live-strategy
-    python 10_tests/s1_pipeline_tester.py --live-strategy --date 2026-08-03
-    python 10_tests/s1_pipeline_tester.py --paper
-    python 10_tests/s1_pipeline_tester.py --live-strategy --paper
+    python 10_tests/s1_equities/s1_pipeline_tester.py
+    python 10_tests/s1_equities/s1_pipeline_tester.py --live-strategy
+    python 10_tests/s1_equities/s1_pipeline_tester.py --live-strategy --date 2026-08-03
+    python 10_tests/s1_equities/s1_pipeline_tester.py --paper
+    python 10_tests/s1_equities/s1_pipeline_tester.py --live-strategy --paper
 
 Default is offline FakeBroker + stub weights. ``--live-strategy`` runs real
 S1Strategy (slow / network). ``--paper`` places 1 share via AlpacaBroker on
@@ -24,7 +24,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -40,7 +40,7 @@ from data.processing.feature_implementation.obv_momentum import (
     signs_agree,
 )
 from data.processing.feature_implementation.utilities import daily_simple_return
-from data.processing.feature_store import (
+from data.processing.s1_feature_store import (
     add_gk_vol_factors,
     add_idio_vol_factors,
     add_max_lottery_factors,
@@ -908,7 +908,7 @@ from data.processing.feature_implementation.beta_features import (
     drop_beta_workspace,
     parse_beta_factor_name,
 )
-from data.processing.feature_store import add_beta_factors
+from data.processing.s1_feature_store import add_beta_factors
 
 
 def _make_beta_panel(n_days: int = 80, tickers: list[str] | None = None) -> pd.DataFrame:
@@ -1378,7 +1378,7 @@ from data.processing.feature_implementation.size_and_valuation_features import (
     valuation_roc,
     value_momentum_distance,
 )
-from data.processing.feature_store import add_size_value_factors
+from data.processing.s1_feature_store import add_size_value_factors
 
 
 def _make_sv_panel(
@@ -1673,7 +1673,7 @@ def test_sv_amihud_only_skips_sec_fetch(monkeypatch: pytest.MonkeyPatch) -> None
 from data.processing.feature_implementation.gross_profitability import (
     gross_profitability,
 )
-from data.processing.feature_store import add_gross_profitability_factors
+from data.processing.s1_feature_store import add_gross_profitability_factors
 
 
 def _make_gp_panel(
@@ -1825,7 +1825,7 @@ from data.processing.feature_implementation.short_flow import (
     abnormal_short_flow,
     short_volume_ratio,
 )
-from data.processing.feature_store import add_short_flow_factors
+from data.processing.s1_feature_store import add_short_flow_factors
 
 
 def _make_short_flow_panel(
@@ -2180,7 +2180,7 @@ def test_short_flow_store_fetches_filing_only_when_needed(
 
 
 def test_resolve_feature_subset_empty_adds_all_near_52w():
-    from data.processing.feature_store import NEAR_52W_FEATURES
+    from data.processing.s1_feature_store import NEAR_52W_FEATURES
 
     panel = _make_panel(n_days=30)
     out = add_near_52w_factors(panel, window=5, feature_subset=None, normalize=False)
@@ -2213,7 +2213,7 @@ def test_gdelt_tone_primitive_and_store_columns() -> None:
         rolling_median_tone,
         tone_momentum,
     )
-    from data.processing.feature_store import add_gdelt_sentiment_factors
+    from data.processing.s1_feature_store import add_gdelt_sentiment_factors
 
     s = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     assert rolling_median_tone(s, window=3).iloc[2] == pytest.approx(2.0)
@@ -2235,7 +2235,7 @@ def test_gdelt_tone_primitive_and_store_columns() -> None:
 
 
 def test_gdelt_abnormal_and_multi_window() -> None:
-    from data.processing.feature_store import add_gdelt_sentiment_factors
+    from data.processing.s1_feature_store import add_gdelt_sentiment_factors
 
     panel = _make_gdelt_panel(n_days=100)
     single = add_gdelt_sentiment_factors(
@@ -2272,7 +2272,7 @@ def test_gdelt_abnormal_and_multi_window() -> None:
 def test_gdelt_store_fetches_and_merges_when_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from data.processing.feature_store import add_gdelt_sentiment_factors
+    from data.processing.s1_feature_store import add_gdelt_sentiment_factors
 
     panel = _make_panel(n_days=40, tickers=["AAA", "BBB"])
     panel = panel.copy()
@@ -2307,7 +2307,7 @@ def test_gdelt_store_fetches_and_merges_when_missing(
 
 
 def test_gdelt_no_lookahead_prefix_stability() -> None:
-    from data.processing.feature_store import add_gdelt_sentiment_factors
+    from data.processing.s1_feature_store import add_gdelt_sentiment_factors
 
     panel = _make_gdelt_panel(n_days=90)
     full = add_gdelt_sentiment_factors(
@@ -2463,7 +2463,7 @@ def test_amihud_hand_check_and_normalize() -> None:
     from data.processing.feature_implementation.size_and_valuation_features import (
         amihud_illiquidity,
     )
-    from data.processing.feature_store import add_size_value_factors
+    from data.processing.s1_feature_store import add_size_value_factors
 
     close = pd.Series([10.0, 11.0, 12.0, 13.0])
     volume = pd.Series([100.0, 100.0, 100.0, 100.0])
@@ -2493,7 +2493,7 @@ def test_amihud_hand_check_and_normalize() -> None:
 
 
 def test_abnormal_volume_store() -> None:
-    from data.processing.feature_store import add_volume_factors
+    from data.processing.s1_feature_store import add_volume_factors
 
     panel = _make_panel(n_days=80)
     rng = np.random.default_rng(0)
@@ -2522,7 +2522,7 @@ def test_abnormal_volume_store() -> None:
 
 
 def test_abnormal_volume_no_lookahead() -> None:
-    from data.processing.feature_store import add_volume_factors
+    from data.processing.s1_feature_store import add_volume_factors
 
     panel = _make_panel(n_days=90)
     rng = np.random.default_rng(1)
@@ -2556,7 +2556,7 @@ def test_abnormal_volume_no_lookahead() -> None:
 
 
 def test_talib_factors_columns_and_multi() -> None:
-    from data.processing.feature_store import add_talib_factors
+    from data.processing.s1_feature_store import add_talib_factors
 
     panel = _make_panel(n_days=60)
     single = add_talib_factors(
@@ -2590,7 +2590,7 @@ def test_talib_factors_columns_and_multi() -> None:
 
 
 def test_talib_no_lookahead() -> None:
-    from data.processing.feature_store import add_talib_factors
+    from data.processing.s1_feature_store import add_talib_factors
 
     panel = _make_panel(n_days=80)
     full = add_talib_factors(panel, feature_subset=["rsi"], timeperiod=14)

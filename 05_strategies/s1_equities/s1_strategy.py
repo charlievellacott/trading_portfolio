@@ -5,10 +5,11 @@ import pandas as pd
 
 from data.ingestion.alternative_data.fama_french_fetcher import fetch_ff_factors_daily
 from data.ingestion.equity_fetcher import OHLCV_COLUMNS, fetch_ohlcv
+from data.repo_paths import repo_root
 from data.processing.cleaner import forward_fill_panel
 from data.processing.feature_implementation.beta_features import market_return_frame
 from data.processing.feature_implementation.momentum import add_raw_momentum
-from data.processing.feature_store import (
+from data.processing.s1_feature_store import (
     add_beta_factors,
     add_gdelt_sentiment_factors,
     add_gross_profitability_factors,
@@ -38,11 +39,11 @@ from strategies.s1_equities.s1_utilities import (
 
 # constants
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_REPO_ROOT = os.path.dirname(os.path.dirname(_HERE))
 UNIVERSE_CSV = os.path.join(_HERE, "s1_universe.csv")
 EXPECTED_N_TICKERS = 97
+LIVE_HISTORY_START = "2020-01-01"
 DEFAULT_MODEL_ARTIFACT_PATH = os.path.join(
-    _REPO_ROOT,
+    repo_root(),
     "03_models",
     "s1_equities",
     "model_artifacts",
@@ -74,7 +75,11 @@ class S1Strategy(Strategy):
         as_of = pd.Timestamp(start_date).normalize()
         self.decision_date = as_of
         self.end_date = as_of.strftime("%Y-%m-%d")
-        self.start_date = (as_of - pd.Timedelta(days=550)).strftime("%Y-%m-%d")
+        hist_start = pd.Timestamp(LIVE_HISTORY_START).normalize()
+        if as_of < hist_start:
+            self.start_date = as_of.strftime("%Y-%m-%d")
+        else:
+            self.start_date = LIVE_HISTORY_START
 
         self.tickers = self.get_tickers()
         

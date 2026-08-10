@@ -54,7 +54,7 @@ For deployment (live signal): Alpha Vantage NEWS_SENTIMENT — fetch nightly, st
 
 For backtesting from 2020: Finnhub news + VADER locally — it's deterministic, free, and you own the scoring logic. One batch fetch stores everything to parquet once, then it's just a join.
 
-The feature_store.py file you already have is the natural home for a build_sentiment_features(df, tickers, date_col) function that pulls from your cached parquet and aligns with merge_asof.
+The s1_feature_store.py file you already have is the natural home for a build_sentiment_features(df, tickers, date_col) function that pulls from your cached parquet and aligns with merge_asof.
 
 ---
 

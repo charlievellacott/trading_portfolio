@@ -17,6 +17,7 @@ from data.processing.cleaner import forward_fill_panel
 from models.s1_equities.training_common import (
     LABEL_COL,
     date_ic_series,
+    feature_attrition_summary,
     week_start_dates,
 )
 from risk.position_sizing import monday_inv_vol_weights
@@ -319,27 +320,64 @@ def _score_week_start_panel(strategy: Any, panel: pd.DataFrame) -> pd.DataFrame:
 
     # 3. Week-start trade dates only (mon_open_mon_open)
     weeks = week_start_dates(work["date"])
-    work = work.loc[work["date"].isin(weeks)].copy()
+    week = work.loc[work["date"].isin(weeks)].copy()
 
     # 4. Complete-case features
-    complete = work[feature_cols].notna().all(axis=1)
-    work = work.loc[complete].copy()
-    if work.empty:
-        raise ValueError("no complete week-start rows to score for predictions cache")
+    complete = week[feature_cols].notna().all(axis=1)
+    scored = week.loc[complete].copy()
+    if scored.empty:
+        n_week = int(len(week))
+        attrition = feature_attrition_summary(
+            week, feature_cols, ffill=False
+        )
+        blame = attrition["total_blame"].sort_values(ascending=False)
+        top_feat = list(blame.head(8).items())
+        print(
+            "predictions cache score: no complete week-start rows "
+            f"(n_week_rows={n_week}, n_complete=0)",
+            flush=True,
+        )
+        print("  feature NaN share (after slim-ffill, week-starts only):", flush=True)
+        for name, rate in top_feat:
+            print(f"    {name}: {float(rate):.3f}", flush=True)
+        if n_week > 0:
+            per_ticker = (
+                week.assign(_ok=complete.to_numpy())
+                .groupby("ticker", sort=False)["_ok"]
+                .sum()
+                .astype(int)
+            )
+            never = sorted(per_ticker.index[per_ticker == 0].astype(str).tolist())
+        else:
+            never = sorted(work["ticker"].astype(str).unique().tolist())
+        show = never[:20]
+        more = f" (+{len(never) - len(show)} more)" if len(never) > len(show) else ""
+        print(
+            f"  tickers with zero complete week-starts: "
+            f"n={len(never)}{more}",
+            flush=True,
+        )
+        if show:
+            print(f"    {', '.join(show)}", flush=True)
+        top3 = ", ".join(f"{n}={float(r):.3f}" for n, r in top_feat[:3])
+        raise ValueError(
+            "no complete week-start rows to score for predictions cache "
+            f"(n_week_rows={n_week}, n_complete=0; top features NaN: {top3})"
+        )
 
     # 5. Predict
-    scores = np.asarray(model.predict(work[feature_cols]), dtype=float)
+    scores = np.asarray(model.predict(scored[feature_cols]), dtype=float)
     out = pd.DataFrame(
         {
-            "date": work["date"].to_numpy(),
-            "ticker": work["ticker"].to_numpy(),
+            "date": scored["date"].to_numpy(),
+            "ticker": scored["ticker"].to_numpy(),
             "feature_date": (
-                work["feature_date"].to_numpy()
-                if "feature_date" in work.columns
+                scored["feature_date"].to_numpy()
+                if "feature_date" in scored.columns
                 else pd.NaT
             ),
             "score": scores,
-            LABEL_COL: work[LABEL_COL].to_numpy(),
+            LABEL_COL: scored[LABEL_COL].to_numpy(),
             "is_research_is": False,
         }
     )
@@ -367,16 +405,20 @@ def load_predictions_cache() -> pd.DataFrame:
     return df.sort_values(["date", "ticker"]).reset_index(drop=True)
 
 
-def build_predictions_cache(strategy: Any) -> pd.DataFrame:
+def build_predictions_cache(
+    strategy: Any,
+    panel: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """
     Bootstrap live predictions parquet when missing.
 
-    1. Engineer features via strategy.generate_features (yfinance fetch)
+    1. Use ``panel`` if provided, else ``strategy.generate_features``
     2. Score week-starts with the production Ridge
     3. Persist cache under strategies/s1_equities/cache/
     """
-    # 1. Feature panel
-    panel = strategy.generate_features()
+    # 1. Feature panel (reuse caller panel to avoid a second FINRA/GDELT/SEC fetch)
+    if panel is None:
+        panel = strategy.generate_features()
     # 2–5. Score week-starts
     preds = _score_week_start_panel(strategy, panel)
     # 6. Write
@@ -460,7 +502,7 @@ def ensure_predictions_cache_continuity(
             new_idx = pd.MultiIndex.from_frame(filled[keys])
             keep = ~old_idx.isin(new_idx)
             cached = pd.concat(
-                [cached.loc[keep.values], filled], ignore_index=True
+                [cached.loc[keep], filled], ignore_index=True
             )
             cached = (
                 cached[_PRED_CACHE_COLS]
@@ -524,7 +566,7 @@ def update_predictions_cache(
     path = predictions_cache_path()
     # 1. Bootstrap if absent
     if not os.path.isfile(path):
-        return build_predictions_cache(strategy)
+        return build_predictions_cache(strategy, panel=panel_with_scores)
 
     # 2. Load existing
     cached = load_predictions_cache()
@@ -562,7 +604,7 @@ def update_predictions_cache(
         old_idx = pd.MultiIndex.from_frame(cached[keys])
         new_idx = pd.MultiIndex.from_frame(new_rows[keys])
         keep = ~old_idx.isin(new_idx)
-        cached = pd.concat([cached.loc[keep.values], new_rows], ignore_index=True)
+        cached = pd.concat([cached.loc[keep], new_rows], ignore_index=True)
 
     # 5. Backfill labels from opens covering the cache span
     tickers = sorted(cached["ticker"].astype(str).unique())

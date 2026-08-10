@@ -2,7 +2,7 @@
 ETF Tier A Carhart-style daily factors via ``fetch_ohlcv``.
 
 Same public schema as the archived Ken French ZIP fetcher
-(``02_research/notebooks/redundant/old_fama_french_fetcher.py``):
+(``02_research/notebooks/s1_equities/redundant/old_fama_french_fetcher.py``):
 ``date, mkt_rf, smb, hml, [mom,] rf`` in decimal daily *simple* returns.
 
 These are free, live-updatable ETF proxies — not the academic Ken French

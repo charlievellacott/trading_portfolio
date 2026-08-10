@@ -39,7 +39,7 @@ Row `t` therefore answers: *given everything known at close `t`, should we enter
 | Fill | open `date` | Entry |
 | Label | `Open_{date+h} / Open_date - 1` | Exit at open `date+h` (panel columns `fwd_ret_{h}`) |
 
-Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/factor_tests/*`, S1 pooled GBM). All other strategies use the default close-fill timeline above. Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`.
+Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, S1 pooled GBM). All other strategies use the default close-fill timeline above. Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`.
 
 ## Rules
 

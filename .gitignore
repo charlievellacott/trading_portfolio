@@ -1,5 +1,6 @@
 config/credentials.env
 01_data/cache/
+09_performance/cache/
 01_data/data_files/**/*.parquet
 
 # Generated panels / predictions / engineered features (GitHub 100MB limit)
@@ -9,7 +10,7 @@ config/credentials.env
 03_models/s1_equities/model_tests/extras/artifacts/
 
 # Pipeline tester run dumps
-10_tests/s1_logs/
+10_tests/s1_equities/s1_logs/
 
 __pycache__/
 *.pyc

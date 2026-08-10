@@ -8,8 +8,11 @@ from unittest.mock import patch
 import pandas as pd
 
 from data.ingestion.alternative_data.finra_short_volume import (
+    _DayFetchResult,
     _canonical_finra_ticker,
+    _covered_months_path,
     _empty_dates_path,
+    _empty_frame,
     _ticker_aliases,
     _year_cache_path,
     fetch_short_volume_daily,
@@ -49,6 +52,21 @@ def test_parse_drops_footer_and_bad_rows() -> None:
     assert aapl["short_exempt_volume"] == 5.0
     assert aapl["total_volume"] == 400.0
     assert pd.Timestamp(aapl["date"]) == pd.Timestamp("2024-01-02")
+
+
+def test_parse_old_five_field_layout() -> None:
+    text = "\n".join(
+        [
+            "Date|Symbol|ShortVolume|TotalVolume|Market",
+            "20240102|AAPL|10|40|Q",
+            "1",
+        ]
+    )
+    df = parse_finra_short_volume_text(text)
+    assert len(df) == 1
+    assert df.iloc[0]["short_volume"] == 10.0
+    assert df.iloc[0]["short_exempt_volume"] == 0.0
+    assert df.iloc[0]["total_volume"] == 40.0
 
 
 def test_canonical_and_aliases() -> None:
@@ -153,17 +171,9 @@ def test_empty_day_sidecar_skips_second_download(tmp_path) -> None:
     day = pd.Timestamp("2024-01-02")
     calls: list[pd.Timestamp] = []
 
-    def _fake_download(facility, d, *, session=None, sleep_sec=0.0):
+    def _fake_download(facility, d, *, session=None, sleep_sec=0.0, retries=2):
         calls.append(pd.Timestamp(d).normalize())
-        return pd.DataFrame(
-            columns=[
-                "date",
-                "ticker",
-                "short_volume",
-                "short_exempt_volume",
-                "total_volume",
-            ]
-        )
+        return _DayFetchResult(_empty_frame(), "hard_empty")
 
     with patch(
         "data.ingestion.alternative_data.finra_short_volume._download_facility_day",
@@ -196,13 +206,48 @@ def test_empty_day_sidecar_skips_second_download(tmp_path) -> None:
     assert pd.Timestamp(empty["date"].iloc[0]).normalize() == day
 
 
+def test_soft_fail_not_written_to_empty_sidecar(tmp_path) -> None:
+    cache_dir = str(tmp_path)
+    calls: list[pd.Timestamp] = []
+
+    def _fake_download(facility, d, *, session=None, sleep_sec=0.0, retries=2):
+        calls.append(pd.Timestamp(d).normalize())
+        return _DayFetchResult(_empty_frame(), "soft_fail")
+
+    with patch(
+        "data.ingestion.alternative_data.finra_short_volume._download_facility_day",
+        side_effect=_fake_download,
+    ):
+        out1 = fetch_short_volume_daily(
+            ["AAPL"],
+            start_date="2024-01-02",
+            end_date="2024-01-02",
+            facilities=("FNSQ",),
+            cache_dir=cache_dir,
+            max_workers=1,
+        )
+        out2 = fetch_short_volume_daily(
+            ["AAPL"],
+            start_date="2024-01-02",
+            end_date="2024-01-02",
+            facilities=("FNSQ",),
+            cache_dir=cache_dir,
+            max_workers=1,
+        )
+
+    assert out1.empty and out2.empty
+    assert len(calls) == 2  # soft-fail remains retryable
+    empty_path = _empty_dates_path(cache_dir, "FNSQ", 2024)
+    assert not os.path.isfile(empty_path)
+
+
 def test_parallel_download_sums_facilities(tmp_path) -> None:
     cache_dir = str(tmp_path)
     day = pd.Timestamp("2024-01-03")
 
-    def _fake_download(facility, d, *, session=None, sleep_sec=0.0):
+    def _fake_download(facility, d, *, session=None, sleep_sec=0.0, retries=2):
         vol = 100.0 if facility == "FNSQ" else 40.0
-        return pd.DataFrame(
+        frame = pd.DataFrame(
             {
                 "date": [pd.Timestamp(d).normalize()],
                 "ticker": ["AAPL"],
@@ -211,6 +256,7 @@ def test_parallel_download_sums_facilities(tmp_path) -> None:
                 "total_volume": [vol * 4],
             }
         )
+        return _DayFetchResult(frame, "ok")
 
     with patch(
         "data.ingestion.alternative_data.finra_short_volume._download_facility_day",
@@ -264,3 +310,79 @@ def test_cache_hit_month_loop_no_downloads(tmp_path) -> None:
 
     assert len(out) == 1
     assert out.iloc[0]["short_volume"] == 10.0
+
+
+def test_covered_month_skips_download(tmp_path) -> None:
+    cache_dir = str(tmp_path)
+    sub = os.path.join(cache_dir, "finra_short_volume")
+    os.makedirs(sub, exist_ok=True)
+    day = pd.Timestamp("2024-03-01")
+    pd.DataFrame(
+        {
+            "date": [day],
+            "ticker": ["AAPL"],
+            "short_volume": [7.0],
+            "short_exempt_volume": [0.0],
+            "total_volume": [28.0],
+        }
+    ).to_parquet(os.path.join(sub, "FNSQ_2024.parquet"), index=False)
+    pd.DataFrame({"month": ["2024-03"]}).to_parquet(
+        _covered_months_path(cache_dir, "FNSQ", 2024), index=False
+    )
+
+    with patch(
+        "data.ingestion.alternative_data.finra_short_volume._download_facility_day",
+        side_effect=AssertionError("should not download"),
+    ) as mock_dl:
+        out = fetch_short_volume_daily(
+            ["AAPL"],
+            start_date="2024-03-01",
+            end_date="2024-03-01",
+            facilities=("FNSQ",),
+            cache_dir=cache_dir,
+        )
+        mock_dl.assert_not_called()
+
+    assert len(out) == 1
+    assert out.iloc[0]["short_volume"] == 7.0
+
+
+def test_write_once_year_cache_across_months(tmp_path) -> None:
+    cache_dir = str(tmp_path)
+    write_counts = {"n": 0}
+    real_write = None
+
+    import data.ingestion.alternative_data.finra_short_volume as finra_mod
+
+    real_write = finra_mod._write_year_cache
+
+    def _counting_write(path, df):
+        write_counts["n"] += 1
+        return real_write(path, df)
+
+    def _fake_download(facility, d, *, session=None, sleep_sec=0.0, retries=2):
+        frame = pd.DataFrame(
+            {
+                "date": [pd.Timestamp(d).normalize()],
+                "ticker": ["AAPL"],
+                "short_volume": [1.0],
+                "short_exempt_volume": [0.0],
+                "total_volume": [4.0],
+            }
+        )
+        return _DayFetchResult(frame, "ok")
+
+    with patch.object(finra_mod, "_write_year_cache", side_effect=_counting_write):
+        with patch.object(finra_mod, "_download_facility_day", side_effect=_fake_download):
+            out = fetch_short_volume_daily(
+                ["AAPL"],
+                start_date="2024-01-02",
+                end_date="2024-02-01",
+                facilities=("FNSQ",),
+                cache_dir=cache_dir,
+                max_workers=1,
+            )
+
+    assert not out.empty
+    # Two calendar months, one facility-year → a single year parquet write.
+    assert write_counts["n"] == 1

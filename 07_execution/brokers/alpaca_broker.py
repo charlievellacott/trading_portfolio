@@ -1,16 +1,16 @@
 # imports
 import os
 import time
+from datetime import datetime
 
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderSide, OrderStatus, TimeInForce
-from alpaca.trading.requests import MarketOrderRequest, StopOrderRequest
+from alpaca.trading.enums import OrderSide, OrderStatus, QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest, StopOrderRequest
+
+from data.repo_paths import repo_root
 
 # constants
-_HERE = os.path.dirname(os.path.abspath(__file__))
-# brokers/ -> 07_execution/ -> repo root; editable install may resolve __file__ under build/
-_REPO_ROOT = os.path.dirname(os.path.dirname(_HERE))
-CREDENTIALS_PATH = os.path.join(_REPO_ROOT, "config", "credentials.env")
+CREDENTIALS_PATH = os.path.join(repo_root(), "config", "credentials.env")
 LIQUIDATE_POLL_INTERVAL_SEC = 2.0
 LIQUIDATE_TIMEOUT_SEC = 15 * 60
 FILL_POLL_INTERVAL_SEC = 2.0
@@ -21,6 +21,18 @@ TERMINAL_ORDER_STATUSES = {
     OrderStatus.EXPIRED,
     OrderStatus.REJECTED,
 }
+
+
+def _as_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    # pandas.Timestamp and date-like objects
+    to_pydt = getattr(value, "to_pydatetime", None)
+    if callable(to_pydt):
+        return to_pydt()
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
 def load_alpaca_credentials(path=None):
@@ -57,8 +69,73 @@ class AlpacaBroker:
     def get_positions(self):
         return self.client.get_all_positions()
 
+    def get_positions_normalized(self):
+        """Plain dict snapshots for live_log mark-to-market."""
+        rows = []
+        for pos in list(self.get_positions() or []):
+            rows.append(
+                {
+                    "ticker": str(pos.symbol).strip().upper(),
+                    "qty": float(pos.qty),
+                    "avg_entry": float(getattr(pos, "avg_entry_price", float("nan"))),
+                    "market_value": float(getattr(pos, "market_value", float("nan"))),
+                    "unrealized_pl": float(
+                        getattr(pos, "unrealized_pl", float("nan"))
+                    ),
+                    "current_price": float(
+                        getattr(pos, "current_price", float("nan"))
+                    ),
+                }
+            )
+        return rows
+
+    def get_filled_orders(self, after=None, until=None, limit=500):
+        """
+        Normalized filled orders for stop-fill sync.
+
+        Returns list of dicts:
+        ``order_id, ticker, side, qty, price, filled_at, order_type``.
+        """
+        kwargs = {
+            "status": QueryOrderStatus.CLOSED,
+            "limit": int(limit),
+            "nested": False,
+        }
+        if after is not None:
+            kwargs["after"] = _as_datetime(after)
+        if until is not None:
+            kwargs["until"] = _as_datetime(until)
+
+        orders = list(self.client.get_orders(GetOrdersRequest(**kwargs)) or [])
+        rows = []
+        for order in orders:
+            filled_qty = float(getattr(order, "filled_qty", 0) or 0)
+            if filled_qty <= 0:
+                continue
+            side = getattr(order, "side", None)
+            side_str = side.value if hasattr(side, "value") else str(side)
+            otype = getattr(order, "type", None)
+            otype_str = otype.value if hasattr(otype, "value") else str(otype)
+            filled_at = getattr(order, "filled_at", None) or getattr(
+                order, "updated_at", None
+            )
+            rows.append(
+                {
+                    "order_id": str(order.id),
+                    "ticker": str(order.symbol).strip().upper(),
+                    "side": str(side_str).lower(),
+                    "qty": filled_qty,
+                    "price": float(getattr(order, "filled_avg_price", 0) or 0)
+                    or None,
+                    "filled_at": filled_at,
+                    "order_type": str(otype_str).lower(),
+                }
+            )
+        return rows
+
     def cancel_open_orders(self):
         return self.client.cancel_orders()
+
 
     def cancel_order(self, order_id):
         return self.client.cancel_order_by_id(str(order_id))

@@ -3,8 +3,11 @@
 - Monthly reshuffle backtest does not include any gdelt features. This is because I ran out of BigQuery tokens for the month - set USE_GDELT_FEATURES true to add the features.
 - Performs badly on bearish market regimes - might be worth while adding a regmine filter. Win rate drops to 30% when SPY is down.
 - Survivourship Bias is high in the backtest.
-- Live universe (`s1_universe.csv`) is the 2015 frozen top-100 minus three 2018 delists Yahoo no longer serves in a ~550d window: AET (Aetna → CVS), ESRX (Express Scripts → Cigna), TWX (Time Warner → AT&T). Train/backtest panels still include them. `EXPECTED_N_TICKERS = 97`.
+- Live universe (`s1_universe.csv`) is the 2015 frozen top-100 minus three 2018 delists Yahoo no longer serves for live OHLCV: AET (Aetna → CVS), ESRX (Express Scripts → Cigna), TWX (Time Warner → AT&T). Train/backtest panels still include them. `EXPECTED_N_TICKERS = 97`.
+- Live feature fetch starts at `2020-01-01` (`LIVE_HISTORY_START`) through the decision date for warm-up / complete-case scoring.
+- Live FINRA / SEC / GDELT / equity caches resolve under repo `01_data/cache/` (via `data.repo_paths.data_cache_dir`), not the editable `build/` farm.
 - The monthly resample did show slight improvements on the IC for a small test - however did not seem worth the effort after looking at the backtesting statistics.
 - The top 100 could be increased further? Perhaps a further test could be run here.
 - Might be worth exploring the 21 day look-a-head period.
 - Given the performance of the linear model in the validation period (a negative IC) vs the GBM (a positive IC) there is reason to suggest the GBM can be improved upon. Perhaps the smaller feature set would be useful?
+- Look for an alternative to Alpaca as currently am unable to short fractional shares which leads to rounding and skipping shares

@@ -28,16 +28,13 @@ import pandas as pd
 import requests
 
 from data.ingestion.equity_fetcher import fetch_ohlcv
+from data.repo_paths import data_cache_dir
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SEC_USER_AGENT = "trading_portfolio charlie.vellacott@gmail.com"
 
-# alternative_data/ -> ingestion/ -> 01_data/ -> cache/
-DEFAULT_CACHE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "cache",
-)
+DEFAULT_CACHE_DIR = data_cache_dir()
 
 _TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 _COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik10}.json"

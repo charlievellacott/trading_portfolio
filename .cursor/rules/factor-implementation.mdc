@@ -11,7 +11,7 @@ Related always-applied rules (do not re-explain): [reuse-interfaces](.cursor/rul
 
 ## Step 1 — Explore before asking
 
-Read, in this order: the target H-XXX entry in `hypothesis_log.md`, [`01_data/processing/feature_store.py`](01_data/processing/feature_store.py), [`01_data/processing/feature_implementation/`](01_data/processing/feature_implementation), an existing peer factor (e.g. [`obv_momentum.py`](01_data/processing/feature_implementation/obv_momentum.py) or [`gk_vol_ratio.py`](01_data/processing/feature_implementation/gk_vol_ratio.py)), and [`10_tests/test_features.py`](10_tests/test_features.py).
+Read, in this order: the target H-XXX entry in `hypothesis_log.md`, [`01_data/processing/s1_feature_store.py`](01_data/processing/s1_feature_store.py), [`01_data/processing/feature_implementation/`](01_data/processing/feature_implementation), an existing peer factor (e.g. [`obv_momentum.py`](01_data/processing/feature_implementation/obv_momentum.py) or [`gk_vol_ratio.py`](01_data/processing/feature_implementation/gk_vol_ratio.py)), and [`10_tests/s1_equities/test_features.py`](10_tests/s1_equities/test_features.py).
 
 ## Step 2 — Clarify (must happen before Plan)
 
@@ -65,14 +65,14 @@ Lock every open decision from Step 2 concretely: `feature_subset` IDs, column na
 - No `include_components` flag. Intermediates are attached only by calling the smaller `add_*` helpers directly.
 - Panel helpers must: `_require_columns` validate; handle empty panel; sort by `["ticker", "date"]` with `kind="mergesort"`; restore original row order via `reindex`.
 - Reuse peers' patterns; do not duplicate `cross_sectional_pct_rank` or `cross_sectional_zscore` (import from `utilities.py`).
-- Former store-side singular `add_*` bodies for a family live here (same signatures/defaults) so [`feature_store.py`](01_data/processing/feature_store.py) can dispatch without duplicating math. **Do not change formulae or defaults when relocating.**
+- Former store-side singular `add_*` bodies for a family live here (same signatures/defaults) so [`s1_feature_store.py`](01_data/processing/s1_feature_store.py) can dispatch without duplicating math. **Do not change formulae or defaults when relocating.**
 
-### 5.2 Store entrypoint — `01_data/processing/feature_store.py`
+### 5.2 Store entrypoint — `01_data/processing/s1_feature_store.py`
 
-- **Keep** `feature_store.py` as the public dispatcher module (do not convert to a package).
+- **Keep** `s1_feature_store.py` as the public dispatcher module (do not convert to a package).
 - One public function per hypothesis family: `add_<family>_factors(panel, *, feature_subset=None, ...tunables...) -> pd.DataFrame`.
 - `feature_subset: Sequence[str] | None = None` — `None` or empty → add **all** registered IDs for that family (canonical order); non-empty → only those IDs; unknown ID → `ValueError`. IDs omit window params.
-- Resolve IDs via `resolve_feature_subset` (in `utilities.py` or `feature_store.py`).
+- Resolve IDs via `resolve_feature_subset` (in `utilities.py` or `s1_feature_store.py`).
 - Internally call the existing helpers in `feature_implementation/` (moved singular `add_*` bodies). Do not reimplement formulae in the dispatcher.
 - Expose `normalize` **only** when Step 2–3 locked store-side normalization. Signature then includes `normalize: bool = ...` with the agreed default. If the factor does not need ranking/normalization, **do not** add a `normalize` parameter — always write the raw signal.
 - Kwargs are keyword-only after required positional args (`*` after `panel` / required frames).
@@ -83,7 +83,7 @@ Lock every open decision from Step 2 concretely: `feature_subset` IDs, column na
 - Docstring states: features at `t` use OHLCV through close of `t` (or S1 `feature_date` contract when applicable); labels are **not** attached here; documents `feature_subset` IDs; and either documents `normalize` semantics **or** states that the store does not CS/TS-normalize (raw signal only).
 - Export from [`01_data/processing/__init__.py`](01_data/processing/__init__.py) alphabetically, updating `__all__`. Old singular public names (`add_beta`, `add_book_yield`, …) are **not** re-exported from the store.
 
-### 5.3 Tests — extend [`10_tests/test_features.py`](10_tests/test_features.py)
+### 5.3 Tests — extend [`10_tests/s1_equities/test_features.py`](10_tests/s1_equities/test_features.py)
 
 Add these tests (mirror the H-002 block):
 
@@ -100,7 +100,7 @@ Reuse the existing `_make_panel` helper. Call `add_*_factors(..., feature_subset
 
 Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g. whether `normalize` exists and its default, `feature_subset` IDs / column-name pattern, denominator handling, "no floor / no winsorize in store", monotonic-rank equivalences). If there is no `normalize` kwarg, state that explicitly and why (raw signal already scale-comparable). Update the **Formulae** block to match the implemented code (windows, std convention, factor IDs).
 
-### 5.5 Notebook stub — `02_research/notebooks/factor_tests/H-XXX_<factor>.ipynb`
+### 5.5 Notebook stub — `02_research/notebooks/s1_equities/factor_tests/H-XXX_<factor>.ipynb`
 
 **Markdown-only** (no runnable code cells); code cells are present but empty per the H-001 layout. Follows [notebook-structure](.cursor/rules/notebook-structure.mdc). Sections:
 
@@ -109,7 +109,7 @@ Update **Notes** for the H-XXX row with any non-obvious parameter semantics (e.g
 - `## 1. Data Loading` — for S1 equities factor tests, load `s1_factor_panel_train.parquet` (already the research IS; do not re-split). Use project fetchers only for data the train panel does not carry (e.g. SPY). See [reuse-interfaces](.cursor/rules/reuse-interfaces.mdc).
 - `## 2. Data Cleaning & Engineering` — where any winsorize / floor lives.
 - `## 3. Modeling / Signal Construction` — call `add_<family>_factors`.
-- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default and prices = pivot of `open` (no shift). When a full (runnable) factor-test notebook is built later, Alphalens full tear sheets must **display and save** a multi-page PDF under `02_research/notebooks/factor_tests/tearsheets/` named `H-XXX_{factor_col}.pdf` — see [notebook-structure](.cursor/rules/notebook-structure.mdc).
+- `## 4. Evaluation` — describe the intended test (do **not** write Alphalens / IC code unless the user asks). For S1 equities, state Alphalens `periods=(1, 5, 21)` as the sleeve default and prices = pivot of `open` (no shift). When a full (runnable) factor-test notebook is built later, Alphalens full tear sheets must **display and save** a multi-page PDF under `02_research/notebooks/s1_equities/factor_tests/tearsheets/` named `H-XXX_{factor_col}.pdf` — see [notebook-structure](.cursor/rules/notebook-structure.mdc).
 
 Do not create an Alphalens or research notebook beyond this stub unless explicitly requested.
 

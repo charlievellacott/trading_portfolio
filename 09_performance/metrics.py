@@ -1,7 +1,8 @@
-"""Portfolio risk metrics backed by vectorbt."""
+"""Portfolio risk metrics backed by vectorbt (backtest + live)."""
 
 from __future__ import annotations
 
+# Imports
 from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Any
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
-
+# Subroutines
 def _ensure_vectorbt() -> None:
     """Import vectorbt after a full numba init; recover from a partial Jupyter import."""
     try:
@@ -82,6 +83,25 @@ def as_return_series(data: Any, *, from_equity: bool = False) -> pd.Series:
     return series
 
 
+def equity_to_returns(equity: pd.Series) -> pd.Series:
+    """Convert an equity curve to period returns."""
+    return as_return_series(equity, from_equity=True)
+
+
+def apply_go_live_start(series: pd.Series, go_live: Any) -> pd.Series:
+    """Truncate a DatetimeIndex series to ``go_live`` when set; pass-through if None."""
+    if series is None or series.empty:
+        return series
+    if go_live is None or (isinstance(go_live, float) and pd.isna(go_live)):
+        return series
+    start = pd.Timestamp(go_live)
+    if start.tzinfo is not None:
+        start = start.tz_convert("UTC").tz_localize(None)
+    start = pd.Timestamp(start.date())
+    idx = pd.DatetimeIndex(pd.to_datetime(series.index))
+    return series.loc[idx >= start]
+
+
 def _returns_accessor(
     data: Any,
     *,
@@ -95,6 +115,81 @@ def _returns_accessor(
     return series.vbt.returns(freq=freq, year_freq=year_freq, defaults=defaults)
 
 
+@contextmanager
+def _plot_style_context():
+    for style_name in ("seaborn-v0_8-whitegrid", "ggplot"):
+        if style_name in plt.style.available:
+            with plt.style.context(style_name):
+                yield
+            return
+    yield
+
+
+def _style_axis(ax: plt.Axes, *, ylabel: str) -> None:
+    ax.set_ylabel(ylabel, fontsize=10, labelpad=8)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(_GRID_COLOR)
+    ax.spines["bottom"].set_color(_GRID_COLOR)
+    ax.tick_params(axis="both", labelsize=9, colors="#4a4f57")
+    ax.grid(True, axis="y", color=_GRID_COLOR, linewidth=0.8, alpha=0.7)
+    ax.grid(False, axis="x")
+
+
+def _plot_ratio_series(
+    ax: plt.Axes,
+    series: pd.Series,
+    *,
+    title: str,
+    show_one_reference: bool,
+) -> None:
+    ax.plot(series.index, series.values, color=_RATIO_COLOR, linewidth=1.6)
+    ax.axhline(0.0, color=_ZERO_LINE_COLOR, linewidth=0.9, linestyle="-", zorder=1)
+    if show_one_reference:
+        ax.axhline(
+            1.0,
+            color=_REFERENCE_LINE_COLOR,
+            linewidth=0.9,
+            linestyle="--",
+            zorder=1,
+        )
+    _style_axis(ax, ylabel="Ratio")
+    ax.set_title(title, fontsize=11, fontweight="semibold", loc="left", pad=10)
+
+
+def _plot_drawdown_series(ax: plt.Axes, series: pd.Series, *, title: str) -> None:
+    values = series.values
+    ax.fill_between(series.index, values, 0.0, color=_DRAWDOWN_COLOR, alpha=0.18)
+    ax.plot(series.index, values, color=_DRAWDOWN_COLOR, linewidth=1.6)
+    ax.axhline(0.0, color=_ZERO_LINE_COLOR, linewidth=0.9, linestyle="-", zorder=1)
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0, decimals=1))
+    _style_axis(ax, ylabel="Drawdown")
+    ax.set_title(title, fontsize=11, fontweight="semibold", loc="left", pad=10)
+
+
+def _summary_from_returns(
+    returns: pd.Series,
+    *,
+    freq: str,
+    year_freq: str,
+    risk_free: float,
+) -> pd.Series:
+    return pd.Series(
+        {
+            "sharpe": sharpe_ratio(
+                returns, freq=freq, year_freq=year_freq, risk_free=risk_free
+            ),
+            "sortino": sortino_ratio(
+                returns, freq=freq, year_freq=year_freq, risk_free=risk_free
+            ),
+            "calmar": calmar_ratio(returns, freq=freq, year_freq=year_freq),
+            "max_drawdown": max_drawdown(returns, freq=freq),
+        },
+        dtype=float,
+    )
+
+
+# Main
 def sharpe_ratio(
     returns: Any,
     *,
@@ -259,56 +354,19 @@ _ROLLING_DISPATCH = {
 }
 
 
-@contextmanager
-def _plot_style_context():
-    for style_name in ("seaborn-v0_8-whitegrid", "ggplot"):
-        if style_name in plt.style.available:
-            with plt.style.context(style_name):
-                yield
-            return
-    yield
-
-
-def _style_axis(ax: plt.Axes, *, ylabel: str) -> None:
-    ax.set_ylabel(ylabel, fontsize=10, labelpad=8)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(_GRID_COLOR)
-    ax.spines["bottom"].set_color(_GRID_COLOR)
-    ax.tick_params(axis="both", labelsize=9, colors="#4a4f57")
-    ax.grid(True, axis="y", color=_GRID_COLOR, linewidth=0.8, alpha=0.7)
-    ax.grid(False, axis="x")
-
-
-def _plot_ratio_series(
-    ax: plt.Axes,
-    series: pd.Series,
+def summary_metrics_table(
+    returns: Any,
     *,
-    title: str,
-    show_one_reference: bool,
-) -> None:
-    ax.plot(series.index, series.values, color=_RATIO_COLOR, linewidth=1.6)
-    ax.axhline(0.0, color=_ZERO_LINE_COLOR, linewidth=0.9, linestyle="-", zorder=1)
-    if show_one_reference:
-        ax.axhline(
-            1.0,
-            color=_REFERENCE_LINE_COLOR,
-            linewidth=0.9,
-            linestyle="--",
-            zorder=1,
-        )
-    _style_axis(ax, ylabel="Ratio")
-    ax.set_title(title, fontsize=11, fontweight="semibold", loc="left", pad=10)
-
-
-def _plot_drawdown_series(ax: plt.Axes, series: pd.Series, *, title: str) -> None:
-    values = series.values
-    ax.fill_between(series.index, values, 0.0, color=_DRAWDOWN_COLOR, alpha=0.18)
-    ax.plot(series.index, values, color=_DRAWDOWN_COLOR, linewidth=1.6)
-    ax.axhline(0.0, color=_ZERO_LINE_COLOR, linewidth=0.9, linestyle="-", zorder=1)
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0, decimals=1))
-    _style_axis(ax, ylabel="Drawdown")
-    ax.set_title(title, fontsize=11, fontweight="semibold", loc="left", pad=10)
+    freq: str = "d",
+    year_freq: str = "252d",
+    risk_free: float = 0.0,
+    from_equity: bool = False,
+) -> pd.Series:
+    """Sharpe / Sortino / Calmar / max drawdown in one Series."""
+    series = as_return_series(returns, from_equity=from_equity)
+    return _summary_from_returns(
+        series, freq=freq, year_freq=year_freq, risk_free=risk_free
+    )
 
 
 def plot_rolling_metrics(
@@ -381,3 +439,78 @@ def plot_rolling_metrics(
         axes[-1].set_xlabel("Date", fontsize=10, labelpad=8)
         fig.autofmt_xdate()
         plt.show()
+
+
+def live_portfolio_metrics(
+    *,
+    cache_dir: str | None = None,
+    freq: str = "d",
+    year_freq: str = "252d",
+    risk_free: float = 0.0,
+    lookback: int | None = None,
+    plot: bool = False,
+) -> dict[str, Any]:
+    """
+    Load live portfolio equity from ``live_log`` and compute display metrics.
+
+    Returns ``{"equity", "returns", "summary"}``. When ``plot`` is True and
+    ``lookback`` is set, also shows rolling metric plots.
+    """
+    from performance.live_log import get_meta, portfolio_equity_series
+
+    equity = portfolio_equity_series(cache_dir=cache_dir)
+    if equity is None or equity.empty or len(equity.dropna()) < 2:
+        return {"equity": equity, "returns": pd.Series(dtype=float), "summary": None}
+
+    returns = equity_to_returns(equity)
+    summary = summary_metrics_table(
+        returns, freq=freq, year_freq=year_freq, risk_free=risk_free
+    )
+    if plot and lookback is not None:
+        meta = get_meta(cache_dir)
+        go_live = meta.get("portfolio_go_live")
+        title = "Live portfolio"
+        if go_live:
+            title = f"{title} (go-live {go_live})"
+        plot_rolling_metrics(
+            returns,
+            lookback,
+            freq=freq,
+            year_freq=year_freq,
+            risk_free=risk_free,
+            title=title,
+        )
+    return {"equity": equity, "returns": returns, "summary": summary}
+
+
+def live_strategy_metrics(
+    strategy_id: str,
+    *,
+    cache_dir: str | None = None,
+    freq: str = "d",
+    year_freq: str = "252d",
+    risk_free: float = 0.0,
+    lookback: int | None = None,
+    plot: bool = False,
+) -> dict[str, Any]:
+    """Load one sleeve equity from ``live_log`` and compute display metrics."""
+    from performance.live_log import strategy_equity_series
+
+    equity = strategy_equity_series(strategy_id, cache_dir=cache_dir)
+    if equity is None or equity.empty or len(equity.dropna()) < 2:
+        return {"equity": equity, "returns": pd.Series(dtype=float), "summary": None}
+
+    returns = equity_to_returns(equity)
+    summary = summary_metrics_table(
+        returns, freq=freq, year_freq=year_freq, risk_free=risk_free
+    )
+    if plot and lookback is not None:
+        plot_rolling_metrics(
+            returns,
+            lookback,
+            freq=freq,
+            year_freq=year_freq,
+            risk_free=risk_free,
+            title=f"Live strategy: {strategy_id}",
+        )
+    return {"equity": equity, "returns": returns, "summary": summary}

@@ -1,6 +1,6 @@
 """Data processing package: cleaners and feature-store dispatchers."""
 
-from data.processing.feature_store import (
+from data.processing.s1_feature_store import (
     add_beta_factors,
     add_gdelt_sentiment_factors,
     add_gk_vol_factors,

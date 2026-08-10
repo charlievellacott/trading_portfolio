@@ -1,5 +1,10 @@
 from performance.metrics import (
+    apply_go_live_start,
+    as_return_series,
     calmar_ratio,
+    equity_to_returns,
+    live_portfolio_metrics,
+    live_strategy_metrics,
     max_drawdown,
     plot_rolling_metrics,
     rolling_calmar_ratio,
@@ -8,10 +13,16 @@ from performance.metrics import (
     rolling_sortino_ratio,
     sharpe_ratio,
     sortino_ratio,
+    summary_metrics_table,
 )
 
 __all__ = [
+    "apply_go_live_start",
+    "as_return_series",
     "calmar_ratio",
+    "equity_to_returns",
+    "live_portfolio_metrics",
+    "live_strategy_metrics",
     "max_drawdown",
     "plot_rolling_metrics",
     "rolling_calmar_ratio",
@@ -20,4 +31,5 @@ __all__ = [
     "rolling_sortino_ratio",
     "sharpe_ratio",
     "sortino_ratio",
+    "summary_metrics_table",
 ]
