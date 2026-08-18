@@ -117,6 +117,36 @@ def test_simulate_records_one_round_trip():
     assert not result.returns.empty
 
 
+def test_exit_long_spread_on_z_above_zero():
+    """Long spread (z <= -2) flattens on the first bar with z > 0, not exact 0."""
+    z = np.zeros(12, dtype=float)
+    z[0] = -2.5
+    z[1] = -0.4
+    z[2] = 0.1
+    z[3:] = 0.2
+    result = simulate_pair_baseline(_hk_panel(z=z))
+    assert result.n_entries == 1
+    assert result.n_open_at_end == 0
+    assert len(result.trades) == 1
+    assert int(result.trades.iloc[0]["side"]) == 1
+    assert int(result.trades.iloc[0]["hold_bars"]) == 2
+
+
+def test_exit_short_spread_on_z_below_zero():
+    """Short spread (z >= 2) flattens on the first bar with z < 0."""
+    z = np.zeros(12, dtype=float)
+    z[0] = 2.5
+    z[1] = 0.4
+    z[2] = -0.1
+    z[3:] = -0.2
+    result = simulate_pair_baseline(_hk_panel(z=z))
+    assert result.n_entries == 1
+    assert result.n_open_at_end == 0
+    assert len(result.trades) == 1
+    assert int(result.trades.iloc[0]["side"]) == -1
+    assert int(result.trades.iloc[0]["hold_bars"]) == 2
+
+
 def test_per_pair_diagnostics_and_adf():
     panel = _hk_panel()
     table = diagnose_locked_panel(panel, adf_pvalue_threshold=0.05)

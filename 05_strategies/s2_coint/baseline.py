@@ -63,6 +63,10 @@ def simulate_pair_baseline(
 ) -> PairSimResult:
     """Trad-z baseline: decide at close t, fill both legs at open t+1.
 
+    Long the spread when ``z <= -entry_z``; short when ``z >= entry_z``. Exit is
+    a signed recross of ``exit_z`` (default 0 = mean): flatten a long when
+    ``z >= exit_z``, a short when ``z <= -exit_z``.
+
     Costs hit on the fill date. Holding PnL is open t+1 → open t+2, attributed
     to the fill date. Completed round-trips populate ``trades``; an open
     position at the last evaluable bar is counted in ``n_open_at_end`` only.
@@ -101,7 +105,11 @@ def simulate_pair_baseline(
         fill_date = pd.Timestamp(dates[i + 1])
 
         do_entry = pos == 0 and np.isfinite(z_t) and np.isfinite(beta_fill)
-        do_exit = pos != 0 and np.isfinite(z_t) and abs(z_t) <= exit_z
+        do_exit = (
+            pos != 0
+            and np.isfinite(z_t)
+            and (float(pos) * z_t >= float(exit_z))
+        )
 
         event_cost = 0.0
         if do_exit:
