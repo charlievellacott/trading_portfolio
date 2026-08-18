@@ -362,7 +362,7 @@ def check_stub_place_orders(log_path: str) -> tuple[list[CheckResult], FakeBroke
         fail_stop_tickers={"BAD"},
     )
     strategy = SimpleNamespace(STOP_PCT_STAR=STOP_PCT)
-    place_orders(broker, strategy, weights, log_path)
+    place_orders(broker, strategy, weights, log_path, run_id="stub", require_rth=False)
 
     expected = expected_qtys(weights, STUB_EQUITY)
     log_txt = ""
@@ -545,7 +545,9 @@ def check_live_strategy(
             fill_prices[str(row["ticker"]).strip().upper()] = px
     broker = FakeBroker(equity=STUB_EQUITY, fill_prices=fill_prices)
     try:
-        place_orders(broker, strategy, weights, log_path)
+        place_orders(
+            broker, strategy, weights, log_path, run_id="live_stub", require_rth=False
+        )
     except Exception as exc:
         results.append(CheckResult("live FakeBroker place_orders", False, str(exc)))
         return results, weights, broker

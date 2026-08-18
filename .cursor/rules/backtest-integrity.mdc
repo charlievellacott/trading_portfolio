@@ -18,7 +18,14 @@ Every simulation must answer: **what could this strategy have known and traded a
      - Decision pre-open of `date`; fill at `open` of `date`.
      - Label: `Open_{date+h} / Open_date - 1` (columns `fwd_ret_{h}` or Alphalens on opens with **no** price-frame `shift(-1)`).
      - Purge/embargo `>= h`.
-   - No other sleeve (FX, crypto, commodities) inherits the S1 convention.
+   - **S2 cointegration** (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_strategies/s2_coint/*`, future `04_backtest/s2_coint/*`):
+     - Panel row `date = t` is the **signal** bar (not an S1-style trade-date / `feature_date` panel).
+     - Features / signal / decision known at **close of `t`**. Hedge, z, ADF, half-life use **`close_y` / `close_x` only** (panel also stores open/high/low for execution; never feed those into β / spread math).
+     - Optional alt data allowed **after close `t` and before open `t+1`** if it could have been known then. Orders are queued just before open `t+1`.
+     - Fill at **open of `t+1`** on both legs (venues with no auction open: next bar’s OHLCV open). First PnL from open `t+1` onward.
+     - Same causal lag at every bar size (1D / 4H / 1H — H-002). Do **not** use Default same-bar close-fill and do **not** inherit the S1 trade-date convention.
+     - Backtest stops: path-check high/low after entry (S1-style). Live/paper: resting stop/limit after fill.
+   - No other sleeve (FX, crypto, commodities) inherits the S1 or S2 convention; they use Default unless listed above.
 3. **Point-in-time data** — At date `t`, use only rows with `timestamp <= t`. No restated fundamentals, revised index membership, or full-sample stats.
 4. **Honest universe** — Backtest the tradable set that existed at `t`, including names later delisted or failed.
 5. **Realistic friction** — Default to commissions, spread/slippage, and borrow/short constraints; document if omitted. The opening auction is thinner than the close — **S1 slippage assumptions must be higher** than a close-fill equivalent, not lower.
@@ -31,6 +38,7 @@ Every simulation must answer: **what could this strategy have known and traded a
 - [ ] Labels do not leak future returns into features at the same timestamp
 - [ ] Walk-forward or purged CV for any hyperparameter search (not one in-sample optimum)
 - [ ] Under the S1 trade-date convention, purge/embargo is `>= h` (label on trade date `d` spans `[d, d+h]`)
+- [ ] Under the S2 contract: fill uses next-bar open (not same-bar close); no extra `.shift(1)` on close-`t` features; open/high/low are not inputs to hedge / z / ADF
 
 ## Red flags — stop and fix
 

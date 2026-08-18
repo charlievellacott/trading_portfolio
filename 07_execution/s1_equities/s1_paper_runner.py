@@ -1,6 +1,9 @@
 # S1 equities Monday paper runner.
-# Start 30-60 minutes before the NYSE open (09:30 America/New_York) and leave
-# the process running until flatten, new entries, and GTC stops are done.
+# Preferred: start    30-60 minutes before the NYSE open (09:30 America/New_York)
+# and leave the process running until flatten, new entries, and GTC stops are done.
+# Late start is OK while NYSE regular hours are still open — DAY market entries
+# fill the same session. Do not run after the US close; the runner hard-fails
+# rather than submitting DAY orders that would queue into the next session.
 #
 # UK wall clock (most of the year, UK and US DST aligned):
 #   NYSE open 14:30 UK → start this script about 13:30-14:00 UK.
@@ -40,6 +43,8 @@ PAPER = True
 NY_TZ = ZoneInfo("America/New_York")
 NYSE_OPEN_HOUR = 9
 NYSE_OPEN_MINUTE = 30
+NYSE_CLOSE_HOUR = 16
+NYSE_CLOSE_MINUTE = 0
 OPEN_POLL_INTERVAL_SEC = 5.0
 _HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(_HERE, "logs")
@@ -67,19 +72,45 @@ def is_us_equity_trading_day(date: datetime.date) -> bool:
     return True
 
 
-def wait_for_market_open():
-    # 1. Poll until local time in America/New_York is >= 09:30 on today
+def _nyse_session_bounds(now: datetime.datetime):
+    # Open/close datetimes for the calendar day of ``now`` (America/New_York).
+    open_dt = now.replace(
+        hour=NYSE_OPEN_HOUR,
+        minute=NYSE_OPEN_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    close_dt = now.replace(
+        hour=NYSE_CLOSE_HOUR,
+        minute=NYSE_CLOSE_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    return open_dt, close_dt
+
+
+def is_nyse_regular_hours(now: datetime.datetime | None = None) -> bool:
+    # True iff NYSE cash RTH: 09:30 <= now < 16:00 America/New_York.
+    if now is None:
+        now = datetime.datetime.now(NY_TZ)
+    open_dt, close_dt = _nyse_session_bounds(now)
+    return open_dt <= now < close_dt
+
+
+def ensure_nyse_rth():
+    # Wait if before open; return in RTH; refuse after close (no next-session queue).
     while True:
         now = datetime.datetime.now(NY_TZ)
-        open_dt = now.replace(
-            hour=NYSE_OPEN_HOUR,
-            minute=NYSE_OPEN_MINUTE,
-            second=0,
-            microsecond=0,
-        )
-        if now >= open_dt:
-            return
-        time.sleep(OPEN_POLL_INTERVAL_SEC)
+        open_dt, close_dt = _nyse_session_bounds(now)
+        if now < open_dt:
+            time.sleep(OPEN_POLL_INTERVAL_SEC)
+            continue
+        if now >= close_dt:
+            raise RuntimeError(
+                f"NYSE regular session is closed ({now.isoformat()}). "
+                "Refusing to submit DAY entries that would queue into the next session."
+            )
+        return
 
 
 def log_line(log_path, msg):
@@ -91,13 +122,18 @@ def log_line(log_path, msg):
         f.write(line + "\n")
 
 
-def place_orders(broker, strategy, weights, log_path, *, run_id: str):
+def place_orders(broker, strategy, weights, log_path, *, run_id: str, require_rth: bool = True):
     # 1. Fresh equity after flatten; stop pct from recipe
     # TODO(multi-sleeve): size with allocated_equity = sleeve_weight * equity
     equity = float(broker.get_account().equity)
     pct = float(strategy.STOP_PCT_STAR)
 
     # 2. Whole-share DAY entries (round down; skip qty < 1)
+    if require_rth and not is_nyse_regular_hours():
+        raise RuntimeError(
+            "NYSE regular session is not open; refusing entry submits "
+            "(avoids next-session queued DAY fills)."
+        )
     pending = []
     t_open_start = time.monotonic()
     for _, row in weights.iterrows():
@@ -328,9 +364,9 @@ def main() -> None:
         run_id=run_id,
     )
 
-    # 3. Wait until NYSE 09:30 (runner helper; no-op if already open)
-    wait_for_market_open()
-    log_line(log_path, "MARKET OPEN")
+    # 3. Wait until RTH if early; no-op if already open; refuse if already closed
+    ensure_nyse_rth()
+    log_line(log_path, "MARKET OPEN (RTH)")
 
     # 4. Close previous book; must be flat before new risk
     closed = broker.liquidate_all_positions()

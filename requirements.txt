@@ -12,6 +12,7 @@ TA-Lib>=0.4.28
 tqdm>=4.66.0
 lightgbm>=4.0.0
 seaborn>=0.13.0
+statsmodels>=0.14.0
 google-cloud-bigquery>=3.11.0
 google-cloud-bigquery-storage>=2.24.0
 db-dtypes>=1.2.0

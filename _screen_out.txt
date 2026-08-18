@@ -1,0 +1,18 @@
+
+=== Universe A: 15 same-venue candidates ===
+
+----
+diagnostics: n_candidates=15  n_ineligible=0  n_eg_fail=15  n_pass=0
+passing eligible & p < 0.05: 0 / 15
+
+=== Universe B: 6 same-venue candidates ===
+
+----
+diagnostics: n_candidates=6  n_ineligible=0  n_eg_fail=6  n_pass=0
+passing eligible & p < 0.05: 0 / 6
+
+=== Universe C: 30 same-venue candidates ===
+
+----
+diagnostics: n_candidates=30  n_ineligible=0  n_eg_fail=23  n_pass=7
+passing eligible & p < 0.05: 7 / 30

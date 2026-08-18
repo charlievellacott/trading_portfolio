@@ -66,21 +66,59 @@ def _write_cache(cache_dir: str, key: str, df: pd.DataFrame) -> None:
     df.to_parquet(path, index=False)
 
 
-def _canonical_to_yahoo(symbol: str) -> str:
-    """Map project ticker form to Yahoo Finance symbol (e.g. ``BRK.B`` → ``BRK-B``)."""
+# Yahoo exchange suffixes that must keep their dot (Asia / international listings).
+_ASIAN_EXCHANGE_SUFFIXES = frozenset(
+    {
+        ".HK",
+        ".T",
+        ".L",
+        ".TO",
+        ".AX",
+        ".NS",
+        ".BO",
+        ".SS",
+        ".SZ",
+        ".KS",
+        ".KQ",
+        ".TW",
+        ".SI",
+        ".JK",
+        ".KL",
+        ".BK",
+    }
+)
+
+
+def _has_asian_exchange_suffix(symbol: str) -> bool:
+    upper = symbol.upper()
+    return any(upper.endswith(suf) for suf in _ASIAN_EXCHANGE_SUFFIXES)
+
+
+def _canonical_to_yahoo(symbol: str, *, isAsian: bool = False) -> str:
+    """Map project ticker form to Yahoo Finance symbol (e.g. ``BRK.B`` → ``BRK-B``).
+
+    When ``isAsian=True``, known exchange suffixes (``.HK``, ``.T``, …) are kept
+    so ``0700.HK`` / ``8306.T`` are not mangled into ``0700-HK`` / ``8306-T``.
+    """
+    if isAsian and _has_asian_exchange_suffix(symbol):
+        return symbol
     return symbol.replace(".", "-")
 
 
-def _yahoo_to_canonical(symbol: str) -> str:
+def _yahoo_to_canonical(symbol: str, *, isAsian: bool = False) -> str:
     """Map Yahoo Finance symbol back to project ticker form (e.g. ``BRK-B`` → ``BRK.B``)."""
+    if isAsian and _has_asian_exchange_suffix(symbol):
+        return symbol
     return symbol.replace("-", ".")
 
 
 def _build_yahoo_ticker_maps(
     tickers: list[str],
+    *,
+    isAsian: bool = False,
 ) -> tuple[list[str], dict[str, str]]:
     """Return Yahoo download symbols and a Yahoo→canonical lookup."""
-    yahoo_tickers = [_canonical_to_yahoo(t) for t in tickers]
+    yahoo_tickers = [_canonical_to_yahoo(t, isAsian=isAsian) for t in tickers]
     yahoo_to_canonical = {y: c for y, c in zip(yahoo_tickers, tickers)}
     return yahoo_tickers, yahoo_to_canonical
 
@@ -165,6 +203,7 @@ def _download_ohlcv(
     *,
     cache_dir: str | None,
     cache_label: str,
+    isAsian: bool = False,
 ) -> pd.DataFrame:
     """Batch-download daily OHLCV for tickers in [start, end]."""
     if not tickers:
@@ -177,7 +216,9 @@ def _download_ohlcv(
             cached.columns.name = None
             return cached
 
-    yahoo_tickers, yahoo_to_canonical = _build_yahoo_ticker_maps(tickers)
+    yahoo_tickers, yahoo_to_canonical = _build_yahoo_ticker_maps(
+        tickers, isAsian=isAsian
+    )
 
     # yfinance end is exclusive
     end_exclusive = end + pd.Timedelta(days=1)
@@ -357,11 +398,15 @@ def fetch_ohlcv(
     end_date: str | date | None = None,
     *,
     cache_dir: str | None = DEFAULT_CACHE_DIR,
+    isAsian: bool = False,
 ) -> pd.DataFrame:
     """
     Return long-format daily OHLCV for a single ticker over ``[start_date, end_date]``.
 
     Columns: date, ticker, open, high, low, close, volume
+
+    Set ``isAsian=True`` for Yahoo exchange-suffixed names (``.HK``, ``.T``, …)
+    so the suffix dot is not treated as a US share-class separator.
     """
     symbol = ticker.strip().upper()
     if not symbol:
@@ -379,6 +424,7 @@ def fetch_ohlcv(
         end_ts,
         cache_dir=cache_dir,
         cache_label=f"single_{symbol}",
+        isAsian=isAsian,
     )
 
     if panel.empty:

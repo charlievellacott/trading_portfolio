@@ -39,11 +39,24 @@ Row `t` therefore answers: *given everything known at close `t`, should we enter
 | Fill | open `date` | Entry |
 | Label | `Open_{date+h} / Open_date - 1` | Exit at open `date+h` (panel columns `fwd_ret_{h}`) |
 
-Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, S1 pooled GBM). All other strategies use the default close-fill timeline above. Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`.
+Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, S1 pooled GBM). Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`.
+
+## Decision timeline — S2 cointegration (signal close `t` → fill open `t+1`)
+
+| Role | Timestamp | Meaning |
+|------|-----------|---------|
+| Features & signal | close of `t` | `close_y` / `close_x` (and derived β, spread, z, ADF, half-life) |
+| Optional alt data | after close `t`, before open `t+1` | Allowed if knowable in that window |
+| Decision | after close `t` | Enter / exit choice |
+| Orders | just before open `t+1` | Queued for the open |
+| Fill | open of `t+1` | Both legs (crypto: next-bar OHLCV open) |
+| PnL / HL stops | from open `t+1` onward | Path-check high/low after entry |
+
+Applies to S2 (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_strategies/s2_coint/*`, future `04_backtest/s2_coint/*`) at every bar size (1D / 4H / 1H). **Not** S1 trade-date indexing; **not** Default same-bar close-fill. Strategies other than S1 and S2 use the default close-fill timeline above.
 
 ## Rules
 
-- Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly.
+- Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly. **Exception — S2:** a close-`t` decision may use close `t` in the signal; the lag is the **fill** at open `t+1`, not an extra `.shift(1)` on features.
 - **Never** use `shift(-n)`, `lead`, `bfill`, or forward-looking joins to build **features, signals, or cross-row derived inputs**.
 - **Labels / targets only:** `shift(-n)` on price or forward returns is allowed in dedicated target columns (e.g. `open.shift(-h) / open - 1` for S1 `fwd_ret_h`, or `close.shift(-1)` under the default close-fill convention). Keep targets in separate columns; never feed them into feature engineering on the same row.
 - Merge auxiliary data with `merge_asof(..., direction='backward')` (or equivalent), never forward-fill from the future. On the S1 trade-date panel, merge alt data on `feature_date` (not trade `date`) so same-morning filings cannot leak.
@@ -54,11 +67,16 @@ Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_
 ## Examples
 
 ```python
-# BAD — today's close in today's signal
+# BAD (Default when you cannot trade the close you just used) — same-bar close in signal + fill
 signal = (close > close.rolling(20).mean())
+# fill at close t  # Default only when that is the intentional convention
 
-# GOOD — signal uses yesterday's completed bar
+# GOOD (Default / pre-close decision) — signal uses yesterday's completed bar
 signal = (close.shift(1) > close.shift(1).rolling(20).mean())
+
+# GOOD (S2) — close t in the signal is fine; fill at next open (do NOT also shift features)
+signal_t = (close > close.rolling(20).mean())  # known at close t
+# fill at open of t+1 (both legs); do not store next open on the signal row as a feature
 
 # BAD — forward return used as a feature (peeking)
 df["fwd_ret"] = close.pct_change(5).shift(-5)
@@ -73,7 +91,7 @@ df["feature"] = close.shift(1).pct_change().rolling(10).mean()
 df["fwd_ret_5"] = open.groupby(ticker).shift(-5) / open - 1
 # Alphalens: pivot values="open" (no shift)
 
-# GOOD — decide at close t, enter at t; model trained on target, infers from features only
+# GOOD (Default) — decide at close t, enter at close t; model trained on target, infers from features only
 X = df[["feature"]]                               # no target/label columns
 y = df["target"]
 # at inference: signal = model.predict(X)  →  order at close t

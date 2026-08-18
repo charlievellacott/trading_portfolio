@@ -1,0 +1,188 @@
+PREDICTIONS AND WEIGHTS
+  AAPL  score=0.5088329508488771  weight=0.008217353606042314
+  ABT  score=0.4880365475732625  weight=-0.007512756697316784
+  ADBE  score=0.512262151064063  weight=0.0062783814909831105
+  AIG  score=nan  weight=0.0
+  AMAT  score=0.5081888578149799  weight=0.0
+  AMD  score=0.5061922583469276  weight=0.0
+  AMGN  score=0.48095129113823504  weight=-0.008406162915236779
+  AMZN  score=nan  weight=0.0
+  APA  score=nan  weight=0.0
+  AXP  score=nan  weight=0.0
+  BA  score=nan  weight=0.0
+  BAC  score=nan  weight=0.0
+  BAX  score=0.4988819622114024  weight=0.0
+  BBY  score=0.5257864264299987  weight=0.008770996214667516
+  BIIB  score=0.4951688925288646  weight=0.0
+  BKNG  score=nan  weight=0.0
+  BMY  score=0.4941346013700424  weight=0.0
+  C  score=0.5417605768274772  weight=0.012359631882632624
+  CAT  score=0.4813904436760463  weight=-0.004665453968141421
+  CL  score=0.49304932840787097  weight=-0.00921453731682663
+  CLF  score=nan  weight=0.0
+  CMCSA  score=nan  weight=0.0
+  COF  score=nan  weight=0.0
+  COP  score=0.4910227409580435  weight=-0.009343415058861652
+  CSCO  score=0.5169341169589463  weight=0.008565092194947567
+  CVS  score=nan  weight=0.0
+  CVX  score=0.4913908588365957  weight=-0.009998396633282744
+  DD  score=nan  weight=0.0
+  DE  score=0.5036474435589899  weight=0.0
+  DIS  score=nan  weight=0.0
+  DVN  score=0.48299969837281614  weight=-0.009240869690039708
+  EBAY  score=0.510283796784602  weight=0.009447622608154807
+  EOG  score=nan  weight=0.0
+  F  score=nan  weight=0.0
+  FCX  score=0.5104941971527728  weight=0.007721378075663716
+  FDX  score=nan  weight=0.0
+  FLR  score=0.49144994679459497  weight=-0.005494910382775865
+  FSLR  score=0.5259491447901782  weight=0.006277532260665955
+  GE  score=nan  weight=0.0
+  GILD  score=0.49049881724434846  weight=-0.008860244926791749
+  GLW  score=0.5106786797167528  weight=0.0029568438192310404
+  GOOGL  score=0.5295056450471725  weight=0.006926757118739151
+  GS  score=nan  weight=0.0
+  HAL  score=nan  weight=0.0
+  HD  score=0.5046355991372861  weight=0.0
+  HON  score=0.49102113145946386  weight=-0.008704852440758321
+  HPQ  score=nan  weight=0.0
+  IBM  score=0.5045945754801122  weight=0.0
+  INTC  score=0.49891532411116823  weight=0.0
+  JNJ  score=0.49002106174785226  weight=-0.009630050924072757
+  JPM  score=nan  weight=0.0
+  KO  score=0.49723941044277103  weight=0.0
+  KR  score=nan  weight=0.0
+  LLY  score=0.49545706056781574  weight=0.0
+  LOW  score=0.5017841254813733  weight=0.0
+  MA  score=nan  weight=0.0
+  MCD  score=nan  weight=0.0
+  MDT  score=0.48331318503350795  weight=-0.009637004624706014
+  MET  score=nan  weight=0.0
+  MMM  score=nan  weight=0.0
+  MRK  score=0.4751111529945894  weight=-0.01005170543147427
+  MS  score=nan  weight=0.0
+  MSFT  score=0.5217231800617915  weight=0.007534901712013628
+  MSI  score=0.5128882666076124  weight=0.010958797821753984
+  MU  score=0.5042743261664868  weight=0.0
+  NEM  score=0.4938548036195179  weight=-0.005886186069497056
+  NKE  score=nan  weight=0.0
+  NOV  score=0.518825945443798  weight=0.00873965378655885
+  NTAP  score=nan  weight=0.0
+  NVDA  score=0.5228080958129697  weight=0.008712455676389091
+  ORCL  score=nan  weight=0.0
+  OXY  score=0.49563780590398965  weight=0.0
+  PEP  score=0.48558874627679655  weight=-0.008353452920218251
+  PFE  score=0.49432636980237743  weight=0.0
+  PG  score=0.4988360282152141  weight=0.0
+  PM  score=nan  weight=0.0
+  QCOM  score=nan  weight=0.0
+  ROST  score=nan  weight=0.0
+  RRC  score=0.5180522078722606  weight=0.01153260173155667
+  SBUX  score=nan  weight=0.0
+  SCHW  score=nan  weight=0.0
+  SLB  score=nan  weight=0.0
+  STT  score=nan  weight=0.0
+  T  score=nan  weight=0.0
+  TGT  score=nan  weight=0.0
+  TJX  score=nan  weight=0.0
+  TRV  score=nan  weight=0.0
+  TXN  score=0.500148295270926  weight=0.0
+  UNH  score=nan  weight=0.0
+  UNP  score=nan  weight=0.0
+  UPS  score=nan  weight=0.0
+  USB  score=nan  weight=0.0
+  V  score=nan  weight=0.0
+  VZ  score=nan  weight=0.0
+  WFC  score=nan  weight=0.0
+  WMT  score=0.49885097901971664  weight=0.0
+  XOM  score=nan  weight=0.0
+MARKET OPEN (RTH)
+CLOSED POSITIONS
+  BBY  qty=12.0  close_sec=5.9
+  C  qty=9.0  close_sec=5.9
+  CL  qty=-9.0  close_sec=5.9
+  CSCO  qty=8.0  close_sec=5.9
+  DVN  qty=-19.0  close_sec=5.9
+  EBAY  qty=10.0  close_sec=5.9
+  FCX  qty=11.0  close_sec=5.9
+  FSLR  qty=2.0  close_sec=5.9
+  GILD  qty=-6.0  close_sec=5.9
+  GLW  qty=2.0  close_sec=5.9
+  GOOGL  qty=2.0  close_sec=5.9
+  HON  qty=-3.0  close_sec=5.9
+  INTC  qty=4.0  close_sec=5.9
+  JNJ  qty=-3.0  close_sec=5.9
+  KO  qty=-10.0  close_sec=5.9
+  MDT  qty=-11.0  close_sec=5.9
+  MRK  qty=-8.0  close_sec=5.9
+  MSFT  qty=1.0  close_sec=5.9
+  NOV  qty=50.0  close_sec=5.9
+  NVDA  qty=4.0  close_sec=5.9
+  PEP  qty=-6.0  close_sec=5.9
+  PG  qty=-6.0  close_sec=5.9
+  RRC  qty=34.0  close_sec=5.9
+  ALL CLOSED in 5.9s
+SKIP qty<1  CAT  weight=-0.004665453968141421  px=856.5700073242188
+OPENED POSITIONS
+  AAPL  qty=2  fill=305.52  open_sec=3.5
+  ABT  qty=6  fill=110.08  open_sec=3.5
+  ADBE  qty=2  fill=255.76  open_sec=3.5
+  AMGN  qty=2  fill=414.94  open_sec=3.4
+  BBY  qty=10  fill=86.69  open_sec=5.4
+  C  qty=8  fill=140.15  open_sec=5.4
+  CL  qty=10  fill=90.52  open_sec=5.3
+  COP  qty=7  fill=126.117143  open_sec=5.3
+  CSCO  qty=7  fill=113.394285  open_sec=5.3
+  CVX  qty=4  fill=200.94  open_sec=5.3
+  DVN  qty=20  fill=46.32  open_sec=5.3
+  EBAY  qty=9  fill=102.451111  open_sec=5.3
+  FCX  qty=11  fill=66.86  open_sec=5.3
+  FLR  qty=10  fill=53.06  open_sec=5.3
+  FSLR  qty=2  fill=226.2  open_sec=5.3
+  GILD  qty=6  fill=137.25  open_sec=5.3
+  GLW  qty=1  fill=169.59  open_sec=5.2
+  GOOGL  qty=1  fill=343.96  open_sec=5.2
+  HON  qty=3  fill=232.066667  open_sec=5.2
+  JNJ  qty=3  fill=260.94  open_sec=5.2
+  MDT  qty=10  fill=91.018  open_sec=5.2
+  MRK  qty=7  fill=135.54  open_sec=7.3
+  MSFT  qty=1  fill=484.49  open_sec=7.3
+  MSI  qty=2  fill=464.76  open_sec=7.3
+  NEM  qty=4  fill=119.775  open_sec=7.3
+  NOV  qty=41  fill=21.37  open_sec=7.3
+  NVDA  qty=3  fill=226.27  open_sec=7.3
+  PEP  qty=5  fill=138.43  open_sec=7.3
+  RRC  qty=28  fill=39.66  open_sec=7.3
+  ALL OPENED in 10.8s
+STOPS
+  AAPL  STOP OK  qty=2  stop=244.42  order_id=beee735d-a14f-4f66-b344-24817581c49b
+  ABT  STOP OK  qty=6  stop=132.1  order_id=3949bcf5-21a9-4247-84e5-06767de6ddf0
+  ADBE  STOP OK  qty=2  stop=204.61  order_id=82bf02ae-414d-46b7-9f4f-8afc1c9c86a8
+  AMGN  STOP OK  qty=2  stop=497.93  order_id=5fe46d54-6fae-48c8-beb8-32ee2399db45
+  BBY  STOP OK  qty=10  stop=69.35  order_id=7ce375e6-fe6c-4c33-9c35-8c4ae3fd094e
+  C  STOP OK  qty=8  stop=112.12  order_id=7eed7d45-d979-471d-be7e-7511c30fdcd0
+  CL  STOP OK  qty=10  stop=108.62  order_id=323f68ef-824e-46b3-99ef-5ce739d040aa
+  COP  STOP OK  qty=7  stop=151.34  order_id=799b0188-2166-48fa-b942-d6937a3d703d
+  CSCO  STOP OK  qty=7  stop=90.72  order_id=e214dbe7-5fab-482b-8d58-ae89d5fd0156
+  CVX  STOP OK  qty=4  stop=241.13  order_id=f8d0413e-a449-4055-9c27-102003f13f68
+  DVN  STOP OK  qty=20  stop=55.58  order_id=540e2113-1d40-4fdd-8dad-a62a60e2f82f
+  EBAY  STOP OK  qty=9  stop=81.96  order_id=6097fec3-14b6-4b47-a7fa-a7fac656f59e
+  FCX  STOP OK  qty=11  stop=53.49  order_id=8b5b0a68-67a1-45ae-a6a2-ba44429a7c29
+  FLR  STOP OK  qty=10  stop=63.67  order_id=754b6563-64fb-4979-8d35-fa93dfa91983
+  FSLR  STOP OK  qty=2  stop=180.96  order_id=3caebed5-8448-4158-ab0f-4c30390dcade
+  GILD  STOP OK  qty=6  stop=164.7  order_id=d21ef766-b7c7-4a9c-8fd5-30394dc83899
+  GLW  STOP OK  qty=1  stop=135.67  order_id=503a661b-94d0-48ad-a047-675f520000cd
+  GOOGL  STOP OK  qty=1  stop=275.17  order_id=8a71da96-86c8-4e58-9059-4752a8518dc4
+  HON  STOP OK  qty=3  stop=278.48  order_id=137b6a0e-1e0b-4fc3-bd2c-64a7d7a0eaac
+  JNJ  STOP OK  qty=3  stop=313.13  order_id=19734aa0-a2ab-47ad-a689-0415e42a54cc
+  MDT  STOP OK  qty=10  stop=109.22  order_id=7456f9b4-4dab-4ebd-a3f5-c60f12713435
+  MRK  STOP OK  qty=7  stop=162.65  order_id=17978175-e217-4402-a903-486282ce16c8
+  MSFT  STOP OK  qty=1  stop=387.59  order_id=224c4c90-8884-412b-9b78-ba6edec0ce6b
+  MSI  STOP OK  qty=2  stop=371.81  order_id=21fab7c8-94e7-46af-8408-df761c54dc57
+  NEM  STOP OK  qty=4  stop=143.73  order_id=c9dac494-c63b-4836-8007-953f12d635d5
+  NOV  STOP OK  qty=41  stop=17.1  order_id=ce6bae62-5e74-4c81-9689-f598c36eed8b
+  NVDA  STOP OK  qty=3  stop=181.02  order_id=9a4397dc-0b79-428b-8f07-fdbff80a4cb7
+  PEP  STOP OK  qty=5  stop=166.12  order_id=19d53e3d-1f19-47f5-a44d-2232d2097fd0
+  RRC  STOP OK  qty=28  stop=31.73  order_id=ce74820d-9bd0-4ba7-8f1b-0c8b6d50cb58
+CLOSED UNCOVERED
+  none

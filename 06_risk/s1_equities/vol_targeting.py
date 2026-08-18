@@ -417,7 +417,7 @@ def compute_gross_leverage(
     Live one-call helper: ``clip(L_vol * m_ic, min, max)``.
 
     Caller supplies a PIT-safe return history and an optional IC multiplier
-    (from ``risk.signal_conviction.ic_multiplier_from_history``, or 1.0).
+    (from ``risk.s1_equities.signal_conviction.ic_multiplier_from_history``, or 1.0).
     """
     l_vol = leverage_from_history(
         past_returns, vol_cfg, prev_leverage=prev_leverage

@@ -19,9 +19,12 @@ from data.processing.s1_feature_store import (
     drop_beta_workspace,
 )
 from strategies.base.strategy import Strategy
-from risk.position_sizing import monday_gross_leverage, monday_inv_vol_weights
-from risk.signal_conviction import parse_ic_scale_star
-from risk.vol_targeting import parse_vol_target_star
+from risk.s1_equities.position_sizing import (
+    monday_gross_leverage,
+    monday_inv_vol_weights,
+)
+from risk.s1_equities.signal_conviction import parse_ic_scale_star
+from risk.s1_equities.vol_targeting import parse_vol_target_star
 from strategies.s1_equities.s1_utilities import (
     base_period_returns_from_cache,
     drop_non_model_columns,
