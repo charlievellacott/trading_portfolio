@@ -14,9 +14,12 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from data.processing.feature_implementation.cointegration import (
+    adaptive_zscore,
+    ewm_zscore,
     is_integrated_order_one,
     kalman_hedge,
     ou_half_life,
+    ou_residual_score,
     residual_variance_ratio,
     rolling_adf_pvalue,
     rolling_hedge,
@@ -378,3 +381,19 @@ def test_run_cointegration_test_accepts_raw_prices():
     assert store_res.is_cointegrated == math_res.is_cointegrated
     assert store_res.direction == math_res.direction
     assert store_res.pvalue == pytest.approx(math_res.pvalue, rel=1e-10, abs=1e-12)
+
+
+def test_ewm_ou_adaptive_z_no_lookahead():
+    rng = np.random.default_rng(0)
+    idx = _dates(120)
+    s = pd.Series(np.cumsum(rng.normal(size=120)), index=idx)
+    hl = pd.Series(30.0, index=idx)
+    z_full = ewm_zscore(s, span=20)
+    z_pref = ewm_zscore(s.iloc[:80], span=20)
+    pd.testing.assert_series_equal(z_full.iloc[:80], z_pref, check_names=False)
+    ou_full = ou_residual_score(s, window=30)
+    ou_pref = ou_residual_score(s.iloc[:80], window=30)
+    pd.testing.assert_series_equal(ou_full.iloc[:80], ou_pref, check_names=False)
+    az_full = adaptive_zscore(s, hl, z_min=20, z_max=40)
+    az_pref = adaptive_zscore(s.iloc[:80], hl.iloc[:80], z_min=20, z_max=40)
+    pd.testing.assert_series_equal(az_full.iloc[:80], az_pref, check_names=False)

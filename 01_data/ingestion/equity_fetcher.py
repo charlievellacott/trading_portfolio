@@ -37,8 +37,20 @@ def _ranking_end(start_date: pd.Timestamp) -> pd.Timestamp:
     return ts
 
 
-def _cache_key(tickers: list[str], start: pd.Timestamp, end: pd.Timestamp, label: str) -> str:
-    payload = f"{label}|{start.date()}|{end.date()}|{','.join(sorted(tickers))}"
+VALID_OHLCV_INTERVALS = frozenset({"1d", "1h"})
+
+
+def _cache_key(
+    tickers: list[str],
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    label: str,
+    *,
+    interval: str = "1d",
+) -> str:
+    payload = (
+        f"{label}|{interval}|{start.date()}|{end.date()}|{','.join(sorted(tickers))}"
+    )
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
@@ -204,13 +216,18 @@ def _download_ohlcv(
     cache_dir: str | None,
     cache_label: str,
     isAsian: bool = False,
+    interval: str = "1d",
 ) -> pd.DataFrame:
-    """Batch-download daily OHLCV for tickers in [start, end]."""
+    """Batch-download OHLCV for tickers in [start, end] at ``interval`` (``1d`` or ``1h``)."""
+    if interval not in VALID_OHLCV_INTERVALS:
+        raise ValueError(
+            f"interval must be one of {sorted(VALID_OHLCV_INTERVALS)}, got {interval!r}"
+        )
     if not tickers:
         return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
 
     if cache_dir is not None:
-        key = _cache_key(tickers, start, end, cache_label)
+        key = _cache_key(tickers, start, end, cache_label, interval=interval)
         cached = _read_cache(cache_dir, key)
         if cached is not None:
             cached.columns.name = None
@@ -234,7 +251,7 @@ def _download_ohlcv(
                     chunk,
                     start=start.date(),
                     end=end_exclusive.date(),
-                    interval="1d",
+                    interval=interval,
                     auto_adjust=True,
                     group_by="ticker",
                     threads=True,
@@ -271,7 +288,9 @@ def _download_ohlcv(
         result = pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
     else:
         result = pd.concat(frames, ignore_index=True)
-        result["date"] = pd.to_datetime(result["date"]).dt.normalize()
+        result["date"] = pd.to_datetime(result["date"])
+        if interval == "1d":
+            result["date"] = result["date"].dt.normalize()
         result.columns.name = None
         ohlcv = list(OHLCV_COLUMNS)
         result = result.loc[~result[ohlcv].isna().all(axis=1)].copy()
@@ -399,11 +418,15 @@ def fetch_ohlcv(
     *,
     cache_dir: str | None = DEFAULT_CACHE_DIR,
     isAsian: bool = False,
+    interval: str = "1d",
 ) -> pd.DataFrame:
     """
-    Return long-format daily OHLCV for a single ticker over ``[start_date, end_date]``.
+    Return long-format OHLCV for a single ticker over ``[start_date, end_date]``.
 
     Columns: date, ticker, open, high, low, close, volume
+
+    ``interval`` is ``1d`` (default) or ``1h``. Hourly timestamps are **not**
+    normalized to midnight. This sleeve does not fetch 4-hour bars.
 
     Set ``isAsian=True`` for Yahoo exchange-suffixed names (``.HK``, ``.T``, …)
     so the suffix dot is not treated as a US share-class separator.
@@ -425,6 +448,7 @@ def fetch_ohlcv(
         cache_dir=cache_dir,
         cache_label=f"single_{symbol}",
         isAsian=isAsian,
+        interval=interval,
     )
 
     if panel.empty:

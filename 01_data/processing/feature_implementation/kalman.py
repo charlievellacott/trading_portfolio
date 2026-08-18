@@ -133,3 +133,60 @@ def kalman_linear_regression(
         },
         index=y.index,
     )
+
+
+def kalman_correlation(
+    r1: pd.Series,
+    r2: pd.Series,
+    *,
+    delta: float = 1e-4,
+    obs_var: float = 1e-3,
+    burn_in: int = 30,
+) -> pd.Series:
+    """PIT correlation of two series via shared ``_run_kalman`` on second moments.
+
+    Each of ``r1^2``, ``r2^2``, and ``r1 r2`` is tracked as a 1-state random
+    walk (prior, not posterior). ``rho_hat = cov / (s1 s2)`` from those priors.
+    """
+    if delta <= 0.0 or delta >= 1.0:
+        raise ValueError(f"delta must be in (0, 1), got {delta!r}")
+    if obs_var <= 0.0:
+        raise ValueError(f"obs_var must be > 0, got {obs_var!r}")
+    if burn_in < 0:
+        raise ValueError(f"burn_in must be >= 0, got {burn_in!r}")
+    if len(r1) != len(r2):
+        raise ValueError("r1 and r2 must have the same length")
+    if not r1.index.equals(r2.index):
+        raise ValueError("r1 and r2 must share an identical index")
+
+    a = r1.astype(float).to_numpy()
+    b = r2.astype(float).to_numpy()
+    n = len(a)
+    F = np.ones((n, 1), dtype=float)
+    q_scale = delta / (1.0 - delta)
+    Q = np.array([[q_scale]], dtype=float)
+    theta0 = np.array([0.0], dtype=float)
+    P0 = np.array([[1.0]], dtype=float)
+
+    def _moment(obs: np.ndarray) -> np.ndarray:
+        prior, _, _, _, _ = _run_kalman(
+            obs, F, Q, float(obs_var), theta0, P0
+        )
+        return prior[:, 0]
+
+    v1 = _moment(a * a)
+    v2 = _moment(b * b)
+    c12 = _moment(a * b)
+    rho = np.full(n, np.nan)
+    ok = (
+        np.isfinite(v1)
+        & np.isfinite(v2)
+        & np.isfinite(c12)
+        & (v1 > 0.0)
+        & (v2 > 0.0)
+    )
+    denom = np.sqrt(v1[ok] * v2[ok])
+    rho[ok] = np.clip(c12[ok] / denom, -1.0, 1.0)
+    if burn_in > 0:
+        rho[: min(burn_in, n)] = np.nan
+    return pd.Series(rho, index=r1.index, dtype=float, name="rho_hat")

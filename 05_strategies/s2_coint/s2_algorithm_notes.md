@@ -5,7 +5,7 @@
 - Features / signal / decision at **close of bar `t`** (`close_y` / `close_x`).
 - Optional alt data after close `t` and before open `t+1` if knowable then; orders queued just before open `t+1`.
 - Fill at **open of `t+1`** (both legs; no-auction venues: next-bar OHLCV open). First PnL from open `t+1` onward.
-- Same causal lag at every bar size (1D / 4H / 1H — H-002).
+- Same causal lag at every bar size (**1D / 1H** — H-002). Universe C has **no 4H** arm.
 - Not Default same-bar close-fill; not S1 trade-date / `feature_date` indexing.
 - Do not add an extra `.shift(1)` on close-`t` features; do not store next-bar open on the signal row.
 - Backtest stops: path-check high/low after entry. Live/paper: resting stop/limit after fill.
@@ -19,7 +19,8 @@
 - Final locked book = eligible research-IS Engle–Granger passers (`pvalue < threshold`) + `KEEP_PAIR_IDS`. Do not re-pick pairs after seeing sealed OOS.
 - Panel traditional z uses fixed `Z_WINDOW=60`. Rolling `half_life` (`HL_WINDOW=252`) is for gates / time-stops (H-006 / H-008). Adaptive z-window is **H-012** and is not used in panel v1.
 - Discovery EG p-value and discovery half-life live on `s2_pairs_*_1d.csv` (IS-only). They do not set panel z.
-- Fetch OHLCV in the notebook (or live runner); `s2_coint_store.build_pair_panel` takes per-ticker OHLC frames and is timeframe-agnostic.
+- Fetch OHLCV in the notebook (or live runner); `s2_coint_store.build_pair_panel` takes per-ticker OHLC frames and is timeframe-agnostic (`interval="1d"` or `"1h"`). Do not fetch 4H for C.
+- **Research hyps H-002…H-013** use `04_backtest/s2_coint` (`runner`, `walkforward`, `report`) and `strategies.s2_coint.engine` / `S2SimConfig`. STAR stack: `04_backtest/s2_coint/artifacts/s2_star_stack.json`. You type each STAR after boxplots — never `argmax`. **Do not** create `s2_strategy.py` until all hyps are frozen.
 - Panel columns: `open_y/high_y/low_y/close_y` and `open_x/high_x/low_x/close_x` (no `price_y` / `price_x`). Hedge / z / ADF / half-life use **closes only**; open/high/low are for fill/stop/PnL.
 - Outputs: `s2_panel_{A,B,C}_1d_{train,full}.parquet` and `s2_pairs_{A,B,C}_1d.csv` under `01_data/data_files/s2_coint/`.
 

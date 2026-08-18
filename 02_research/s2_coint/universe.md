@@ -31,9 +31,13 @@
   - Financial JP banks: 8306–8316
   - Semiconductor JP: 8035–6857, 8035–6146, 8035–7735, 6857–6146, 6857–7735, 6146–7735
 
-## C refined (active)
+## C refined (frozen — H-001 DECIDED)
 
 Tech/semis failed IS EG; expand the same-country twins that passed and add China oil SOEs as a disjoint sector cluster.
+
+**Locked book (do not re-screen):** `1398.HK|0939.HK`, `1288.HK|3328.HK`, `8306.T|8316.T`.
+
+H-002 is **1D vs 1H only** for this universe. There is **no 4H** panel or bake-off for C.
 
 - Universe (11): 0939.HK, 1398.HK, 3988.HK, 1288.HK, 3328.HK, 8306.T, 8316.T, 8411.T, 0857.HK, 0386.HK, 0883.HK
 
