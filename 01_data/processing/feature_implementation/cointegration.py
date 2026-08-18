@@ -251,6 +251,87 @@ def rolling_zscore(
     return z.where(sigma > 0)
 
 
+def ewm_zscore(
+    spread: pd.Series,
+    *,
+    span: int = 60,
+) -> pd.Series:
+    """EWM ``(s - mean) / std`` of the spread; NaN when std==0; no bfill."""
+    if span < 1:
+        raise ValueError(f"span must be >= 1, got {span!r}")
+    s = spread.astype(float)
+    mu = s.ewm(span=span, min_periods=span, adjust=False).mean()
+    sigma = s.ewm(span=span, min_periods=span, adjust=False).std()
+    z = (s - mu) / sigma
+    return z.where(sigma > 0)
+
+
+def ou_residual_score(spread: pd.Series, *, window: int = 60) -> pd.Series:
+    """Rolling AR(1) leftover of ``s`` in residual-sigma units (PIT window ending at t)."""
+    if window < 3:
+        raise ValueError(f"window must be >= 3, got {window!r}")
+    s = spread.astype(float).to_numpy()
+    n = len(s)
+    out = np.full(n, np.nan)
+    for i in range(window - 1, n):
+        w = s[i - window + 1 : i + 1]
+        if not np.all(np.isfinite(w)):
+            continue
+        lag = w[:-1]
+        nxt = w[1:]
+        design = np.column_stack([np.ones(len(lag)), lag])
+        try:
+            coef, _, rank, _ = np.linalg.lstsq(design, nxt, rcond=None)
+        except np.linalg.LinAlgError:
+            continue
+        if rank < 2:
+            continue
+        c = float(coef[0])
+        phi = float(coef[1])
+        if not np.isfinite(phi) or abs(phi) >= 1.0 - 1e-12:
+            continue
+        mu = c / (1.0 - phi)
+        resid = nxt - (c + phi * lag)
+        sig = float(np.std(resid, ddof=1)) if len(resid) > 1 else float("nan")
+        if (not np.isfinite(sig)) or sig <= 0.0:
+            continue
+        out[i] = (w[-1] - mu) / sig
+    return pd.Series(out, index=spread.index, dtype=float)
+
+
+def adaptive_zscore(
+    spread: pd.Series,
+    half_life: pd.Series,
+    *,
+    z_min: int = 20,
+    z_max: int = 120,
+    ddof: int = 1,
+) -> pd.Series:
+    """Trad z with ``z_window_t = clip(2 * half_life_{t-1}, z_min, z_max)``. No bfill."""
+    if z_min < 2 or z_max < z_min:
+        raise ValueError(f"need 2 <= z_min <= z_max, got {z_min!r}, {z_max!r}")
+    s = spread.astype(float).to_numpy()
+    hl = half_life.astype(float).to_numpy()
+    n = len(s)
+    out = np.full(n, np.nan)
+    for i in range(n):
+        if i == 0 or not np.isfinite(hl[i - 1]) or hl[i - 1] <= 0.0:
+            continue
+        w = int(round(2.0 * float(hl[i - 1])))
+        w = max(int(z_min), min(int(z_max), w))
+        if i + 1 < w:
+            continue
+        chunk = s[i - w + 1 : i + 1]
+        if not np.all(np.isfinite(chunk)):
+            continue
+        mu = float(np.mean(chunk))
+        sig = float(np.std(chunk, ddof=ddof))
+        if (not np.isfinite(sig)) or sig <= 0.0:
+            continue
+        out[i] = (s[i] - mu) / sig
+    return pd.Series(out, index=spread.index, dtype=float)
+
+
 def _half_life_from_ar1(spread: np.ndarray) -> float:
     """Discrete OU half-life ``-ln(2)/ln(1+b)`` from ``Δs = a + b*s_{t-1}``; NaN if not mean-reverting."""
     s = np.asarray(spread, dtype=float)

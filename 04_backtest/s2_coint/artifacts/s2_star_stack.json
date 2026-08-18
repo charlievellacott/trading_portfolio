@@ -1,0 +1,21 @@
+{
+  "UNIVERSE_STAR": "C",
+  "PAIRS_STAR": ["1398.HK|0939.HK", "1288.HK|3328.HK", "8306.T|8316.T"],
+  "RESEARCH_IS_END_STAR": "2021-12-31",
+  "BAR_STAR": null,
+  "HEDGE_STAR": "ols",
+  "ENTRY_Z_STAR": 2.0,
+  "EXIT_Z_STAR": 0.0,
+  "Z_WINDOW_STAR": 60,
+  "OLS_WINDOW_STAR": 252,
+  "BREAK_STAR": null,
+  "TREND_STAR": null,
+  "HL_GATE_STAR": null,
+  "OVERLAP_STAR": null,
+  "EXIT_STAR": null,
+  "CORR_GATE_STAR": null,
+  "SIZE_STAR": null,
+  "VOL_STAR": null,
+  "Z_WINDOW_MODE_STAR": null,
+  "ENTRY_STAR": null
+}

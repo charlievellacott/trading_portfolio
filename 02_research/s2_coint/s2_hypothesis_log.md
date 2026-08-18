@@ -6,7 +6,9 @@ Mirror `03_models/s1_equities/model_tests/06_training_gbm_lambdarank_wf.ipynb`: 
 
 - **Fold-train (pairs):** estimate / warm anything that must be fit from past data inside the strategy (pair formation, PIT β / Kalman state, half-life estimate, OU/ADF inputs, corr KF state). Do **not** pick discrete design knobs by maximising train Sharpe.
 - **Fold-val:** score each **pre-registered** candidate config (including knobs like ATR multiple) on that fold’s validation segment. Aggregate across folds (boxplots of Sharpe, max DD, corr to S1). Freeze the winner on research IS only; never tune on sealed OOS.
-- **Research IS / sealed OOS:** research IS is the sleeve train panel through that universe’s fixed `RESEARCH_IS_END` (A `2020-12-31`, B `2022-12-31`, C `2021-12-31`); sealed OOS is after it. Pair list is frozen at discovery on `date <= T`.
+- **Research IS / sealed OOS:** research IS is the sleeve train panel through that universe’s fixed `RESEARCH_IS_END` (A `2020-12-31`, B `2022-12-31`, C `2021-12-31`); sealed OOS is after it. Pair list is frozen at discovery on `date <= T`. **If H-002 freezes 1H**, later hyps stay on the Yahoo 1H overlap window with a **70/30 IS:OOS** split (not the full C 1D census).
+- **Stacking:** freeze one knob at a time **H-002 → H-013**. Never re-open an earlier STAR. You **type** the STAR after fold-val boxplots; notebooks must not assign STAR from `argmax` / median Sharpe (hint print only). JSON write and sealed OOS are gated on a non-None STAR via `require_star`.
+- **Research stack:** `04_backtest/s2_coint` (WF / runner / report) + `05_strategies/s2_coint` engine/config. **Do not** add `s2_strategy.py` in this program — that file is a future hardcoded live recipe after all hyps freeze.
 - **Primary metrics (every hyp):** net **Sharpe**, **max drawdown**, and **correlation to S1**.
 
 ### Timing contract (all S2 hyps / all bar sizes)
@@ -21,7 +23,7 @@ Not Default same-bar close-fill; not S1 trade-date / `feature_date` indexing.
 | Fill | Open of `t+1` (both legs; no-auction venues: next-bar OHLCV open) |
 | First PnL / HL stops | From open `t+1` onward |
 
-Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materialize next-bar open on the signal row as a feature. Same lag for 1D / 4H / 1H (H-002).
+Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materialize next-bar open on the signal row as a feature. Same lag for **1D / 1H** (H-002). Universe C has **no 4H** arm.
 
 ---
 
@@ -54,8 +56,8 @@ Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materializ
 
 | ID    | Date       | Asset | Factor                                         | Data required | Status          |
 | ----- | ---------- | ----- | ---------------------------------------------- | ------------- | --------------- |
-| H-001 | 2026-08-10 | Coint | Universes A / B / C                            | —             | NOT IMPLEMENTED |
-| H-002 | 2026-08-10 | Coint | 1D vs 4H / 1H after costs                      | —             | NOT IMPLEMENTED |
+| H-001 | 2026-08-10 | Coint | Universes A / B / C                            | —             | DECIDED         |
+| H-002 | 2026-08-10 | Coint | 1D vs 1H after costs (no 4H for C)             | —             | NOT IMPLEMENTED |
 | H-003 | 2026-08-10 | Coint | Kalman β vs static OLS hedge (trad z)          | —             | NOT IMPLEMENTED |
 | H-004 | 2026-08-10 | Coint | Cointegration-break flat rule                  | —             | NOT IMPLEMENTED |
 | H-005 | 2026-08-10 | Coint | ADX and/or RSI trend filter                    | —             | NOT IMPLEMENTED |
@@ -73,31 +75,31 @@ Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materializ
 
 | Field                  |                                                                                                                                    |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**             | NOT IMPLEMENTED                                                                                                                    |
+| **Status**             | DECIDED                                                                                                                            |
 | **What it is**         | Compare candidate pair universes A, B, and C under the same trading rules.                                                         |
 | **Hypothesis**         | Evaluate universes A, B, and C on Sharpe (after costs), max DD, and correlation to S1.                                             |
 | **Economic rationale** | —                                                                                                                                  |
 | **Data required**      | —                                                                                                                                  |
 | **Test to complete**   | Validation protocol: WF fold-val boxplots of Sharpe, max DD, corr to S1; freeze universe on research IS; one sealed OOS tearsheet. |
-| **Notes**              | Lock chosen universe before later hyps; do not re-pick after downstream bake-offs. H-001 notebook is `02_research/s2_coint/notebooks/hypothesis_tests/H-001_universes.ipynb` and runs (i) sector-only screening, (ii) manual keep gate, and (iii) research-IS trad-z diagnostics. Baseline constants (`ENTRY_Z=2`, `EXIT_Z=0`, beta-sized legs) and market costs (OANDA FX, Kraken spot, IBKR HK, IBKR JP) live in `strategies.s2_coint`. Notebook scores **research IS only** — per-pair trade count, median hold, cost bps/year, Sharpe / max DD, and rolling ADF. Do not use sealed OOS to pick the universe. |
+| **Notes**              | **Frozen:** universe **C refined**. Locked pairs: `1398.HK\|0939.HK`, `1288.HK\|3328.HK`, `8306.T\|8316.T`. `RESEARCH_IS_END=2021-12-31`. A/B failed; do **not** re-pick or retrofit H-001 with walk-forward. H-001 keep-gate empty list locks **zero** pairs (unlike the panel notebook, which keeps all EG passers if the keep list is empty) — later hyps must use the three locked IDs in `04_backtest/s2_coint/artifacts/s2_star_stack.json`. IS trad-z book being net-negative is **not** a reason to reopen the universe. Notebook: `H-001_universes.ipynb`. |
 
 
 ---
 
 
 
-## H-002 · Coint · 1D vs 4H / 1H after costs · 2026-08-10
+## H-002 · Coint · 1D vs 1H after costs · 2026-08-10
 
 
 | Field                  |                                                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | **Status**             | NOT IMPLEMENTED                                                                                                         |
-| **What it is**         | Same pair logic on daily vs 4H vs 1H bars, with timeframe-appropriate frictions.                                        |
-| **Hypothesis**         | 1D timeframe survives costs better than 4H/1H after frictions.                                                          |
+| **What it is**         | Same pair logic on daily vs 1H bars, with timeframe-appropriate frictions. **No 4H for universe C.**                    |
+| **Hypothesis**         | 1D timeframe survives costs better than 1H after frictions.                                                             |
 | **Economic rationale** | —                                                                                                                       |
-| **Data required**      | —                                                                                                                       |
-| **Test to complete**   | Compare on Sharpe, max DD, corr to S1 under the Validation protocol (identical pair set and entry rule where possible). |
-| **Notes**              | Same Timing contract at **1D / 4H / 1H** (signal close `t` → fill open `t+1`). Compare on Sharpe, max DD, corr to S1 under the Validation protocol. |
+| **Data required**      | Yahoo 1D (existing C panel) and Yahoo 1H (~730d overlap). Locked C pairs only.                                          |
+| **Test to complete**   | Compare on Sharpe, max DD, corr to S1 under the Validation protocol (identical pair set and entry rule).                |
+| **Notes**              | **No 4H anywhere in this sleeve for C.** Same Timing contract at 1D / 1H (close `t` → fill open `t+1`). Per-fill `COSTS` (not scaled down on 1H). Sharpe annualizes from bar count (`periods_per_year_from_index`). Scale OLS/z/HL lookbacks to **sessions** (`252/60/252` days × 6 1H bars/session), not raw hour counts. Sample: longest overlapping Yahoo 1H window; WF on first 70% of that overlap; one sealed look on the last 30%. **If 1D wins**, later hyps use full C 1D with `RESEARCH_IS_END=2021-12-31`. **If 1H wins**, stay on that window with 70/30 IS:OOS. Type `BAR_STAR` after boxplots. Notebook: `H-002_bar_size.ipynb`. |
 
 
 ---
@@ -115,7 +117,7 @@ Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materializ
 | **Economic rationale** | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **Data required**      | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **Test to complete**   | Traditional z-score entry/exit for both arms. Score candidates on fold-val (not train Sharpe). WF boxplots of Sharpe, max DD, corr to S1; sealed OOS once.                                                                                                                                                                                                                                                                                                                   |
-| **Notes**              | Entry/exit = traditional z-score. Spread history obeys PIT β Notes. Isolates hedge quality before gates or alternate scores. Score candidates on fold-val (not train Sharpe). **Impl:** 2-state KF tracks [\beta_t, \alpha_t] as a joint random walk; spread / returned β,α are from the **prior** \theta_{t|t-1} (innovation), never the posterior. Shared core: `feature_implementation/kalman.py`. Store: `compute_kalman_hedge_spread` vs `compute_static_hedge_spread`. |
+| **Notes**              | Entry/exit = traditional z-score. Spread history obeys PIT β Notes. Isolates hedge quality before gates or alternate scores. Score candidates on fold-val (not train Sharpe). **Impl:** 2-state KF tracks [\beta_t, \alpha_t] as a joint random walk; spread / returned β,α are from the **prior** \theta_{t\|t-1} (innovation), never the posterior. Shared core: `feature_implementation/kalman.py`. Store: `compute_kalman_hedge_spread` vs `compute_static_hedge_spread`. **Arms:** OLS 252 vs Kalman (`delta=1e-4`, `obs_var=1e-3`, `burn_in=30` days, session-scaled on 1H). Extra rolling ADF/HL diagnostic is **not** a freeze input. Type `HEDGE_STAR`. Notebook: `H-003_hedge.ipynb`. |
 
 
 Look to expand this test to see if a kalman filter improves rolling ADF & half life
@@ -135,7 +137,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                 |
 | **Data required**      | —                                                                                                                                                                                                                                                                 |
 | **Test to complete**   | Validation protocol: Sharpe, max DD, corr to S1 on fold-val boxplots; sealed OOS once.                                                                                                                                                                            |
-| **Notes**              | **Impl health metrics** via `compute_coint_metrics`: `adf_pvalue` (rolling ADF on PIT spread) and `variance_jump` (recent spread std / lagged baseline std). Use as kill-switch / entry gate; discovery EG (`run_cointegration_test`) stays out of the live loop. |
+| **Notes**              | **Impl health metrics** via `compute_coint_metrics`: `adf_pvalue` (rolling ADF on PIT spread) and `variance_jump` (recent spread std / lagged baseline std). Use as kill-switch / entry gate; discovery EG (`run_cointegration_test`) stays out of the live loop. **Arms:** `off` \| `block_05_flat_10` \| `flat_05`. Type `BREAK_STAR`. Notebook: `H-004_coint_break.ipynb`. |
 
 
 ---
@@ -153,7 +155,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                          |
 | **Data required**      | —                                                                                                                                                          |
 | **Test to complete**   | Validation protocol: fold-val boxplots of Sharpe, max DD, corr to S1; sealed OOS once.                                                                     |
-| **Notes**              | Prefer defaults (e.g. RSI 14, ADX 14) + at most a tiny pre-registered robustness set. Select via Validation protocol (fold-val boxplots; sealed OOS once). |
+| **Notes**              | RSI-14 / ADX-14 on the **spread** (constructed H/L envelope from close-t α/β), not the legs. **Arms:** `off` \| `adx_veto` (ADX>25) \| `rsi_confirm` (long RSI<30, short RSI>70) \| `both`. Type `TREND_STAR`. Notebook: `H-005_trend_filter.ipynb`. |
 
 
 ---
@@ -171,7 +173,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **Data required**      | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **Test to complete**   | Same traditional z-score entry as H-003. Primary band vs at most one alternate via WF val boxplots (Sharpe, max DD, corr to S1); sealed OOS once.                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Notes**              | Same traditional z-score entry as H-003; adds half-life clipping only. **Pre-register one** [L_{\min}, L_{\max}] from literature or economics as the primary band; allow **at most one** alternate band for robustness — **not** a grid over many bands. Choose between primary vs alternate (if any) via WF val boxplots; sealed OOS once. **Impl:** discrete half-life `-ln(2)/ln(1+b)` from `Δs_t = a + b·s_{t-1}`; NaN if `b >= 0` (no MR) or `1+b <= 0` (oscillatory). Store rolling series: `compute_half_life`; scalar discovery helper: `ou_half_life`. |
+| **Notes**              | Same traditional z-score entry as H-003; adds half-life clipping only. **Arms:** `off` \| `[5,60]` \| `[5,30]`. **Impl:** discrete half-life `-ln(2)/ln(1+b)` from `Δs_t = a + b·s_{t-1}`; NaN if `b >= 0` (no MR) or `1+b <= 0` (oscillatory). Store rolling series: `compute_half_life`; scalar discovery helper: `ou_half_life`. Type `HL_GATE_STAR`. Notebook: `H-006_half_life_gate.ipynb`. |
 
 
 ---
@@ -189,7 +191,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                                                                                                                                               |
 | **Data required**      | —                                                                                                                                                                                                                                                                                                                                                                                               |
 | **Test to complete**   | Allow vs never-allow under the Validation protocol (Sharpe, max DD, corr to S1).                                                                                                                                                                                                                                                                                                                |
-| **Notes**              | **Never-allow rules:** Conflict = candidate shares **any ticker** with an already open pair, or with another candidate on the same bar. If a position is **already open** and a new signal shares a leg → **do not open** the new position. If **two** (or more) signals would open on the **same bar** and their legs overlap → open only the candidate with the best **Score × confidence** ( |
+| **Notes**              | **Never-allow rules:** Conflict = candidate shares **any ticker** with an already open pair, or with another candidate on the same bar. If a position is **already open** and a new signal shares a leg → **do not open** the new position. If **two** (or more) signals would open on the **same bar** and their legs overlap → open only the candidate with the best **Score × confidence** (`|score|*(1-adf_p)`). **Arms:** `allow` vs `never_allow`. Pair list is never re-screened. Type `OVERLAP_STAR`. Notebook: `H-007_overlap.ipynb`. |
 
 
 ---
@@ -207,7 +209,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Data required**      | —                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Test to complete**   | Compare to mean-exit-only under the Validation protocol (Sharpe, max DD, corr to S1). Discrete knobs (e.g. ATR multiple) scored on fold-val, not fold-train Sharpe.                                                                                                                                                                                                                                                       |
-| **Notes**              | **Time exit:** flat if not reverted within n \times half-life. **ATR stop:** position size so stop hit ≈ **1%** portfolio loss. **Max-loss circuit breaker:** if a **single pair’s** open PnL reaches a hard floor (example **−20%** — exact equity attribution fixed at implement), **liquidate that pair immediately** and do not re-enter until a reset rule. Catastrophe backstop separate from the 1% ATR risk unit. **Backtest:** path-check high/low after open entry (S1-style). **Live/paper:** resting stop/limit after fill. |
+| **Notes**              | **Time exit:** flat if not reverted within n=3 × half-life. **ATR stop:** dollar risk at stop = `0.01 * pair_scale * L_t` of a scale=1 trade (do **not** shrink the stop distance to cancel scale). Wilder-14 ATR on constructed spread H/L. **Max-loss circuit breaker:** −20% pair; re-enter when ADF<0.05 and HL in frozen band or `[5,60]`. **Backtest:** path-check high/low after open entry. **Arms:** `mean_only` vs `hl3_atr_breaker`. Type `EXIT_STAR`. Notebook: `H-008_exits.ipynb`. |
 
 
 ---
@@ -225,7 +227,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                                                                          |
 | **Data required**      | —                                                                                                                                                                                                                                                                                                                          |
 | **Test to complete**   | Bake-off no corr gate vs gate on; pre-register a small k set; choose on fold-val boxplots (Sharpe, max DD, corr to S1); sealed OOS once.                                                                                                                                                                                   |
-| **Notes**              | Estimate **time-varying correlation** between pair spread series (prefer spread **returns**/changes) with a **Kalman filter** tracking \hat\rho_t, **not** a fixed-window OLS/sample correlation. **Must use the single shared Kalman module** (state = correlation or bivariate moments → \hat\rho_t); no new KF core. If |
+| **Notes**              | Estimate **time-varying correlation** between pair spread **changes** with the shared Kalman module (`kalman_correlation`); no new KF core. Same conflict resolution as H-007. **Arms:** `off` \| `k=0.50` \| `k=0.70`. Type `CORR_GATE_STAR`. Notebook: `H-009_corr_gate.ipynb`. |
 
 
 ---
@@ -243,7 +245,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                      |
 | **Data required**      | —                                                                                                                                                                                                                                                                      |
 | **Test to complete**   | Arms: equal risk vs score-only vs score×(1−p). Validation protocol boxplots; sealed OOS once.                                                                                                                                                                          |
-| **Notes**              | ADF p = stationarity/coint evidence; (1-p) up-weights when stronger. Same Score × confidence formula is the **tie-break / priority metric** in H-007 and H-009 conflict rules; this hyp tests it as a **position-size** multiplier. Selection via Validation protocol. |
+| **Notes**              | ADF p = stationarity/coint evidence; (1-p) up-weights when stronger. Same Score × confidence formula is the **tie-break / priority metric** in H-007 and H-009 conflict rules; this hyp tests it as a **position-size** multiplier. **Arms:** `equal` \| `score` \| `score_conf`. Fold-train mean abs score rescales to ~1. Type `SIZE_STAR`. Notebook: `H-010_sizing.ipynb`. |
 
 
 ---
@@ -261,7 +263,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                       |
 | **Data required**      | —                                                                                                                                                                                       |
 | **Test to complete**   | Arms: fixed k vs vol-aware entry k_t vs S1-style portfolio VT. Validation protocol; sealed OOS once.                                                                                    |
-| **Notes**              | Selection via Validation protocol. Entry-threshold lever vs position-leverage lever.                                                                                                    |
+| **Notes**              | Entry-threshold lever vs position-leverage lever. **Arms:** `fixed_k` \| `kt` (`k_t=2*σ_t/σ_bar`) \| `s1_vt` via `risk.s1_equities.vol_targeting`. Type `VOL_STAR`. Notebook: `H-011_vol.ipynb`. |
 
 
 **Formulae**
@@ -279,7 +281,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | Mean-reversion speed (and thus a sensible lookback for z) may change with regime; a fixed window cannot track that.                                                                                                                                                                                                                                      |
 | **Data required**      | Panel rolling `half_life`; traditional z entry/exit.                                                                                                                                                                                                                                                                                                     |
 | **Test to complete**   | Arms: fixed 60 vs one pre-registered adaptive clamp band (at most one alternate band). Validation protocol fold-val boxplots (Sharpe, max DD, corr to S1); sealed OOS once.                                                                                                                                                                              |
-| **Notes**              | Keeps traditional z definition; only the standardization window adapts. Do **not** conflate with H-006 half-life gate (trade / no-trade). Panel v1 ships fixed `Z_WINDOW=60` only — this hyp is the adaptive arm. Lag HL one bar; clamp to avoid NaN/explosion when MR is weak. |
+| **Notes**              | Keeps traditional z definition; only the standardization window adapts. Do **not** conflate with H-006 half-life gate (trade / no-trade). Panel v1 ships fixed `Z_WINDOW=60` only — this hyp is the adaptive arm. Lag HL one bar; clamp to avoid NaN/explosion when MR is weak. **Arms:** fixed 60 vs `clip(2*HL_{t-1}, 20, 120)` vs alt `[10,252]`. Type `Z_WINDOW_MODE_STAR`. Notebook: `H-012_z_window.ipynb`. |
 
 
 ---
@@ -297,7 +299,7 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 | **Economic rationale** | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **Data required**      | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **Test to complete**   | Bake-off chosen subsets under the Validation protocol; same pairs/costs/exits where possible. Metrics: Sharpe, max DD, corr to S1.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **Notes**              | Selectable variants (not one forced stack): (1) Rolling / EWM z + asymmetric bands — enter at \pm k_{\text{in}}, exit nearer mean or at k_{\text{out}} < k_{\text{in}}; rolling vs EWM vol. (2) OU / AR(1) residual score — see below. (3) Fused Kalman β + HMM regime + Kalman-on-spread innovation — β from shared Kalman; HMM gates mean-reverting vs trending/broken (flat when not MR); in MR only, trade standardized Kalman innovation on the spread (**reuse shared Kalman module** for β and spread state; no second KF core). (4) Copula / conditional quantile — see below. |
+| **Notes**              | Selectable variants (not one forced stack): (1) Rolling / EWM z + asymmetric bands — enter at \pm k_{\text{in}}, exit nearer mean or at k_{\text{out}} < k_{\text{in}}; rolling vs EWM vol. (2) OU / AR(1) residual score — see below. (3) Fused Kalman β + HMM regime + Kalman-on-spread innovation — β from shared Kalman; HMM gates mean-reverting vs trending/broken (flat when not MR); in MR only, trade standardized Kalman innovation on the spread (**reuse shared Kalman module** for β and spread state; no second KF core). **This program tests variants 1–3 only. No copula.** Type `ENTRY_STAR`. Notebook: `H-013_entry_scores.ipynb`. |
 
 
 **OU / AR(1) residual score (A-level Maths)**
@@ -309,11 +311,9 @@ Look to expand this test to see if a kalman filter improves rolling ADF & half l
 
 Steps: (1) build PIT spread (2) estimate \mu, \phi, \sigma on past only (3) distance of s_t from \mu in units of \sigma (4) enter beyond threshold.
 
-**Copula / conditional quantile**
+**Copula / conditional quantile (deferred)**
 
-- **Leg** = one asset in the pair (leg A, leg B). Spread = weighted difference of the two legs.
-- **Copula** = model of how the two legs move together (dependence) given each leg’s own distribution.
-- **Conditional quantile:** given leg B today, is leg A extreme vs what the copula expects? That can fire without a large linear-spread z.
+Not in this program (H-013 variants 1–3 only). Kept here as background: copula = dependence of two legs given each marginal; conditional quantile asks whether leg A is extreme given leg B without a large linear-spread z.
 
 **Architecture (variant 3)**
 
