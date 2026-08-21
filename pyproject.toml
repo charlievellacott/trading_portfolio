@@ -39,6 +39,7 @@ packages = [
   "models.s1_equities",
   "backtest",
   "backtest.s1_equities",
+  "backtest.s2_coint",
   "strategies",
   "strategies.base",
   "strategies.s1_equities",

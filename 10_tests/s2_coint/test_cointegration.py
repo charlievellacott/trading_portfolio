@@ -250,6 +250,41 @@ def test_kalman_recovers_constant_beta_after_burn_in():
     assert out["beta"].iloc[100:].mean() == pytest.approx(true_beta, rel=0.1, abs=0.15)
 
 
+def test_slower_kalman_delta_has_higher_spread_autocorr():
+    y, x = _make_coint_pair(n=800, seed=71)
+    fast = compute_kalman_hedge_spread(y, x, delta=1e-4, burn_in=30)["spread"].dropna()
+    slow = compute_kalman_hedge_spread(y, x, delta=1e-7, burn_in=30)["spread"].dropna()
+    ac_fast = float(fast.autocorr(lag=1))
+    ac_slow = float(slow.autocorr(lag=1))
+    assert np.isfinite(ac_fast) and np.isfinite(ac_slow)
+    assert ac_slow > ac_fast
+
+
+def test_overlay_kalman_hedge_delta_changes_beta():
+    from backtest.s2_coint.research import overlay_kalman_hedge
+
+    y, x = _make_coint_pair(n=80, seed=72)
+    panel = pd.DataFrame(
+        {
+            "pair_id": "A|B",
+            "date": y.index,
+            "close_y": y.to_numpy(dtype=float),
+            "close_x": x.to_numpy(dtype=float),
+        }
+    )
+    fast = overlay_kalman_hedge(
+        panel, burn_in=10, z_window=20, hl_window=40, delta=1e-4
+    )
+    slow = overlay_kalman_hedge(
+        panel.copy(), burn_in=10, z_window=20, hl_window=40, delta=1e-6
+    )
+    b_fast = fast["beta"].dropna()
+    b_slow = slow["beta"].dropna()
+    assert len(b_fast) > 0
+    pd.testing.assert_index_equal(b_fast.index, b_slow.index)
+    assert not np.allclose(b_fast.to_numpy(), b_slow.to_numpy())
+
+
 # ---------------------------------------------------------------------------
 # Variance jump
 # ---------------------------------------------------------------------------
