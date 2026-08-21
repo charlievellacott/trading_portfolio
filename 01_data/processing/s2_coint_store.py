@@ -9,8 +9,11 @@ import pandas as pd
 from data.processing.feature_implementation.cointegration import (
     COINT_PVALUE,
     CointResult,
+    adaptive_zscore,
+    ewm_zscore,
     kalman_hedge,
     ou_half_life,
+    ou_residual_score,
     residual_variance_ratio,
     rolling_adf_pvalue,
     rolling_hedge,
@@ -167,6 +170,27 @@ def compute_spread_zscore(
 ) -> pd.Series:
     """Rolling z-score of the spread residual; no bfill."""
     return rolling_zscore(spread, window=window, ddof=ddof)
+
+
+def compute_ewm_zscore(spread: pd.Series, *, span: int = 60) -> pd.Series:
+    """EWM z-score of the spread residual; no bfill."""
+    return ewm_zscore(spread, span=span)
+
+
+def compute_ou_residual_score(spread: pd.Series, *, window: int = 60) -> pd.Series:
+    """Rolling OU / AR(1) residual score of the spread."""
+    return ou_residual_score(spread, window=window)
+
+
+def compute_adaptive_zscore(
+    spread: pd.Series,
+    half_life: pd.Series,
+    *,
+    z_min: int = 20,
+    z_max: int = 120,
+) -> pd.Series:
+    """Trad z with lagged half-life window; see ``adaptive_zscore``."""
+    return adaptive_zscore(spread, half_life, z_min=z_min, z_max=z_max)
 
 
 def compute_half_life(spread: pd.Series, *, window: int = 252) -> pd.Series:
@@ -329,13 +353,18 @@ def build_pair_panel(
     hl_window: int = 252,
     include_adf_pvalue: bool = False,
     include_variance_jump: bool = False,
+    hedge: str = "ols",
+    kalman_delta: float = 1e-4,
+    kalman_obs_var: float = 1e-3,
+    kalman_burn_in: int = 30,
 ) -> pd.DataFrame:
-    """Long panel of PIT rolling OLS hedge, fixed-window z, and rolling half-life.
+    """Long panel of PIT hedge, fixed-window z, and rolling half-life.
 
     ``pairs`` must already be oriented as ``(ticker_y, ticker_x)``. Each value in
     ``ohlc_by_ticker`` is a DatetimeIndex frame with columns
     ``open`` / ``high`` / ``low`` / ``close``.
 
+    ``hedge`` is ``ols`` (rolling window) or ``kalman`` (prior-state KF).
     Hedge, z, half-life, and optional ADF / variance-jump metrics use **closes
     only** (``close_y`` / ``close_x`` at bar ``t``). Open / high / low are stored
     for execution-path consumers (fill at next-bar open; high/low stops) and are
@@ -344,11 +373,18 @@ def build_pair_panel(
 
     Fetching and candidate selection happen outside this store.
     """
+    if hedge not in {"ols", "kalman"}:
+        raise ValueError(f"hedge must be 'ols' or 'kalman', got {hedge!r}")
+
     metric_ids: list[str] = []
     if include_adf_pvalue:
         metric_ids.append("adf_pvalue")
     if include_variance_jump:
         metric_ids.append("variance_jump")
+
+    extra_cols: list[str] = []
+    if hedge == "kalman":
+        extra_cols.extend(["spread_var", "z_innov"])
 
     frames: list[pd.DataFrame] = []
     for ticker_y, ticker_x in pairs:
@@ -358,9 +394,18 @@ def build_pair_panel(
 
         y_close = y_ohlc["close"]
         x_close = x_ohlc["close"]
-        hedge = compute_static_hedge_spread(y_close, x_close, window=ols_window)
-        z = compute_spread_zscore(hedge["spread"], window=z_window)
-        hl = compute_half_life(hedge["spread"], window=hl_window)
+        if hedge == "kalman":
+            hedge_df = compute_kalman_hedge_spread(
+                y_close,
+                x_close,
+                delta=kalman_delta,
+                obs_var=kalman_obs_var,
+                burn_in=kalman_burn_in,
+            )
+        else:
+            hedge_df = compute_static_hedge_spread(y_close, x_close, window=ols_window)
+        z = compute_spread_zscore(hedge_df["spread"], window=z_window)
+        hl = compute_half_life(hedge_df["spread"], window=hl_window)
 
         frame = pd.DataFrame(
             {
@@ -376,23 +421,28 @@ def build_pair_panel(
                 "high_x": x_ohlc["high"].to_numpy(dtype=float),
                 "low_x": x_ohlc["low"].to_numpy(dtype=float),
                 "close_x": x_close.to_numpy(dtype=float),
-                "alpha": hedge["alpha"].to_numpy(dtype=float),
-                "beta": hedge["beta"].to_numpy(dtype=float),
-                "spread": hedge["spread"].to_numpy(dtype=float),
+                "alpha": hedge_df["alpha"].to_numpy(dtype=float),
+                "beta": hedge_df["beta"].to_numpy(dtype=float),
+                "spread": hedge_df["spread"].to_numpy(dtype=float),
                 "z": z.to_numpy(dtype=float),
                 "half_life": hl.to_numpy(dtype=float),
             }
         )
+        if hedge == "kalman":
+            frame["spread_var"] = hedge_df["spread_var"].to_numpy(dtype=float)
+            frame["z_innov"] = hedge_df["z_innov"].to_numpy(dtype=float)
         if metric_ids:
-            metrics = compute_coint_metrics(hedge["spread"], metrics=metric_ids)
+            metrics = compute_coint_metrics(hedge_df["spread"], metrics=metric_ids)
             for col in metric_ids:
                 frame[col] = metrics[col].to_numpy(dtype=float)
         frames.append(frame)
 
     if not frames:
-        empty_cols = list(_PANEL_BASE_COLS) + metric_ids
+        empty_cols = list(_PANEL_BASE_COLS) + extra_cols + metric_ids
         return pd.DataFrame(columns=empty_cols)
 
     out = pd.concat(frames, ignore_index=True)
+    # Pair frames must already share one clock (naive UTC from fetch_ohlcv /
+    # long_ohlcv_to_frames). Mixed HK/Tokyo tz-aware stamps fail here.
     out["date"] = pd.to_datetime(out["date"])
     return out.sort_values(["date", "pair_id"], kind="mergesort").reset_index(drop=True)

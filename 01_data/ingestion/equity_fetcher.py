@@ -37,8 +37,71 @@ def _ranking_end(start_date: pd.Timestamp) -> pd.Timestamp:
     return ts
 
 
-def _cache_key(tickers: list[str], start: pd.Timestamp, end: pd.Timestamp, label: str) -> str:
-    payload = f"{label}|{start.date()}|{end.date()}|{','.join(sorted(tickers))}"
+VALID_OHLCV_INTERVALS = frozenset({"1d", "1h"})
+
+# Yahoo 1h history is a 730 calendar-day wall (not 730 hourly bars).
+YFINANCE_1H_MAX_CALENDAR_DAYS = 730
+
+
+def yfinance_1h_min_start(
+    end_date: date | str | pd.Timestamp | None = None,
+) -> pd.Timestamp:
+    """Earliest inclusive calendar start Yahoo accepts for ``interval='1h'``.
+
+    Our download range is ``[start, end]`` inclusive; yfinance sends ``end`` as
+    exclusive (``end + 1`` day). Yahoo then rejects a window of *exactly* 730
+    days (the ``2024-08-20 → 2026-08-20`` request failed). Floor is therefore
+    ``end - (730 - 2)``: −1 day for the exclusive end, −1 day for the strict
+    inequality.
+    """
+    end = (
+        _to_timestamp(end_date)
+        if end_date is not None
+        else _to_timestamp(datetime.now().date())
+    )
+    return end - pd.Timedelta(days=YFINANCE_1H_MAX_CALENDAR_DAYS - 2)
+
+
+def ohlcv_dates_to_naive_utc(dates: pd.Series) -> pd.Series:
+    """Convert OHLCV timestamps to naive UTC instants (one clock).
+
+    Yahoo 1h stamps are exchange-local and tz-aware (``Asia/Hong_Kong`` vs
+    ``Asia/Tokyo``). ``utc=True`` converts those zones to UTC; naive values are
+    treated as already-UTC. Dropping tz stores UTC instants as tz-naive
+    ``datetime64`` so a later concat of HK and Tokyo rows does not mix
+    tz-aware Python datetimes. Daily bars do **not** use this helper:
+    ``.dt.normalize()`` keeps calendar dates and must not be UTC-shifted.
+    """
+    as_utc = pd.to_datetime(dates, utc=True)
+    if getattr(as_utc.dtype, "tz", None) is not None:
+        return as_utc.dt.tz_localize(None)
+    return as_utc
+
+
+def _clamp_yfinance_1h_start(start: pd.Timestamp, end: pd.Timestamp) -> pd.Timestamp:
+    floor = yfinance_1h_min_start(end)
+    if start < floor:
+        logger.info(
+            "clamping 1h start %s → %s (Yahoo %sd calendar wall)",
+            start.date(),
+            floor.date(),
+            YFINANCE_1H_MAX_CALENDAR_DAYS,
+        )
+        return floor
+    return start
+
+
+def _cache_key(
+    tickers: list[str],
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    label: str,
+    *,
+    interval: str = "1d",
+) -> str:
+    payload = (
+        f"{label}|{interval}|{start.date()}|{end.date()}|{','.join(sorted(tickers))}"
+    )
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
@@ -204,16 +267,26 @@ def _download_ohlcv(
     cache_dir: str | None,
     cache_label: str,
     isAsian: bool = False,
+    interval: str = "1d",
 ) -> pd.DataFrame:
-    """Batch-download daily OHLCV for tickers in [start, end]."""
+    """Batch-download OHLCV for tickers in [start, end] at ``interval`` (``1d`` or ``1h``)."""
+    if interval not in VALID_OHLCV_INTERVALS:
+        raise ValueError(
+            f"interval must be one of {sorted(VALID_OHLCV_INTERVALS)}, got {interval!r}"
+        )
+    if interval == "1h":
+        start = _clamp_yfinance_1h_start(start, end)
     if not tickers:
         return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
 
     if cache_dir is not None:
-        key = _cache_key(tickers, start, end, cache_label)
+        key = _cache_key(tickers, start, end, cache_label, interval=interval)
         cached = _read_cache(cache_dir, key)
         if cached is not None:
             cached.columns.name = None
+            if interval == "1h" and not cached.empty:
+                cached = cached.copy()
+                cached["date"] = ohlcv_dates_to_naive_utc(cached["date"])
             return cached
 
     yahoo_tickers, yahoo_to_canonical = _build_yahoo_ticker_maps(
@@ -234,7 +307,7 @@ def _download_ohlcv(
                     chunk,
                     start=start.date(),
                     end=end_exclusive.date(),
-                    interval="1d",
+                    interval=interval,
                     auto_adjust=True,
                     group_by="ticker",
                     threads=True,
@@ -271,7 +344,13 @@ def _download_ohlcv(
         result = pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
     else:
         result = pd.concat(frames, ignore_index=True)
-        result["date"] = pd.to_datetime(result["date"]).dt.normalize()
+        # Date clock: 1h → naive UTC here (Yahoo tz is per-exchange). 1d →
+        # naive calendar midnight; do not UTC-convert daily bars.
+        if interval == "1h":
+            result["date"] = ohlcv_dates_to_naive_utc(result["date"])
+        else:
+            result["date"] = pd.to_datetime(result["date"])
+            result["date"] = result["date"].dt.normalize()
         result.columns.name = None
         ohlcv = list(OHLCV_COLUMNS)
         result = result.loc[~result[ohlcv].isna().all(axis=1)].copy()
@@ -399,11 +478,20 @@ def fetch_ohlcv(
     *,
     cache_dir: str | None = DEFAULT_CACHE_DIR,
     isAsian: bool = False,
+    interval: str = "1d",
 ) -> pd.DataFrame:
     """
-    Return long-format daily OHLCV for a single ticker over ``[start_date, end_date]``.
+    Return long-format OHLCV for a single ticker over ``[start_date, end_date]``.
 
     Columns: date, ticker, open, high, low, close, volume
+
+    ``interval`` is ``1d`` (default) or ``1h``. Hourly timestamps are **not**
+    normalized to midnight; they are converted to **naive UTC** in
+    ``_download_ohlcv`` via ``ohlcv_dates_to_naive_utc`` (Yahoo 1h tz is
+    exchange-local). Daily bars stay naive calendar dates. This sleeve does
+    not fetch 4-hour bars.
+    For ``1h``, starts older than Yahoo's 730 calendar-day wall are clamped
+    via ``yfinance_1h_min_start`` (vendor rejects; it does not truncate).
 
     Set ``isAsian=True`` for Yahoo exchange-suffixed names (``.HK``, ``.T``, …)
     so the suffix dot is not treated as a US share-class separator.
@@ -425,6 +513,7 @@ def fetch_ohlcv(
         cache_dir=cache_dir,
         cache_label=f"single_{symbol}",
         isAsian=isAsian,
+        interval=interval,
     )
 
     if panel.empty:
