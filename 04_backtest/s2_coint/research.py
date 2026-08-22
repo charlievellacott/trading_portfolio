@@ -46,26 +46,52 @@ ARTIFACTS_DIR = os.path.join(repo_root(_PKG_DIR), "04_backtest", "s2_coint", "ar
 DEFAULT_STAR_STACK = os.path.join(ARTIFACTS_DIR, "s2_star_stack.json")
 
 
-def lookbacks_for_bar(bar: str) -> dict[str, int]:
-    """Map day-unit lookbacks to bar counts. 1H uses sessions, not raw hours."""
+def lookbacks_for_bar(
+    bar: str,
+    *,
+    ols_days: int | None = None,
+    z_days: int | None = None,
+    adf_days: int | None = None,
+    hl_days: int | None = None,
+    sigma_days: int | None = None,
+) -> dict[str, int]:
+    """Map day-unit lookbacks to bar counts. 1H uses sessions, not raw hours.
+
+    Optional ``*_days`` overrides honor frozen star-stack day units
+    (``OLS_WINDOW_STAR``, ``Z_WINDOW_STAR``, ``ADF_WINDOW_STAR``).
+    """
+    ols = int(DAY_OLS_WINDOW if ols_days is None else ols_days)
+    z = int(DAY_Z_WINDOW if z_days is None else z_days)
+    adf = int(DAY_OLS_WINDOW if adf_days is None else adf_days)
+    hl = int(DAY_HL_WINDOW if hl_days is None else hl_days)
+    sigma = int(DAY_SIGMA_WINDOW if sigma_days is None else sigma_days)
     if bar == "1h":
         m = BARS_PER_SESSION_1H
         return {
-            "ols_window": DAY_OLS_WINDOW * m,
-            "z_window": DAY_Z_WINDOW * m,
-            "hl_window": DAY_HL_WINDOW * m,
-            "sigma_window": DAY_SIGMA_WINDOW * m,
+            "ols_window": ols * m,
+            "z_window": z * m,
+            "adf_window": adf * m,
+            "hl_window": hl * m,
+            "sigma_window": sigma * m,
             "kalman_burn_in": KALMAN_BURN_IN_DAYS * m,
         }
     if bar != "1d":
         raise ValueError(f"bar must be '1d' or '1h' (no 4h), got {bar!r}")
     return {
-        "ols_window": DAY_OLS_WINDOW,
-        "z_window": DAY_Z_WINDOW,
-        "hl_window": DAY_HL_WINDOW,
-        "sigma_window": DAY_SIGMA_WINDOW,
+        "ols_window": ols,
+        "z_window": z,
+        "adf_window": adf,
+        "hl_window": hl,
+        "sigma_window": sigma,
         "kalman_burn_in": KALMAN_BURN_IN_DAYS,
     }
+
+
+def _day_star(stack: dict, key: str, default: int) -> int:
+    raw = stack.get(key)
+    if raw in (None, "None", ""):
+        return int(default)
+    return int(raw)
 
 
 def half_life_to_sessions(hl, *, bar: str):
@@ -234,7 +260,12 @@ def config_from_stack(stack: dict, **overrides) -> S2SimConfig:
     """Build a sim config from frozen STARs; unset knobs keep H-001 defaults."""
     bar = overrides.pop("bar", None) or stack.get("BAR_STAR") or "1d"
     hl_min, hl_max = _hl_gate(stack.get("HL_GATE_STAR"))
-    lb = lookbacks_for_bar(str(bar))
+    lb = lookbacks_for_bar(
+        str(bar),
+        ols_days=_day_star(stack, "OLS_WINDOW_STAR", DAY_OLS_WINDOW),
+        z_days=_day_star(stack, "Z_WINDOW_STAR", DAY_Z_WINDOW),
+        adf_days=_day_star(stack, "ADF_WINDOW_STAR", DAY_OLS_WINDOW),
+    )
     kwargs: dict = {
         "hedge": stack.get("HEDGE_STAR") or "ols",
         "bar": bar,
@@ -243,6 +274,7 @@ def config_from_stack(stack: dict, **overrides) -> S2SimConfig:
         "ols_window": lb["ols_window"],
         "z_window": lb["z_window"],
         "hl_window": lb["hl_window"],
+        "adf_window": lb["adf_window"],
         "sigma_window": lb["sigma_window"],
         "break_mode": stack.get("BREAK_STAR") or "off",
         "trend_mode": stack.get("TREND_STAR") or "off",
@@ -277,10 +309,11 @@ def overlay_kalman_hedge(
     burn_in: int = 30,
     z_window: int = 60,
     hl_window: int = 252,
+    adf_window: int = 252,
     delta: float = 1e-4,
     obs_var: float = 1e-3,
 ) -> pd.DataFrame:
-    """Replace OLS α/β/spread/z/HL with Kalman prior-state hedge (H-003)."""
+    """Replace OLS α/β/spread/z/HL with Kalman prior-state hedge (H-004)."""
     from data.processing.s2_coint_store import (
         compute_coint_metrics,
         compute_half_life,
@@ -308,7 +341,7 @@ def overlay_kalman_hedge(
         g["half_life"] = compute_half_life(hedge["spread"], window=hl_window).to_numpy(
             dtype=float
         )
-        metrics = compute_coint_metrics(hedge["spread"])
+        metrics = compute_coint_metrics(hedge["spread"], adf_window=adf_window)
         for col in metrics.columns:
             g[col] = metrics[col].to_numpy(dtype=float)
         parts.append(g)
@@ -321,8 +354,9 @@ def overlay_ols_hedge(
     ols_window: int,
     z_window: int = 60,
     hl_window: int = 252,
+    adf_window: int = 252,
 ) -> pd.DataFrame:
-    """Replace panel α/β/spread/z/HL with rolling OLS hedge (H-002 session window)."""
+    """Replace panel α/β/spread/z/HL/ADF metrics with rolling OLS hedge."""
     from data.processing.s2_coint_store import (
         compute_coint_metrics,
         compute_half_life,
@@ -346,7 +380,7 @@ def overlay_ols_hedge(
         g["half_life"] = compute_half_life(hedge["spread"], window=hl_window).to_numpy(
             dtype=float
         )
-        metrics = compute_coint_metrics(hedge["spread"])
+        metrics = compute_coint_metrics(hedge["spread"], adf_window=adf_window)
         for col in metrics.columns:
             g[col] = metrics[col].to_numpy(dtype=float)
         parts.append(g)

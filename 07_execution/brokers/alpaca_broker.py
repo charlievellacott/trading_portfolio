@@ -5,7 +5,12 @@ from datetime import datetime
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, OrderStatus, QueryOrderStatus, TimeInForce
-from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest, StopOrderRequest
+from alpaca.trading.requests import (
+    GetOrdersRequest,
+    GetPortfolioHistoryRequest,
+    MarketOrderRequest,
+    StopOrderRequest,
+)
 
 from data.repo_paths import repo_root
 
@@ -85,6 +90,51 @@ class AlpacaBroker:
                     "current_price": float(
                         getattr(pos, "current_price", float("nan"))
                     ),
+                }
+            )
+        return rows
+
+    def get_portfolio_history(self, period="1M", timeframe="1D"):
+        """
+        Daily (or finer) account equity history from Alpaca.
+
+        Returns list of dicts: ``date, equity, profit_loss, profit_loss_pct``.
+        ``date`` is the America/New_York session calendar day (naive Timestamp-compatible).
+        Rows with non-positive equity are dropped (pre-funding zeros).
+        """
+        import pandas as pd
+
+        hist = self.client.get_portfolio_history(
+            GetPortfolioHistoryRequest(period=str(period), timeframe=str(timeframe))
+        )
+        timestamps = list(getattr(hist, "timestamp", None) or [])
+        equities = list(getattr(hist, "equity", None) or [])
+        pls = list(getattr(hist, "profit_loss", None) or [])
+        pl_pcts = list(getattr(hist, "profit_loss_pct", None) or [])
+        rows = []
+        n = min(len(timestamps), len(equities))
+        for i in range(n):
+            eq = float(equities[i] or 0.0)
+            if not (eq > 0):
+                continue
+            day = (
+                pd.Timestamp(int(timestamps[i]), unit="s", tz="UTC")
+                .tz_convert("America/New_York")
+                .normalize()
+                .tz_localize(None)
+            )
+            pl = float(pls[i]) if i < len(pls) and pls[i] is not None else None
+            pl_pct = (
+                float(pl_pcts[i])
+                if i < len(pl_pcts) and pl_pcts[i] is not None
+                else None
+            )
+            rows.append(
+                {
+                    "date": day,
+                    "equity": eq,
+                    "profit_loss": pl,
+                    "profit_loss_pct": pl_pct,
                 }
             )
         return rows

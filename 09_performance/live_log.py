@@ -884,18 +884,78 @@ def snapshot_mark_to_market(
     }
 
 
+def backfill_equity_from_broker(
+    broker: Any,
+    *,
+    period: str = "1M",
+    timeframe: str = "1D",
+    cache_dir: str | None = None,
+) -> pd.DataFrame:
+    """
+    Upsert portfolio (+ single-sleeve mirror) equity from broker daily history.
+
+    Intended to repair sparse ``equity_daily`` ledgers when only Monday runner
+    snapshots were written. Requires ``broker.get_portfolio_history``.
+    When multiple sleeves are configured, only the portfolio level is filled;
+    sleeve NAVs still need daily ``snapshot_mark_to_market``.
+    """
+    if not hasattr(broker, "get_portfolio_history"):
+        raise TypeError("broker must implement get_portfolio_history")
+
+    history = list(broker.get_portfolio_history(period=period, timeframe=timeframe) or [])
+    if not history:
+        return load_equity_daily(cache_dir)
+
+    meta = get_meta(cache_dir)
+    weights = _normalize_weights(meta.get("sleeve_weights") or DEFAULT_SLEEVE_WEIGHTS)
+    single_sleeve = len(weights) == 1
+    sole_sid = next(iter(weights)) if single_sleeve else None
+
+    rows: list[dict[str, Any]] = []
+    for item in history:
+        day = _as_date(item["date"])
+        equity = float(item["equity"])
+        rows.append(
+            {
+                "date": day,
+                "level": "portfolio",
+                "strategy_id": "",
+                "equity": equity,
+                "allocated_equity": equity,
+                "cash": pd.NA,
+            }
+        )
+        if single_sleeve and sole_sid is not None:
+            rows.append(
+                {
+                    "date": day,
+                    "level": "strategy",
+                    "strategy_id": sole_sid,
+                    "equity": equity,
+                    "allocated_equity": equity * float(weights[sole_sid]),
+                    "cash": pd.NA,
+                }
+            )
+
+    return log_equity_daily(rows, cache_dir=cache_dir)
+
+
 def run_eod_snapshot(
     broker: Any,
     *,
     strategy_ids: list[str] | None = None,
     paper: bool = True,
     cache_dir: str | None = None,
+    backfill: bool = False,
+    backfill_period: str = "1M",
 ) -> dict[str, Any]:
     """
     Trading-day EOD entrypoint: sync stop fills, then mark portfolio + sleeves.
 
     ``paper`` is unused when an explicit ``broker`` is passed; kept for script
     callers that construct the broker themselves.
+    When ``backfill`` is True, upsert daily equity from broker portfolio history
+    before the live mark (repairs Monday-only ledger gaps).
     """
     _ = paper
     meta = get_meta(cache_dir)
@@ -907,6 +967,15 @@ def run_eod_snapshot(
         after = len(load_fills(cache_dir))
         sync_summary[sid] = after - before
 
+    backfill_rows = 0
+    if backfill:
+        before_eq = len(load_equity_daily(cache_dir))
+        backfill_equity_from_broker(
+            broker, period=backfill_period, cache_dir=cache_dir
+        )
+        backfill_rows = len(load_equity_daily(cache_dir)) - before_eq
+
     snap = snapshot_mark_to_market(broker, cache_dir=cache_dir)
     snap["stop_fills_added"] = sync_summary
+    snap["backfill_rows_delta"] = backfill_rows
     return snap

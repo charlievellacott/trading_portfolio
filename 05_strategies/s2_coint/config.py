@@ -36,6 +36,7 @@ class S2SimConfig:
     ols_window: int = 252
     z_window: int = 60
     hl_window: int = 252
+    adf_window: int = 252
     break_mode: str = "off"
     trend_mode: str = "off"
     hl_gate_min: float | None = None

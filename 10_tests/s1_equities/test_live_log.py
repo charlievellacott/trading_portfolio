@@ -9,6 +9,7 @@ import pandas as pd
 
 from performance.live_log import (
     STRATEGY_S1_EQUITIES,
+    backfill_equity_from_broker,
     get_meta,
     log_equity_daily,
     log_fills,
@@ -35,10 +36,17 @@ class _FakeAccount:
 
 
 class _FakeBroker:
-    def __init__(self, equity: float, positions=None, filled_orders=None) -> None:
+    def __init__(
+        self,
+        equity: float,
+        positions=None,
+        filled_orders=None,
+        portfolio_history=None,
+    ) -> None:
         self._equity = equity
         self._positions = list(positions or [])
         self._filled_orders = list(filled_orders or [])
+        self._portfolio_history = list(portfolio_history or [])
 
     def get_account(self):
         return _FakeAccount(self._equity, cash=self._equity * 0.1)
@@ -48,6 +56,10 @@ class _FakeBroker:
 
     def get_positions_normalized(self):
         return list(self._positions)
+
+    def get_portfolio_history(self, period="1M", timeframe="1D"):
+        _ = period, timeframe
+        return list(self._portfolio_history)
 
     def get_filled_orders(self, after=None, until=None):
         rows = list(self._filled_orders)
@@ -314,3 +326,23 @@ def test_cache_dir_isolation_does_not_touch_default() -> None:
         meta = get_meta(cache_dir=path)
         assert meta["sleeve_weights"][STRATEGY_S1_EQUITIES] == 1.0
         assert os.path.isfile(os.path.join(path, "meta.json"))
+
+
+def test_backfill_equity_from_broker_fills_daily_curve() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        broker = _FakeBroker(
+            equity=99_500.0,
+            portfolio_history=[
+                {"date": "2024-01-08", "equity": 100_000.0},
+                {"date": "2024-01-09", "equity": 99_800.0},
+                {"date": "2024-01-10", "equity": 99_500.0},
+            ],
+        )
+        backfill_equity_from_broker(broker, cache_dir=tmp)
+        port = portfolio_equity_series(cache_dir=tmp)
+        assert len(port) == 3
+        assert float(port.iloc[0]) == 100_000.0
+        assert float(port.iloc[-1]) == 99_500.0
+        sleeve = strategy_equity_series(STRATEGY_S1_EQUITIES, cache_dir=tmp)
+        assert len(sleeve) == 3
+        assert float(sleeve.iloc[-1]) == 99_500.0

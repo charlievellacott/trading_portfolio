@@ -7,5 +7,6 @@
   "BAR_STAR": "1d",
   "RESEARCH_IS_END_STAR": "2021-12-31",
   "HEDGE_STAR": "ols",
-  "KALMAN_DELTA_STAR": null
+  "KALMAN_DELTA_STAR": null,
+  "BREAK_STAR": "flat_05"
 }
