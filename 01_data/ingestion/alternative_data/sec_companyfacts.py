@@ -342,12 +342,17 @@ def _eps_ttm_from_net_income(
     df = df.dropna(subset=["date", "net_income"])
     df = df.sort_values(["date", "end"]).drop_duplicates("date", keep="last")
 
+    left = df.sort_values("date").copy()
+    right = shares.sort_values("date").copy()
+    left["date"] = pd.to_datetime(left["date"]).astype("datetime64[ns]")
+    right["date"] = pd.to_datetime(right["date"]).astype("datetime64[ns]")
     merged = pd.merge_asof(
-        df.sort_values("date"),
-        shares.sort_values("date"),
+        left,
+        right,
         on="date",
         direction="backward",
     )
+    
     merged = merged.dropna(subset=["shares_outstanding"])
     merged = merged[merged["shares_outstanding"] > 0].copy()
     if merged.empty:
@@ -633,6 +638,8 @@ def _merge_asof_by_ticker(
             for col in fund_cols:
                 if col not in right.columns:
                     right[col] = float("nan")
+            left["date"] = pd.to_datetime(left["date"]).astype("datetime64[ns]")
+            right["date"] = pd.to_datetime(right["date"]).astype("datetime64[ns]")
             merged = pd.merge_asof(
                 left,
                 right,
