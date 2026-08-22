@@ -6,6 +6,7 @@ alpaca-py>=0.30.0
 pytest>=8.0.0
 alphalens-reloaded>=0.4.3
 matplotlib>=3.7.0
+plotly>=5.18.0
 vectorbt>=0.26.0
 finnhub-python>=2.4.0
 TA-Lib>=0.4.28
