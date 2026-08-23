@@ -257,6 +257,7 @@ def screen_pair_cointegration(
     ols_window: int = 252,
     min_is_bars: int | None = None,
     pvalue_threshold: float = COINT_PVALUE,
+    lookback_bars: int | None = None,
 ) -> pd.DataFrame:
     """Engle-Granger screen on dates through calendar research-IS end ``is_end``.
 
@@ -267,8 +268,17 @@ def screen_pair_cointegration(
     slice only. ``pair_id`` / ``ticker_y`` / ``ticker_x`` follow EG direction
     (``y|x``). Discovery half-life is a scalar on the IS rolling-OLS spread
     (not used for panel z).
+
+    ``lookback_bars`` restricts the screen to the last N mutual bars ending at
+    ``is_end`` (trailing window) instead of all history through ``is_end``. Used by the
+    rotating book, which re-screens each quarter on ``L`` trailing bars; the frozen book
+    leaves it None and screens the full IS. Note the default ``min_is_bars`` of
+    ``min(ols_window, 252)`` equals a 252-bar ``L``, so a rotating candidate must have the
+    full trailing window present to be eligible.
     """
     is_end_ts = pd.Timestamp(is_end)
+    if lookback_bars is not None and int(lookback_bars) < 2:
+        raise ValueError("lookback_bars must be >= 2")
     floor = min(ols_window, 252) if min_is_bars is None else int(min_is_bars)
     if floor < 2:
         raise ValueError("min_is_bars must be >= 2")
@@ -298,6 +308,9 @@ def screen_pair_cointegration(
         mask = pa.index <= is_end_ts
         y_is = pa.loc[mask]
         x_is = pb.loc[mask]
+        if lookback_bars is not None:
+            y_is = y_is.iloc[-int(lookback_bars) :]
+            x_is = x_is.iloc[-int(lookback_bars) :]
         n_is = int(len(y_is))
         if n_is < floor:
             rows.append(_ineligible_row(ticker_a, ticker_b, n_is=n_is))

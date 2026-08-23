@@ -620,7 +620,9 @@ def check_fill_timing(
 
 
 def filter_pairs(panel: pd.DataFrame, pair_ids: Sequence[str]) -> pd.DataFrame:
-    keep = set(pair_ids)
+    """Deprecated alias; canonical implementation lives in ``backtest.s2_coint.research``."""
+    from backtest.s2_coint.research import filter_pairs as _filter_pairs
+
     if panel.empty:
         return panel.copy()
-    return panel.loc[panel["pair_id"].isin(keep)].copy()
+    return _filter_pairs(panel, pair_ids)

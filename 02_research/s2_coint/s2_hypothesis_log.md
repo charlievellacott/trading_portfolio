@@ -81,6 +81,8 @@ Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materializ
 | **Test to complete**   | Validation protocol: WF fold-val boxplots of Sharpe, max DD, corr to S1; freeze universe on research IS; one sealed OOS tearsheet. |
 | **Notes**              | Lock chosen universe before later hyps; do not re-pick after downstream bake-offs. H-001 notebook is `02_research/s2_coint/notebooks/hypothesis_tests/H-001_universes.ipynb` and runs (i) sector-only screening, (ii) manual keep gate, and (iii) research-IS trad-z diagnostics. Baseline constants (`ENTRY_Z=2`, `EXIT_Z=0`, beta-sized legs) and market costs (OANDA FX, Kraken spot, IBKR HK, IBKR JP) live in `strategies.s2_coint`. Notebook scores **research IS only** — per-pair trade count, median hold, cost bps/year, Sharpe / max DD, and rolling ADF. Do not use sealed OOS to pick the universe. Asia C IS postmortem → `02_research/s2_coint/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb`. |
 
+**Universe C shelved (2026-08).** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table lives in `02_research/s2_coint/universe.md`; archived Asia artifacts in `04_backtest/s2_coint/artifacts/asia_c/`. A / B / C stay documented as learning points and are not re-selected.
+
 
 ---
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -25,6 +26,20 @@ from strategies.s2_coint.overlap import (
 from strategies.s2_coint.sizing import atr_size_multiplier, pair_scale_from_score
 
 _EMPTY_TRADES = pd.DataFrame(columns=list(_TRADE_COLS))
+
+
+def _entry_mask(
+    mask: Sequence[bool] | np.ndarray | None,
+    n: int,
+    name: str,
+) -> np.ndarray:
+    """Normalize an optional entry mask to a length-n bool array (None => all allowed)."""
+    if mask is None:
+        return np.ones(n, dtype=bool)
+    arr = np.asarray(mask, dtype=bool)
+    if arr.shape != (n,):
+        raise ValueError(f"{name} must have length {n}, got {arr.shape}")
+    return arr
 
 
 @dataclass
@@ -135,8 +150,23 @@ def simulate_pair(
     mean_abs_score: float = 1.0,
     n_pairs: int = 1,
     leverage: float = 1.0,
+    long_entry_allowed: Sequence[bool] | np.ndarray | None = None,
+    short_entry_allowed: Sequence[bool] | np.ndarray | None = None,
 ) -> PairSimResult:
-    """One pair: decide at close t, fill both legs at open t+1."""
+    """One pair: decide at close t, fill both legs at open t+1.
+
+    ``long_entry_allowed`` / ``short_entry_allowed`` are optional per-row boolean masks
+    (aligned to ``df`` after sorting by date) gating **new entries only**; exits are never
+    gated, so an open position always runs to its normal z-exit. Both default to None
+    (= allowed), leaving behaviour identical to a call without them.
+
+    Two callers use this:
+
+    - H-004 rotation passes the same mask to both directions, so a demoted pair (or the old
+      side of an orientation flip) stops opening but still exits.
+    - ``short_bans.pair_entry_masks`` passes direction-specific masks, because a ban on one
+      leg only blocks the spread direction that needs to short it.
+    """
     cfg = cfg or S2SimConfig()
     empty = PairSimResult(
         pair_id="",
@@ -194,6 +224,9 @@ def simulate_pair(
     sh = d["spread_high"].to_numpy(dtype=float) if "spread_high" in d.columns else np.full(len(d), np.nan)
     sl = d["spread_low"].to_numpy(dtype=float) if "spread_low" in d.columns else np.full(len(d), np.nan)
     so = d["spread_open"].to_numpy(dtype=float) if "spread_open" in d.columns else np.full(len(d), np.nan)
+
+    allow_long = _entry_mask(long_entry_allowed, len(d), "long_entry_allowed")
+    allow_short = _entry_mask(short_entry_allowed, len(d), "short_entry_allowed")
 
     ty = str(d["ticker_y"].iloc[0])
     tx = str(d["ticker_x"].iloc[0])
@@ -259,8 +292,8 @@ def simulate_pair(
             open_entry = None
             pos = 0
 
-        want_long = np.isfinite(z_t) and np.isfinite(kin) and z_t <= -kin
-        want_short = np.isfinite(z_t) and np.isfinite(kin) and z_t >= kin
+        want_long = np.isfinite(z_t) and np.isfinite(kin) and z_t <= -kin and allow_long[i]
+        want_short = np.isfinite(z_t) and np.isfinite(kin) and z_t >= kin and allow_short[i]
         side = 1 if want_long else (-1 if want_short else 0)
         do_entry = (
             pos == 0

@@ -129,13 +129,13 @@ def _write_cache(cache_dir: str, key: str, df: pd.DataFrame) -> None:
     df.to_parquet(path, index=False)
 
 
-# Yahoo exchange suffixes that must keep their dot (Asia / international listings).
-_ASIAN_EXCHANGE_SUFFIXES = frozenset(
+# Yahoo exchange suffixes that must keep their dot (international listings). US share-class
+# lines such as BRK.B are NOT here: those take a hyphen on Yahoo (BRK-B).
+_EXCHANGE_SUFFIXES = frozenset(
     {
+        # Asia-Pacific
         ".HK",
         ".T",
-        ".L",
-        ".TO",
         ".AX",
         ".NS",
         ".BO",
@@ -148,29 +148,52 @@ _ASIAN_EXCHANGE_SUFFIXES = frozenset(
         ".JK",
         ".KL",
         ".BK",
+        # Europe (S2 universe F: Madrid, Milan, Amsterdam, Xetra, Paris)
+        ".L",
+        ".MC",
+        ".MI",
+        ".AS",
+        ".DE",
+        ".PA",
+        ".BR",
+        ".LS",
+        ".SW",
+        ".VI",
+        # North America ex-US
+        ".TO",
     }
 )
 
+# Back-compat alias: the set is no longer Asia-only.
+_ASIAN_EXCHANGE_SUFFIXES = _EXCHANGE_SUFFIXES
+
+
+def _has_exchange_suffix(symbol: str) -> bool:
+    upper = symbol.upper()
+    return any(upper.endswith(suf) for suf in _EXCHANGE_SUFFIXES)
+
 
 def _has_asian_exchange_suffix(symbol: str) -> bool:
-    upper = symbol.upper()
-    return any(upper.endswith(suf) for suf in _ASIAN_EXCHANGE_SUFFIXES)
+    """Deprecated alias for ``_has_exchange_suffix`` (kept for existing callers)."""
+    return _has_exchange_suffix(symbol)
 
 
 def _canonical_to_yahoo(symbol: str, *, isAsian: bool = False) -> str:
     """Map project ticker form to Yahoo Finance symbol (e.g. ``BRK.B`` → ``BRK-B``).
 
-    When ``isAsian=True``, known exchange suffixes (``.HK``, ``.T``, …) are kept
-    so ``0700.HK`` / ``8306.T`` are not mangled into ``0700-HK`` / ``8306-T``.
+    When ``isAsian=True``, known exchange suffixes are kept so ``0700.HK`` / ``8306.T`` /
+    ``SAN.MC`` are not mangled into ``0700-HK`` / ``8306-T`` / ``SAN-MC``. The kwarg name
+    predates European coverage; it means "exchange-suffixed names" (see
+    ``_EXCHANGE_SUFFIXES``), not Asia specifically.
     """
-    if isAsian and _has_asian_exchange_suffix(symbol):
+    if isAsian and _has_exchange_suffix(symbol):
         return symbol
     return symbol.replace(".", "-")
 
 
 def _yahoo_to_canonical(symbol: str, *, isAsian: bool = False) -> str:
     """Map Yahoo Finance symbol back to project ticker form (e.g. ``BRK-B`` → ``BRK.B``)."""
-    if isAsian and _has_asian_exchange_suffix(symbol):
+    if isAsian and _has_exchange_suffix(symbol):
         return symbol
     return symbol.replace("-", ".")
 
@@ -493,8 +516,10 @@ def fetch_ohlcv(
     For ``1h``, starts older than Yahoo's 730 calendar-day wall are clamped
     via ``yfinance_1h_min_start`` (vendor rejects; it does not truncate).
 
-    Set ``isAsian=True`` for Yahoo exchange-suffixed names (``.HK``, ``.T``, …)
-    so the suffix dot is not treated as a US share-class separator.
+    Set ``isAsian=True`` for Yahoo exchange-suffixed names (``.HK``, ``.T``, ``.MC``,
+    ``.MI``, ``.AS``, ``.DE``, ``.PA``, …) so the suffix dot is not treated as a US
+    share-class separator. Leave it False for US names, including share classes such as
+    ``BF.B``, which Yahoo expects as ``BF-B``.
     """
     symbol = ticker.strip().upper()
     if not symbol:

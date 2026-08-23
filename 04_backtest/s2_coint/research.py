@@ -9,6 +9,10 @@ import pandas as pd
 
 from backtest.s2_coint.report import load_star_stack, require_star
 from data.ingestion.equity_fetcher import ohlcv_dates_to_naive_utc
+from data.processing.s2_universe import (
+    RESEARCH_IS_END_BY_UNIVERSE,
+    SHELVED_UNIVERSES,
+)
 from strategies.s2_coint.config import S2SimConfig
 from strategies.s2_coint.metrics import load_s1_period_returns
 
@@ -22,12 +26,16 @@ DAY_HL_WINDOW = 252
 DAY_SIGMA_WINDOW = 60
 KALMAN_BURN_IN_DAYS = 30
 
+# Universe C locked book. Kept for the Asia postmortem only - C is shelved.
 FROZEN_C_PAIRS: tuple[str, ...] = (
     "1398.HK|0939.HK",
     "1288.HK|3328.HK",
     "8306.T|8316.T",
 )
-RESEARCH_IS_END_C = "2021-12-31"
+RESEARCH_IS_END_C = RESEARCH_IS_END_BY_UNIVERSE["C"]
+
+# Universes shelved / failed at H-001; never selected as UNIVERSE_STAR.
+SHELVED = SHELVED_UNIVERSES
 
 
 def repo_root(start: str | None = None) -> str:
@@ -166,13 +174,81 @@ def panel_paths(bar: str, *, universe: str = "C", root: str | None = None) -> tu
     return train, full
 
 
+def candidates_path(bar: str, *, universe: str, root: str | None = None) -> str:
+    """Per-candidate screen metrics at IS end (every candidate, not just the selected)."""
+    return os.path.join(s2_data_dir(root), f"s2_candidates_{universe}_{bar}.csv")
+
+
+def pairs_path(bar: str, *, universe: str, root: str | None = None) -> str:
+    """Ranked frozen book for a universe (written by H-001)."""
+    return os.path.join(s2_data_dir(root), f"s2_pairs_{universe}_{bar}.csv")
+
+
+def rebalance_path(bar: str, *, universe: str, root: str | None = None) -> str:
+    """Quarterly rotating selections (written when BOOK_SCOPE includes rotate)."""
+    return os.path.join(s2_data_dir(root), f"s2_rebalance_{universe}_{bar}.csv")
+
+
+def research_is_end_for(universe: str) -> str:
+    """Pre-registered research-IS end for a universe letter (D/E/F = 2021-12-31)."""
+    key = str(universe).strip().upper()
+    if key not in RESEARCH_IS_END_BY_UNIVERSE:
+        raise KeyError(f"no RESEARCH_IS_END registered for universe {universe!r}")
+    return RESEARCH_IS_END_BY_UNIVERSE[key]
+
+
+def frozen_pairs_for_universe(
+    universe: str,
+    bar: str = "1d",
+    *,
+    root: str | None = None,
+) -> list[str]:
+    """Ranked frozen book from ``s2_pairs_{universe}_{bar}.csv`` (best p-value first)."""
+    path = pairs_path(bar, universe=universe, root=root)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"missing {path}. Run H-001_universes.ipynb to write the ranked book."
+        )
+    df = pd.read_csv(path)
+    if "rank" in df.columns:
+        df = df.sort_values("rank")
+    elif "pvalue" in df.columns:
+        df = df.sort_values("pvalue")
+    return [str(p) for p in df["pair_id"]]
+
+
+def load_universe_panels(
+    label: str,
+    bar: str,
+    pair_ids: Sequence[str],
+    *,
+    root: str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load train (research IS) and full census panels for any universe; filter to pairs."""
+    train_path, full_path = panel_paths(bar, universe=label, root=root)
+    if not os.path.isfile(train_path):
+        raise FileNotFoundError(
+            f"missing {train_path}. For 1D run s2_pair_panel.ipynb; "
+            "for 1H run H-002 (no 4H panel is built)."
+        )
+    train = filter_pairs(pd.read_parquet(train_path), pair_ids)
+    full = (
+        filter_pairs(pd.read_parquet(full_path), pair_ids)
+        if os.path.isfile(full_path)
+        else train.copy()
+    )
+    train["date"] = pd.to_datetime(train["date"])
+    full["date"] = pd.to_datetime(full["date"])
+    return train, full
+
+
 def load_universe_c_panels(
     bar: str,
     pair_ids: Sequence[str],
     *,
     root: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load train (research IS) and full census panels; filter to locked pairs."""
+    """Universe C panels (Asia postmortem). Thin alias for ``load_universe_panels("C", ...)``."""
     train_path, full_path = panel_paths(bar, root=root)
     if not os.path.isfile(train_path):
         raise FileNotFoundError(
@@ -220,11 +296,21 @@ def split_is_oos(
 
 
 def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
-    """1D uses frozen RESEARCH_IS_END; 1H uses 70% of the available panel dates."""
+    """1D uses frozen RESEARCH_IS_END; 1H uses 70% of the available panel dates.
+
+    On 1D the date comes from ``RESEARCH_IS_END_STAR`` when present, else the registered end
+    for ``UNIVERSE_STAR`` (D/E/F = 2021-12-31), else universe C's for the Asia postmortem.
+    """
     bar = stack.get("BAR_STAR")
     require_star("BAR_STAR", bar)
     if bar == "1d":
-        return pd.Timestamp(stack.get("RESEARCH_IS_END_STAR") or RESEARCH_IS_END_C)
+        explicit = stack.get("RESEARCH_IS_END_STAR")
+        if explicit:
+            return pd.Timestamp(explicit)
+        universe = stack.get("UNIVERSE_STAR")
+        if universe:
+            return pd.Timestamp(research_is_end_for(str(universe)))
+        return pd.Timestamp(RESEARCH_IS_END_C)
     dates = pd.DatetimeIndex(pd.to_datetime(panel["date"])).sort_values().unique()
     if len(dates) < 10:
         raise ValueError("1H panel too short for a 70/30 IS:OOS split")

@@ -26,8 +26,14 @@ from data.processing.s2_coint_store import (
     screen_pair_cointegration,
 )
 from data.processing.s2_universe import (
+    iter_leaf_pools,
+    iter_pool_pairs,
     iter_same_venue_pairs,
-    load_s2_universes,
+    load_s2_pools,
+    pool_of_pair,
+    pool_path_for_pair,
+    pool_tickers,
+    research_is_end,
     ticker_venue_key,
 )
 
@@ -51,8 +57,14 @@ __all__ = [
     "compute_kalman_hedge_spread",
     "compute_spread_zscore",
     "compute_static_hedge_spread",
+    "iter_leaf_pools",
+    "iter_pool_pairs",
     "iter_same_venue_pairs",
-    "load_s2_universes",
+    "load_s2_pools",
+    "pool_of_pair",
+    "pool_path_for_pair",
+    "pool_tickers",
+    "research_is_end",
     "run_cointegration_test",
     "screen_pair_cointegration",
     "ticker_venue_key",

@@ -1,39 +1,40 @@
-# A: (4-6 assets then keep 2-4 pairs for deployment) Forex
-- AUDUSD, NZDUSD, EURUSD, GBPUSD, USDCHF, USDJPY
+# S2 Universes
 
-# B: (3-5 assets then keep 2-3 pairs) Crypto
-- BTC, ETH, SOL, BNB
+Pool definitions live in `01_data/processing/s2_universe_pools.py` (`S2_POOLS`). Pairs are formed
+**only within a leaf pool** via `iter_pool_pairs`; the nesting depth is arbitrary (universe →
+exchange → sector → tickers) and is walked recursively, so pools can be added or removed by editing
+that module alone.
 
-# C: (8-15 assets then 3-6 pairs max) (Asian) EM cash equities
+Pair-book construction (frozen at IS end vs quarterly rotating) is decided by **H-004** (`BOOK_STAR`).
+Rolling-ADF health gating is decided by **H-003** (`BREAK_STAR`). Discovery Engle-Granger stays out of
+the live trading loop in both cases.
 
-## C prior (H-001 first screen)
+A / B / C are kept below as documented learning points. They are **not** hidden and **not** re-selected.
 
-- Universe (12): 0700.HK, 9988.HK, 3690.HK, 1810.HK, 0939.HK, 1398.HK, 8306.T, 8316.T, 8035.T, 6857.T, 6146.T, 7735.T
+## Results
 
-| Yahoo ticker | Actual ticker | Short name     | Sector / what they do    |
-| ------------ | ------------- | -------------- | ------------------------ |
-| 0700.HK      | 0700          | Tencent        | Tech / social & games    |
-| 9988.HK      | 9988          | Alibaba        | Tech / e-commerce        |
-| 3690.HK      | 3690          | Meituan        | Tech / local services    |
-| 1810.HK      | 1810          | Xiaomi         | Tech / devices & IoT     |
-| 0939.HK      | 0939          | CCB            | Financial / China bank   |
-| 1398.HK      | 1398          | ICBC           | Financial / China bank   |
-| 8306.T       | 8306          | MUFG           | Financial / JP megabank  |
-| 8316.T       | 8316          | SMFG           | Financial / JP megabank  |
-| 8035.T       | 8035          | Tokyo Electron | Semi / wafer equipment   |
-| 6857.T       | 6857          | Advantest      | Semi / test equipment    |
-| 6146.T       | 6146          | Disco          | Semi / dicing tools      |
-| 7735.T       | 7735          | Screen         | Semi / process equipment |
+| Universe | Asset class | Venue | Outcome | Reason |
+|----------|-------------|-------|---------|--------|
+| A | FX majors | OANDA | Failed | 0 EG passers at IS end |
+| B | Crypto | Kraken | Failed | Best pair p=0.0501 and HL > `Z_WINDOW` (60) — untradable horizon |
+| C | Asia EM cash equities | IBKR HK / JP | **Shelved** | Gross Sharpe ≈ 0, net negative after 271–439 bps/yr costs; ADF health did not persist (see below) |
+| D | US share-class twins | Alpaca | Pending H-001 | — |
+| E | US REIT sub-sectors | Alpaca | Pending H-001 | — |
+| F | EUR large caps | IBKR EUR | Pending H-001 | — |
 
-- Sector-specific pair mappings (test **only** these; no HK↔JP, no cross-sector):
-  - Tech HK: 0700–9988, 0700–3690, 0700–1810, 9988–3690, 9988–1810, 3690–1810
-  - Financial HK banks: 0939–1398
-  - Financial JP banks: 8306–8316
-  - Semiconductor JP: 8035–6857, 8035–6146, 8035–7735, 6857–6146, 6857–7735, 6146–7735
+Research IS end: A `2020-12-31`, B `2022-12-31`, C `2021-12-31`, **D / E / F `2021-12-31`**.
 
-## C refined (active)
+---
 
-Tech/semis failed IS EG; expand the same-country twins that passed and add China oil SOEs as a disjoint sector cluster.
+# A: Forex (failed)
+
+- AUDUSD, NZDUSD, EURUSD, GBPUSD, USDCHF, USDJPY (6 names, 15 candidate pairs)
+
+# B: Crypto (failed)
+
+- BTC, ETH, SOL, BNB (4 names, 6 candidate pairs)
+
+# C: (Asian) EM cash equities — shelved
 
 - Universe (11): 0939.HK, 1398.HK, 3988.HK, 1288.HK, 3328.HK, 8306.T, 8316.T, 8411.T, 0857.HK, 0386.HK, 0883.HK
 
@@ -51,52 +52,110 @@ Tech/semis failed IS EG; expand the same-country twins that passed and add China
 | 0386.HK      | 0386          | Sinopec     | Energy / China oil SOE    |
 | 0883.HK      | 0883          | CNOOC       | Energy / China oil SOE    |
 
-- Sector-specific pair mappings (test **only** these; no HK↔JP, no bank↔oil):
-  - Financial HK banks: all pairs among 0939, 1398, 3988, 1288, 3328 (10)
-  - Financial JP banks: 8306–8316, 8306–8411, 8316–8411 (3)
-  - Energy HK oil SOEs: 0857–0386, 0857–0883, 0386–0883 (3)
-- Note: for production drop the number of **pairs** to 2-3 for most of the universes
-- Do not allow for live dynamic pair mining - once pairs have been found keep them.
+- Leaf pools (no HK↔JP, no bank↔oil): HK China banks (5 names, 10 pairs), JP megabanks (3 names, 3 pairs),
+  HK oil SOEs (3 names, 3 pairs). 16 candidate pairs total.
+- Locked book was `1398.HK|0939.HK`, `1288.HK|3328.HK`, `8306.T|8316.T`.
 
-# Dates for universes
-Universe 1 (forex):
-  AUDUSD=X      earliest=2006-06-01  recent_ok=True  ok=True
-  NZDUSD=X      earliest=2003-12-01  recent_ok=True  ok=True
-  EURUSD=X      earliest=2003-12-01  recent_ok=True  ok=True
-  GBPUSD=X      earliest=2003-12-01  recent_ok=True  ok=True
-  USDCHF=X      earliest=2003-10-01  recent_ok=True  ok=True
-  USDJPY=X      earliest=1996-10-01  recent_ok=True  ok=True
+## C outcome (shelved)
 
-Universe 2 (crypto):
-  BTC-USD       earliest=2014-09-01  recent_ok=True  ok=True
-  ETH-USD       earliest=2017-11-01  recent_ok=True  ok=True
-  SOL-USD       earliest=2020-04-01  recent_ok=True  ok=True
-  BNB-USD       earliest=2017-11-01  recent_ok=True  ok=True
+| Pair | RT/yr | Gross SR | Net SR | Cost bps/yr | RT cost | Median ADF p | % p<0.05 | β std |
+|------|-------|----------|--------|-------------|---------|--------------|----------|-------|
+| 1288.HK\|3328.HK | ~3.7 | +0.05 | −0.48 | 439 | 116 bps | 0.30 | 11% | 0.45 |
+| 1398.HK\|0939.HK | ~3.6 | +0.02 | −0.48 | 422 | 116 bps | 0.19 | 29% | 0.18 |
+| 8306.T\|8316.T | ~4.2 | +0.24 | −0.08 | 271 | 64 bps | 0.23 | 18% | 0.24 |
 
-Universe 3 (asia, C prior):
-  0700.HK       earliest=2004-06-01  recent_ok=True  ok=True
-  9988.HK       earliest=2019-11-01  recent_ok=True  ok=True
-  3690.HK       earliest=2018-09-01  recent_ok=True  ok=True
-  1810.HK       earliest=2018-07-01  recent_ok=True  ok=True
-  0939.HK       earliest=2005-10-01  recent_ok=True  ok=True
-  1398.HK       earliest=2006-10-01  recent_ok=True  ok=True
-  8306.T        earliest=2005-09-01  recent_ok=True  ok=True
-  8316.T        earliest=2000-01-01  recent_ok=True  ok=True
-  8035.T        earliest=2000-01-01  recent_ok=True  ok=True
-  6857.T        earliest=2000-01-01  recent_ok=True  ok=True
-  6146.T        earliest=2001-01-01  recent_ok=True  ok=True
-  7735.T        earliest=2001-01-01  recent_ok=True  ok=True
+- Not an opportunity problem: `|z|>2` on ~12% of days; ~35–42% of days in-trade.
+- Gross Sharpe ≈ 0 on 11–16 years IS → no edge to protect.
+- HK friction 116 bps/round-trip vs JP 64 bps → HK net penalty ~2x.
+- Spread rarely stationary (median ADF p 0.19–0.30); EG passed once at discovery, health did not persist.
+- Pairs not independent: HK bank pairs share one China-bank factor; ADF significance clusters in the same periods.
+- Timing contract verified clean (signal close `t` → fill open `t+1`); not an implementation bug.
+- Lesson: EG pass at discovery ≠ tradable MR; venue friction must be small vs expected move.
 
-Universe 3 (asia, C refined — fetch in H-001 prints live ranges):
-  0939.HK, 1398.HK, 3988.HK, 1288.HK, 3328.HK, 8306.T, 8316.T, 8411.T, 0857.HK, 0386.HK, 0883.HK
+Full postmortem: `02_research/s2_coint/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb`.
+Archived Asia artifacts: `04_backtest/s2_coint/artifacts/asia_c/`.
 
-# Cointegration testing vs live health check
-- **Discovery (research):** fixed calendar IS end per universe — A `2020-12-31`, B `2022-12-31`, C `2021-12-31`. Screen each candidate on `date <= T`; require at least `min(ols_window, 252)` mutual IS bars (else ineligible, not locked). Confirm locked pairs on holdout after `T` (no all-vs-all re-search).
-- **Live / backtest trading:** rolling ADF (or similar) as a kill-switch — pause/flatten when the relationship dies; optional gate on new entries.
-- **Do not:** pick pairs on full-sample including holdout; use rolling ADF to invent new pairs in production; treat discovery and live ADF as the same step.
-SUMMARY: 22/22 ok
+---
 
-# Test results
-- Forex = failed
-- Crypto = failed (even though one pair was p=0.0501 its HL was > 60 days and by default the Z-windows are 60)
-- Emerging = passed (running more refined)
+# D: US share-class / structural twins
+
+Leaf pool = one twin set (same issuer, different share class), so the economic tether is a claim on the
+same cash flows rather than a statistical coincidence. 10 pools, 20 names, **10 candidate pairs**.
+
+| Pool | Tickers | Company |
+|------|---------|---------|
+| alphabet | GOOGL, GOOG | Alphabet A / C |
+| fox | FOXA, FOX | Fox A / B |
+| news_corp | NWSA, NWS | News Corp A / B |
+| under_armour | UAA, UA | Under Armour A / C |
+| brown_forman | BF.A, BF.B | Brown-Forman A / B |
+| lennar | LEN, LEN.B | Lennar A / B |
+| heico | HEI, HEI.A | HEICO common / A |
+| clearway | CWEN, CWEN.A | Clearway C / A |
+| watsco | WSO, WSO.B | Watsco common / B |
+| greif | GEF, GEF.B | Greif A / B |
+
+- Per-pool cap of 2 never binds (1 pair per pool); the global cap of 6 does.
+- Excluded: BRK.A/BRK.B (share notional), Paramount and Lions Gate (2024 restructurings).
+- DISCA/DISCK and RDS.A/RDS.B were genuine twins that **delisted** (WBD merger 2022, Shell
+  unification 2022). They are absent from the pools, which is exactly the survivorship gap noted below.
+
+# E: US REIT sub-sectors
+
+Same-subsector REITs share a cap-rate / rates factor and comparable lease economics. 6 pools, 28 names,
+**54 candidate pairs**.
+
+| Pool | Tickers |
+|------|---------|
+| towers | AMT, CCI, SBAC |
+| self_storage | PSA, EXR, CUBE, NSA |
+| net_lease | O, NNN, ADC, WPC, EPRT |
+| industrial | PLD, FR, EGP, STAG, TRNO |
+| apartments | AVB, EQR, ESS, MAA, CPT, UDR |
+| healthcare | WELL, VTR, OHI, CTRE, SBRA |
+
+- Pools are rate-sensitive as a group, so pools are not mutually independent even though pairs are
+  within-pool only. H-004 reports book composition by pool so concentration stays visible.
+
+# F: EUR large caps (same-exchange pools)
+
+7 pools, 26 names, **38 candidate pairs**. Leaf pools are **single-exchange** so trading calendars and
+holidays align and the venue-key rule still holds. All names are EUR-denominated, so FX does not enter
+the spread itself.
+
+| Pool | Tickers | Exchange |
+|------|---------|----------|
+| es_banks | SAN.MC, BBVA.MC, CABK.MC, SAB.MC, BKT.MC | Madrid |
+| it_banks | ISP.MI, UCG.MI, BAMI.MI, BPE.MI, BMPS.MI | Milan |
+| it_regulated_utilities | ENEL.MI, TRN.MI, SRG.MI | Milan |
+| es_utilities | IBE.MC, ELE.MC, RED.MC | Madrid |
+| nl_semis | ASML.AS, ASM.AS, BESI.AS | Amsterdam |
+| de_autos | BMW.DE, MBG.DE, VOW3.DE | Xetra |
+| fr_luxury | MC.PA, RMS.PA, KER.PA, OR.PA | Paris |
+
+Risks specific to F:
+
+- **Bank concentration.** Two of seven pools are banks, so with per-pool cap 2 the book can be 4/6 bank
+  pairs — the same single-factor concentration that sank C. No theme-level cap is added (avoids knob
+  proliferation); H-004 reports composition by pool instead.
+- **Short-selling bans.** The Iberian, Italian and French pools sit under regulatory bans in 2011–12 and
+  2020, all inside F's research IS. Modelled in `05_strategies/s2_coint/short_bans.py`. `nl_semis`
+  (Amsterdam) and `de_autos` (Xetra) are the only F pools never banned — the AFM and BaFin did not
+  impose 2020 bans.
+- **FX translation.** Sleeve P&L is in EUR; converting to the portfolio base currency adds unhedged FX
+  variance. The pair is EUR-neutral only to the extent beta sizing nets the two legs. Not hedged.
+- **Cost assumption.** `F_EUR_IBKR` is an assumption pending IBKR's European cash-equity schedule.
+  F is the most cost-fragile universe, so this must be confirmed before H-001 scores F.
+
+---
+
+# Known gaps
+
+- **Survivorship bias (documented, not fixed).** Pools are hand-curated from currently listed names, so
+  quarterly rotation selects among survivors. Yahoo does not serve delisted tickers, so PIT membership
+  is unavailable. D's absent DISCA/DISCK and RDS.A/RDS.B illustrate the size of the gap.
+- **Short borrow is not modelled** in any cost profile. Relevant to all of D / E / F.
+- **SEC September 2008 US ban** (~799 financial stocks, 2008-09-19 → 2008-10-08) is not modelled for
+  D / E. The published list was amended repeatedly and its coverage of equity REITs and share-class
+  twins is uncertain; asserting membership would be worse than omitting it. Adding a record later is a
+  one-line change to `SHORT_BANS`.

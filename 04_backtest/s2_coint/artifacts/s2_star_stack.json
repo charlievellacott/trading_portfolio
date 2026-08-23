@@ -1,12 +1,14 @@
 {
-  "PAIRS_STAR": [
-    "1398.HK|0939.HK",
-    "1288.HK|3328.HK",
-    "8306.T|8316.T"
-  ],
-  "BAR_STAR": "1d",
-  "RESEARCH_IS_END_STAR": "2021-12-31",
-  "HEDGE_STAR": "ols",
-  "KALMAN_DELTA_STAR": null,
-  "BREAK_STAR": "flat_05"
+  "UNIVERSE_STAR": null,
+  "BAR_STAR": null,
+  "RESEARCH_IS_END_STAR": null,
+  "BREAK_STAR": null,
+  "BOOK_STAR": null,
+  "PAIRS_STAR": null,
+  "OLS_WINDOW_STAR": null,
+  "ADF_WINDOW_STAR": null,
+  "ENTRY_Z_STAR": null,
+  "Z_WINDOW_STAR": null,
+  "HEDGE_STAR": null,
+  "KALMAN_DELTA_STAR": null
 }
