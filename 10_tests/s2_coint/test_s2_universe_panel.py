@@ -16,7 +16,7 @@ if ROOT not in sys.path:
 from data.processing.s2_coint_store import build_pair_panel, screen_pair_cointegration
 from data.processing.s2_universe import (
     iter_same_venue_pairs,
-    load_s2_universes,
+    load_s2_pools,
     ticker_venue_key,
 )
 from data.repo_paths import repo_root
@@ -63,7 +63,18 @@ def test_ticker_venue_key_rules():
     assert ticker_venue_key("8306.T") == "T"
     assert ticker_venue_key("AUDUSD=X") == "FX"
     assert ticker_venue_key("BTC-USD") == "CRYPTO"
-    assert ticker_venue_key("UNKNOWN") == "UNKNOWN"
+    # Plain alphabetic US symbols share one venue so twins are pairable.
+    assert ticker_venue_key("GOOGL") == ticker_venue_key("GOOG") == "US"
+    # US share-class lines: the dotted segment is a class letter, not an exchange.
+    assert ticker_venue_key("BF.A") == ticker_venue_key("BF.B") == "US"
+    assert ticker_venue_key("HEI.A") == "US"
+    assert ticker_venue_key("CWEN.A") == "US"
+    # European exchange suffixes stay distinct from each other.
+    assert ticker_venue_key("SAN.MC") == "MC"
+    assert ticker_venue_key("ISP.MI") == "MI"
+    assert ticker_venue_key("ASML.AS") == "AS"
+    assert ticker_venue_key("BMW.DE") == "DE"
+    assert ticker_venue_key("MC.PA") == "PA"
     with pytest.raises(ValueError):
         ticker_venue_key("  ")
 
@@ -81,13 +92,15 @@ def test_iter_same_venue_pairs_blocks_cross_venue():
     assert all(a < b for a, b in pairs)
 
 
-def test_load_s2_universes_three_lines():
-    path = os.path.join(
-        repo_root(), "01_data", "data_files", "s2_coint", "s2_universes.csv"
-    )
-    universes = load_s2_universes(path)
-    assert len(universes) == 3
-    assert all(len(u) >= 2 for u in universes)
+def test_load_s2_pools_is_dynamic_across_universes():
+    """No fixed universe count: the retired CSV loader required exactly three lines."""
+    every = load_s2_pools()
+    assert set("ABCDEF") <= set(every)
+    for label in "ABCDEF":
+        pools = load_s2_pools(label)
+        assert pools
+    with pytest.raises(KeyError):
+        load_s2_pools("ZZ")
 
 
 def test_build_pair_panel_schema_and_metric_flags():
