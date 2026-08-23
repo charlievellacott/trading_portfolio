@@ -13,15 +13,32 @@
 ## Panel / universe
 
 - No global `START_DATE` for the pair panel: each pair’s history starts on the first date both legs have a valid close. Early calendar dates can omit pairs whose younger leg is missing; that is intentional (unbalanced panel).
-- Candidate pairs come from `data.processing.s2_universe` (`ticker_venue_key` / `iter_same_venue_pairs`): same venue/suffix only (e.g. `.HK` with `.HK`, `.T` with `.T`, FX `=X`, crypto `-USD`). Within-venue theme filters (e.g. HK banks vs HK oil SOEs) are applied via `SECTOR_PAIR_MAP` / `KEEP_PAIR_IDS` in `H-001_universes.ipynb`. C refined: China banks, JP megabanks, China oil SOEs (no tech/semis; no bank↔oil).
-- Research IS is a **fixed calendar end** per universe in `s2_pair_panel.ipynb`: A `2020-12-31`, B `2022-12-31`, C `2021-12-31`. Screen and `*_train.parquet` both use `date <= T`; sealed OOS is `date > T`.
-- Pair **ineligible** if mutual bars with `date <= T` < `min(ols_window, 252)` — diagnostic NaNs only; not an EG fail; not locked; not re-screened on OOS.
-- Final locked book = eligible research-IS Engle–Granger passers (`pvalue < threshold`) + `KEEP_PAIR_IDS`. Do not re-pick pairs after seeing sealed OOS.
-- Panel traditional z uses fixed `Z_WINDOW=60`. Rolling `half_life` (`HL_WINDOW=252`) is for gates / time-stops (H-006 / H-008). Adaptive z-window is **H-012** and is not used in panel v1.
+- **Pool candidacy:** candidate pairs come from nested pools in `data.processing.s2_universe_pools` (`S2_POOLS`) via `iter_pool_pairs`, which walks **any** nesting depth (universe → exchange → sector → tickers) and forms pairs **only within a leaf pool**. Same-venue is asserted per leaf via `ticker_venue_key`, so a pool that accidentally mixes exchanges raises rather than yielding an unalignable pair. `ticker_venue_key` maps plain US symbols and US share-class lines (`BF.B`, `HEI.A`) to one `US` key so twins are pairable; European suffixes (`.MC`, `.MI`, `.AS`, `.DE`, `.PA`) stay distinct so calendars align. `iter_same_venue_pairs` remains for flat lists.
+- **`KEEP_PAIR_IDS` is removed.** The manual keep-list was a discretionary selection channel. The book is now deterministic: Engle-Granger passers ranked by p-value under a **per-pool cap (2)** then a **global cap (6)**, in `strategies.s2_coint.book.select_book`. An unordered pair occupies one slot regardless of orientation.
+- Research IS is a **fixed calendar end** per universe, registered in `data.processing.s2_universe_pools.RESEARCH_IS_END_BY_UNIVERSE`: A `2020-12-31`, B `2022-12-31`, C `2021-12-31`, D/E/F `2021-12-31`. Screen and `*_train.parquet` both use `date <= T`; sealed OOS is `date > T`.
+- Pair **ineligible** if mutual bars with `date <= T` < `min(ols_window, 252)` — diagnostic NaNs only; not an EG fail; not selected; not re-screened on OOS.
+- **Two-pass panel build** (`s2_pair_panel.ipynb`): pass 1 screens on **closes only** (no panel); pass 2 builds panels with per-bar `adf_pvalue` for the **union of pairs ever selected**. Rolling ADF exists solely for the `BREAK_STAR` health gate on an actively traded pair, so materialising panels for candidates that no point-in-time rebalance ever selects would change no signal. `BOOK_SCOPE` controls the union: `freeze_only` for H-001, `freeze_plus_rotate` for H-004.
+- Panel traditional z uses fixed `Z_WINDOW=60`. Rolling `half_life` (`HL_WINDOW=252`) is a **diagnostic only** until H-008 — no half-life filter exists anywhere before it. Adaptive z-window is **H-014** and is not used in panel v1.
 - Discovery EG p-value and discovery half-life live on `s2_pairs_*_1d.csv` (IS-only). They do not set panel z.
 - Fetch OHLCV in the notebook (or live runner); `s2_coint_store.build_pair_panel` takes per-ticker OHLC frames and is timeframe-agnostic.
 - Panel columns: `open_y/high_y/low_y/close_y` and `open_x/high_x/low_x/close_x` (no `price_y` / `price_x`). Hedge / z / ADF / half-life use **closes only**; open/high/low are for fill/stop/PnL.
-- Outputs: `s2_panel_{A,B,C}_1d_{train,full}.parquet` and `s2_pairs_{A,B,C}_1d.csv` under `01_data/data_files/s2_coint/`.
+- Outputs under `01_data/data_files/s2_coint/`: `s2_panel_{letter}_1d_{train,full}.parquet` (union pairs), `s2_pairs_{letter}_1d.csv` (ranked frozen book), `s2_candidates_{letter}_1d.csv` (every candidate at IS end, so rejects stay auditable), and `s2_rebalance_{letter}_1d.csv` (quarterly selections, rotate scope only).
+
+## Book construction (H-004)
+
+- Bake-off is `freeze` (one screen on the **full IS** at `RESEARCH_IS_END`) vs `rotate` (quarterly re-screen on the trailing `L = 252` bars, effective at the **next** session's open). Both arms read one identical union panel and share the health gate, soft defaults, caps, beta hedging and slot weighting, so the only difference is book construction. Rules live in `strategies.s2_coint.book`; the research driver is `backtest.s2_coint.rotation`.
+- **Pre-registered constants, not searched and not STARs:** quarterly cadence, `L = 252`, `alpha = 0.05`, global cap 6, per-pool cap 2, fixed `1/6` slot weighting, no minimum tenure, no half-life filter before H-008.
+- **H-004 only, and continues if `BOOK_STAR = rotate`:** a demoted pair is blocked from **new** entries but runs any open position to its normal z-exit. Nothing is force-closed, so rotation adds no trading cost of its own. Orientation flips are handled the same way — the old orientation is blocked and runs to z-exit, and the new one becomes tradable only once the old is flat.
+- **Sizing:** beta hedging is unchanged (`+y, -beta*x`, gross-normalised). The `1/6` slot weight multiplies that already-normalised position, so a one-pair quarter cannot run six times the per-pair risk of a six-pair quarter and confound the comparison.
+- **Orientation:** Engle-Granger tests both `y~x` and `x~y` and keeps the lower p-value; the winning direction sets `pair_id`. Orientation is **frozen while a pair is active** and only re-evaluated if the pair is demoted and later re-promoted.
+- **Metrics:** report `ann_sharpe_gross` and `ann_sharpe_net` (gross via `gross_returns_from_net`, not a second cost-free sim), max DD, `corr_to_s1`, and book composition by pool. Rank on net Sharpe; **a negative correlation to S1 beats a low positive one**.
+
+## Short-selling bans
+
+- Regulator ban windows live in `strategies.s2_coint.short_bans` (`SHORT_BANS`). They block **new entries only** in the spread direction that needs the banned leg: long spread shorts `x`, short spread shorts `y`. Open positions still exit on z, mirroring real bans, which restricted opening or increasing net short positions rather than forcing liquidation.
+- Mechanically this is the same mask as demotion, composed by logical AND, via the optional `long_entry_allowed` / `short_entry_allowed` arguments on `engine.simulate_pair`. With both masks absent, behaviour is unchanged.
+- Applies to **universe F only** (Madrid / Milan / Paris in 2011–12 and 2020). A–E have no records, so their masks are all-True and their results are byte-identical with or without them. Amsterdam and Xetra were never banned (AFM and BaFin declined in 2020).
+- Not modelled: market-maker exemptions, the 2020 net-short thresholds, and the SEC's 2008 US ban (list membership uncertain for REITs and share classes). **Short borrow is still not modelled** in any cost profile.
 
 ## H-001 baseline costs / IS diagnostics
 
@@ -31,11 +48,15 @@
   - `A_FX_OANDA`: spread+slippage model with pair-level spread pips.
   - `B_CRYPTO_KRAKEN`: maker/taker + slippage model (baseline assumes taker).
   - `C_HK_IBKR` / `C_JP_IBKR`: percent commission + minimum + third-party fee + slippage.
+  - `US_ALPACA` (universes D / E): **commission-free**, so cost is regulatory fees (SEC Section 31 + FINRA TAF, 0.1 bps) plus 3.2 bps execution → **3.3 bps/leg, ~13 bps per pair round trip**. Execution cost is broker-agnostic slippage against a VWAP benchmark, and the upper end of the published band is used deliberately because a pair fills two legs at once and one is a short. Roughly **9x less friction than C's HK 116 bps/RT**, which is the quantitative case for the universe pivot.
+  - `F_EUR_IBKR` (universe F): percent commission + EUR minimum + third-party + slippage → ~10.5 bps/leg. **This is an assumption**, not a confirmed schedule: IBKR's published Reg-NMS metrics describe US stocks and the 0.1% / EUR 4 / EUR 29 table is the mutual-fund schedule, so neither applies to EUR cash equities. Confirm Fixed vs Tiered and per-exchange minimums for Madrid / Milan / Amsterdam / Xetra / Paris before treating F's net Sharpe as decision-grade; F is the most cost-fragile universe.
 - Market routing is deterministic:
   - `=X` -> `A_FX_OANDA`
   - `-USD` -> `B_CRYPTO_KRAKEN`
   - `.HK` -> `C_HK_IBKR`
   - `.T` -> `C_JP_IBKR`
+  - `.MC` / `.MI` / `.AS` / `.DE` / `.PA` -> `F_EUR_IBKR`
+  - plain US symbols and US share-class lines (`GOOGL`, `AMT`, `BF.B`) -> `US_ALPACA`
 - Baseline sizing uses hedge ratio (`beta`) per bar: long spread `+y, -beta*x`; short spread `-y, +beta*x`. Trad-z exit is a signed recross of `EXIT_Z` (default 0): flatten a long spread when `z >= 0`, a short when `z <= 0`.
 - Per-pair IS stats: trade count, median hold (completed round-trips), cost bps/year, Sharpe, max DD, rolling ADF (`adf_pvalue` from `compute_coint_metrics`).
 - Asia C IS postmortem → `02_research/s2_coint/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb` (helpers in `04_backtest/s2_coint/diagnosis.py`).
