@@ -229,3 +229,19 @@ def test_screen_pair_cointegration_ineligible_short_overlap():
     assert np.isnan(row["pvalue"])
     assert np.isnan(row["tstat"])
     assert np.isnan(row["discovery_half_life"])
+
+
+def test_screen_pair_cointegration_ineligible_missing_ticker():
+    y, x = _make_coint_pair(n=400, seed=13)
+    is_end = y.index[int(len(y.index) * 0.7)]
+    screened = screen_pair_cointegration(
+        {"AAA": y},
+        [("AAA", "MISSING"), ("MISSING", "AAA")],
+        is_end=is_end,
+        ols_window=40,
+    )
+    assert len(screened) == 2
+    for _, row in screened.iterrows():
+        assert bool(row["eligible"]) is False
+        assert row["n_is_bars"] == 0
+        assert np.isnan(row["pvalue"])

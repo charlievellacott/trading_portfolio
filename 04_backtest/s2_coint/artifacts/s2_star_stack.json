@@ -1,8 +1,8 @@
 {
-  "UNIVERSE_STAR": null,
-  "BAR_STAR": null,
-  "RESEARCH_IS_END_STAR": null,
-  "BREAK_STAR": null,
+  "UNIVERSE_STAR": "D",
+  "BAR_STAR": "1d",
+  "RESEARCH_IS_END_STAR": "2021-12-31",
+  "BREAK_STAR": "block_05_flat_10",
   "BOOK_STAR": null,
   "PAIRS_STAR": null,
   "OLS_WINDOW_STAR": null,

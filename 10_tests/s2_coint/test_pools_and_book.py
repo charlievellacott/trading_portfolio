@@ -33,9 +33,11 @@ from strategies.s2_coint.book import (
     CAP_PER_POOL,
     SLOT_WEIGHT,
     BookState,
+    annotate_screen,
     apply_rebalance,
     select_book,
     slot_key,
+    validate_manual_book,
 )
 from strategies.s2_coint.costs import leg_cost_bps, market_profile_for_ticker
 from strategies.s2_coint.engine import simulate_pair
@@ -174,6 +176,103 @@ def test_select_book_counts_one_slot_per_unordered_pair():
     pools = {"A1|A2": "a", "A2|A1": "a"}
     kept = select_book(screen, pool_of_pair=pools)
     assert len(kept) == 1
+
+
+def test_annotate_screen_matches_select_book_and_reasons():
+    screen = _screen(
+        [
+            ("A1|A2", 0.001),
+            ("A1|A3", 0.002),
+            ("A2|A3", 0.003),  # pool_cap
+            ("B1|B2", 0.004),
+            ("B1|B3", 0.005),
+            ("C1|C2", 0.006),
+            ("D1|D2", 0.007),
+            ("E1|E2", 0.008),  # global_cap
+        ]
+    )
+    screen = pd.concat(
+        [
+            screen,
+            pd.DataFrame(
+                [
+                    {"pair_id": "F1|F2", "pvalue": 0.20, "eligible": True},
+                    {"pair_id": "G1|G2", "pvalue": np.nan, "eligible": False},
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    pools = {
+        "A1|A2": "a",
+        "A1|A3": "a",
+        "A2|A3": "a",
+        "B1|B2": "b",
+        "B1|B3": "b",
+        "C1|C2": "c",
+        "D1|D2": "d",
+        "E1|E2": "e",
+        "F1|F2": "f",
+        "G1|G2": "g",
+    }
+    kept = select_book(screen, pool_of_pair=pools, pvalue_threshold=0.05)
+    annotated = annotate_screen(screen, pool_of_pair=pools, pvalue_threshold=0.05)
+    auto_ids = set(annotated.loc[annotated["auto_selected"], "pair_id"])
+    assert auto_ids == set(kept["pair_id"])
+    by_id = annotated.set_index("pair_id")
+    assert by_id.loc["A2|A3", "exclude_reason"] == "pool_cap"
+    assert by_id.loc["E1|E2", "exclude_reason"] == "global_cap"
+    assert by_id.loc["F1|F2", "exclude_reason"] == "not_passer"
+    assert by_id.loc["G1|G2", "exclude_reason"] == "ineligible"
+    assert by_id.loc["A1|A2", "exclude_reason"] == ""
+
+
+def test_validate_manual_book_caps_and_passers():
+    screen = _screen(
+        [
+            ("A1|A2", 0.001),
+            ("A1|A3", 0.002),
+            ("A2|A3", 0.003),
+            ("B1|B2", 0.004),
+            ("C1|C2", 0.01),
+        ]
+    )
+    pools = {
+        "A1|A2": "a",
+        "A1|A3": "a",
+        "A2|A3": "a",
+        "B1|B2": "b",
+        "C1|C2": "c",
+    }
+    ok = validate_manual_book(
+        ["A1|A2", "B1|B2", "C1|C2"], screen, pool_of_pair=pools
+    )
+    assert list(ok["pair_id"]) == ["A1|A2", "B1|B2", "C1|C2"]
+    assert list(ok["rank"]) == [1, 2, 3]
+
+    with pytest.raises(ValueError, match="empty"):
+        validate_manual_book([], screen, pool_of_pair=pools)
+    with pytest.raises(ValueError, match="per-pool cap"):
+        validate_manual_book(
+            ["A1|A2", "A1|A3", "A2|A3"], screen, pool_of_pair=pools
+        )
+    with pytest.raises(ValueError, match="not an EG passer"):
+        fat = pd.concat(
+            [screen, pd.DataFrame([{"pair_id": "Z1|Z2", "pvalue": 0.9, "eligible": True}])],
+            ignore_index=True,
+        )
+        pools2 = {**pools, "Z1|Z2": "z"}
+        validate_manual_book(["Z1|Z2"], fat, pool_of_pair=pools2)
+    with pytest.raises(ValueError, match="duplicate slot"):
+        validate_manual_book(
+            ["A1|A2", "A2|A1"], screen, pool_of_pair=pools
+        )
+    with pytest.raises(ValueError, match="global cap"):
+        big = _screen([(f"P{i}|Q{i}", 0.01 * (i + 1) / 100) for i in range(7)])
+        pools_big = {f"P{i}|Q{i}": f"p{i}" for i in range(7)}
+        validate_manual_book(
+            [f"P{i}|Q{i}" for i in range(7)], big, pool_of_pair=pools_big
+        )
 
 
 def test_slot_key_is_orientation_insensitive():

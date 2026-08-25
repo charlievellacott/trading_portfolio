@@ -92,6 +92,88 @@ def summarize_rolling_adf(
     }
 
 
+def adf_health_masks(
+    panel: pd.DataFrame,
+    *,
+    pvalue_threshold: float = COINT_PVALUE,
+    adf_col: str = "adf_pvalue",
+    date_col: str = "date",
+    pair_col: str = "pair_id",
+) -> pd.DataFrame:
+    """Wide bool frame: index=date, columns=pair_id, True when ``adf < threshold``.
+
+    Inspection only (H-001) — not a trading gate (that is H-003).
+    """
+    if panel is None or panel.empty or adf_col not in panel.columns:
+        return pd.DataFrame()
+    d = panel[[date_col, pair_col, adf_col]].copy()
+    d[date_col] = pd.to_datetime(d[date_col])
+    d[adf_col] = pd.to_numeric(d[adf_col], errors="coerce")
+    d["healthy"] = d[adf_col] < float(pvalue_threshold)
+    wide = (
+        d.pivot_table(
+            index=date_col,
+            columns=pair_col,
+            values="healthy",
+            aggfunc="max",
+        )
+        .sort_index()
+        .fillna(False)
+        .astype(bool)
+    )
+    wide.columns = [str(c) for c in wide.columns]
+    return wide
+
+
+def adf_union_coverage(
+    panel: pd.DataFrame,
+    *,
+    pvalue_threshold: float = COINT_PVALUE,
+    adf_col: str = "adf_pvalue",
+) -> float:
+    """Fraction of calendar days where **at least one** pair has ``adf < threshold``."""
+    masks = adf_health_masks(
+        panel, pvalue_threshold=pvalue_threshold, adf_col=adf_col
+    )
+    if masks.empty:
+        return float("nan")
+    any_healthy = masks.any(axis=1)
+    n = int(any_healthy.shape[0])
+    if n == 0:
+        return float("nan")
+    return float(any_healthy.mean())
+
+
+def adf_pairwise_overlap(
+    panel: pd.DataFrame,
+    *,
+    pvalue_threshold: float = COINT_PVALUE,
+    adf_col: str = "adf_pvalue",
+) -> pd.DataFrame:
+    """Pairwise Jaccard overlap of healthy-ADF day sets (diagonal = 1 when any healthy days).
+
+    Low off-diagonal values mean pairs are healthy at different times — useful for
+    staggering a freeze book. Inspection only.
+    """
+    masks = adf_health_masks(
+        panel, pvalue_threshold=pvalue_threshold, adf_col=adf_col
+    )
+    if masks.empty:
+        return pd.DataFrame()
+    cols = list(masks.columns)
+    n = len(cols)
+    out = np.full((n, n), np.nan)
+    arr = masks.to_numpy(dtype=bool)
+    for i in range(n):
+        a = arr[:, i]
+        for j in range(n):
+            b = arr[:, j]
+            inter = int(np.logical_and(a, b).sum())
+            union = int(np.logical_or(a, b).sum())
+            out[i, j] = (inter / union) if union > 0 else float("nan")
+    return pd.DataFrame(out, index=cols, columns=cols)
+
+
 def pair_diagnostics(
     g: pd.DataFrame,
     *,

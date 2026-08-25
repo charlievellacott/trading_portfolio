@@ -18,3 +18,5 @@ google-cloud-bigquery>=3.11.0
 google-cloud-bigquery-storage>=2.24.0
 db-dtypes>=1.2.0
 nbformat>=5.11.1
+numba>=0.67.0
+vectorbt>=1.1.0

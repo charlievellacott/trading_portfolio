@@ -82,6 +82,9 @@ def _align_pair_closes(
     ticker_b: str,
 ) -> tuple[pd.Series, pd.Series]:
     """Inner-join closes on the mutual date index (pair starts at first shared bar)."""
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    if ticker_a not in prices_by_ticker or ticker_b not in prices_by_ticker:
+        return empty, empty
     a = _as_price_series(prices_by_ticker, ticker_a)
     b = _as_price_series(prices_by_ticker, ticker_b)
     idx = a.index.intersection(b.index)
@@ -118,6 +121,9 @@ def _align_pair_ohlc(
     ticker_b: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Inner-join OHLC frames on mutual dates where both closes are finite."""
+    empty = pd.DataFrame(columns=list(_OHLC_COLS), index=pd.DatetimeIndex([]))
+    if ticker_a not in ohlc_by_ticker or ticker_b not in ohlc_by_ticker:
+        return empty, empty
     a = _as_ohlc_frame(ohlc_by_ticker, ticker_a)
     b = _as_ohlc_frame(ohlc_by_ticker, ticker_b)
     idx = a.index.intersection(b.index)

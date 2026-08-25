@@ -26,6 +26,8 @@ from strategies.s2_coint.costs import (
     market_profile_for_ticker,
 )
 from strategies.s2_coint.metrics import (
+    adf_pairwise_overlap,
+    adf_union_coverage,
     compound_to_s1_weeks,
     corr_to_s1,
     cost_bps_per_year,
@@ -171,6 +173,22 @@ def test_summarize_rolling_adf_empty_and_threshold():
     assert out["n_adf"] == 3
     assert out["last_adf_p"] == pytest.approx(0.01)
     assert out["pct_adf_lt_threshold"] == pytest.approx(2.0 / 3.0)
+
+
+def test_adf_union_coverage_and_pairwise_overlap():
+    dates = pd.date_range("2020-01-01", periods=4, freq="B")
+    panel = pd.DataFrame(
+        {
+            "date": list(dates) + list(dates),
+            "pair_id": ["A|B"] * 4 + ["C|D"] * 4,
+            "adf_pvalue": [0.01, 0.01, 0.20, 0.20, 0.20, 0.20, 0.01, 0.01],
+        }
+    )
+    # Days 0-1: only A|B; days 2-3: only C|D → union = 100%, Jaccard = 0
+    assert adf_union_coverage(panel, pvalue_threshold=0.05) == pytest.approx(1.0)
+    ov = adf_pairwise_overlap(panel, pvalue_threshold=0.05)
+    assert ov.loc["A|B", "C|D"] == pytest.approx(0.0)
+    assert ov.loc["A|B", "A|B"] == pytest.approx(1.0)
 
 
 def test_diagnose_two_pairs_separately():
