@@ -1,6 +1,20 @@
 # Hypothesis Log
 
-## Validation protocol
+## Validation protocol (Option 4 — institutional hybrid)
+
+Purged expanding walk-forward on **research IS** (3 folds, 5-day embargo) → per-arm fold-val tables and boxplots → **discretionary STAR** at a typed freeze cell → full-IS report for the frozen arm → **one** sealed OOS tearsheet.
+
+**Core rules:** fold-train fits stateful objects only (Kalman, HMM, sizing scale); fold-val scores pre-registered arms on validation dates (calendar-dense returns); mandatory UI: `fold_df`, boxplots, `median_val_sharpe`, `full_is_sharpe`, `median_sharpe_hint()` (commentary only); STAR is **human discretionary** (no programmatic veto); sealed OOS once after STAR; maintain a **variant ledger** across the stack.
+
+**Tiers** (`backtest.s2_coint.research.hypothesis_tier`): **C** H-001/004/005; **B** H-006/012 scale/013/015; **A** H-002/003/007–011/012 rule.
+
+**Helpers:** `fold_val_metrics`, `full_is_metrics`, `arm_selection_table` in `04_backtest/s2_coint/report.py`; `load_star_panels` after H-005/H-006 freeze.
+
+**Stale note:** H-009–H-012 OOS before calendar-Sharpe fix, raw D panels, and `US_ALPACA_D_REALISTIC` need re-run for decision-grade numbers.
+
+---
+
+## Validation protocol (legacy detail)
 
 Mirror `03_models/s1_equities/model_tests/06_training_gbm_lambdarank_wf.ipynb`: purged expanding walk-forward on **research IS** → freeze by selection score + **boxplot review across folds** → **one** sealed OOS look for tearsheet / final backtest. Embargo between fold-train and fold-val (pairs analogue of the GBM 1-week embargo).
 

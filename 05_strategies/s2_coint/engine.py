@@ -16,13 +16,19 @@ from strategies.s2_coint.baseline import (
     _TRADE_COLS,
 )
 from strategies.s2_coint.config import S2SimConfig
-from strategies.s2_coint.costs import leg_cost_bps, market_profile_for_pair
+from strategies.s2_coint.costs import (
+    daily_borrow_return,
+    leg_cost_bps,
+    market_profile_for_pair,
+    resolve_cost_profile,
+)
 from strategies.s2_coint.overlap import (
     corr_blocks_candidate,
     pair_tickers,
     score_confidence,
     shares_leg,
 )
+from strategies.s2_coint.metrics import book_returns_to_calendar, panel_session_dates
 from strategies.s2_coint.sizing import atr_size_multiplier, pair_scale_from_score
 
 _EMPTY_TRADES = pd.DataFrame(columns=list(_TRADE_COLS))
@@ -231,7 +237,7 @@ def simulate_pair(
     ty = str(d["ticker_y"].iloc[0])
     tx = str(d["ticker_x"].iloc[0])
     pair_id = str(d["pair_id"].iloc[0])
-    profile = market_profile_for_pair(pair_id, ty, tx)
+    profile = resolve_cost_profile(pair_id, ty, tx, cost_profile=cfg.cost_profile)
 
     pos = 0
     pnl_by_date: dict[pd.Timestamp, float] = defaultdict(float)
@@ -360,6 +366,12 @@ def simulate_pair(
             if open_entry is not None:
                 bar_ret *= float(open_entry.get("scale", 1.0))
                 open_entry["cum_pnl"] = float(open_entry.get("cum_pnl", 0.0)) + bar_ret
+            bar_ret += daily_borrow_return(
+                profile,
+                y_weight=y_w,
+                x_weight=x_w,
+                scale=float(open_entry.get("scale", 1.0)) if open_entry else 1.0,
+            )
 
         pnl_by_date[fill_date] += bar_ret - event_cost
 
@@ -375,6 +387,21 @@ def simulate_pair(
         n_open_at_end=int(open_entry is not None),
         open_entry_cost_bps=open_cost,
     )
+
+
+def _densify_book_returns(
+    raw: pd.Series,
+    panel: pd.DataFrame,
+    *,
+    leverage: pd.Series | None = None,
+) -> tuple[pd.Series, pd.Series | None]:
+    """Align sparse joint-sim returns to the panel session calendar."""
+    cal = panel_session_dates(panel)
+    out = book_returns_to_calendar(raw, cal)
+    lev_out = None
+    if leverage is not None and not leverage.empty:
+        lev_out = leverage.astype(float).reindex(out.index).ffill().fillna(1.0)
+    return out, lev_out
 
 
 def simulate_book(
@@ -435,12 +462,18 @@ def simulate_book(
                 lev_index.append(pd.Timestamp(t))
                 prev_lev = leverage
             out = pd.Series(scaled, index=raw.index, name="ret")
+            out, lev_ser = _densify_book_returns(
+                out,
+                panel,
+                leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
+            )
             return BookSimResult(
                 returns=out,
                 pair_results=pair_results,
-                leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
+                leverage=lev_ser,
             )
-        return BookSimResult(returns=raw, pair_results=pair_results)
+        out, _ = _densify_book_returns(raw, panel)
+        return BookSimResult(returns=out, pair_results=pair_results)
 
     return _simulate_book_joint(
         panel,
@@ -564,7 +597,7 @@ def _simulate_book_joint(
             fill_date = pd.Timestamp(g["date"].iloc[i + 1])
             st = open_pos.pop(pid)
             ty, tx = str(g["ticker_y"].iloc[0]), str(g["ticker_x"].iloc[0])
-            profile = market_profile_for_pair(pid, ty, tx)
+            profile = resolve_cost_profile(pid, ty, tx, cost_profile=cfg.cost_profile)
             by = leg_cost_bps(profile, ty, float(g["open_y"].iloc[i + 1]))
             bx = leg_cost_bps(profile, tx, float(g["open_x"].iloc[i + 1]))
             pnl[pid][fill_date] -= (by + bx) / 10_000.0
@@ -630,7 +663,7 @@ def _simulate_book_joint(
                 continue
             i = int(g.index[pd.to_datetime(g["date"]) == sig_date][0])
             fill_date = pd.Timestamp(g["date"].iloc[i + 1])
-            profile = market_profile_for_pair(pid, ty, tx)
+            profile = resolve_cost_profile(pid, ty, tx, cost_profile=cfg.cost_profile)
             by = leg_cost_bps(profile, ty, float(g["open_y"].iloc[i + 1]))
             bx = leg_cost_bps(profile, tx, float(g["open_x"].iloc[i + 1]))
             score = _score_series(g, cfg)[i]
@@ -694,6 +727,12 @@ def _simulate_book_joint(
                 y_w /= gross
                 x_w /= gross
             bar_ret = (y_w * (oy2 / oy1 - 1.0) + x_w * (ox2 / ox1 - 1.0)) * float(st.get("scale", 1.0))
+            bar_ret += daily_borrow_return(
+                resolve_cost_profile(pid, ty, tx, cost_profile=cfg.cost_profile),
+                y_weight=y_w,
+                x_weight=x_w,
+                scale=float(st.get("scale", 1.0)),
+            )
             st["cum_pnl"] = float(st.get("cum_pnl", 0.0)) + bar_ret
             pnl[pid][fill_date] += bar_ret
 
@@ -718,7 +757,8 @@ def _simulate_book_joint(
     wide = pd.concat(parts, axis=1).fillna(0.0)
     raw = wide.mean(axis=1).rename("ret")
     if cfg.vol_mode != "s1_vt":
-        return BookSimResult(returns=raw, pair_results=pair_results)
+        out, _ = _densify_book_returns(raw, panel)
+        return BookSimResult(returns=out, pair_results=pair_results)
     vt_cfg = VolTargetConfig(
         enabled=True,
         target_ann_vol=cfg.vt_target_ann_vol,
@@ -742,8 +782,13 @@ def _simulate_book_joint(
         lev_index.append(pd.Timestamp(t))
         prev_lev = leverage
     out = pd.Series(scaled, index=raw.index, name="ret")
+    out, lev_ser = _densify_book_returns(
+        out,
+        panel,
+        leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
+    )
     return BookSimResult(
         returns=out,
         pair_results=pair_results,
-        leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
+        leverage=lev_ser,
     )

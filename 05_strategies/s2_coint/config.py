@@ -59,6 +59,7 @@ class S2SimConfig:
     z_clip_max: int = 120
     entry_mode: str = "trad_z"
     hmm_mr_threshold: float = 0.5
+    cost_profile: str | None = None
 
     def __post_init__(self) -> None:
         if self.hedge not in VALID_HEDGE:

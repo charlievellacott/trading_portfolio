@@ -75,6 +75,29 @@ def _fold_val_panel_stats(
     }
 
 
+def _fold_train_state(
+    panel: pd.DataFrame,
+    fold: S2WalkForwardFold,
+    cfg: S2SimConfig,
+    *,
+    score_column: str,
+) -> tuple[float, dict | None]:
+    """Tier B fold-train fit: sizing scale and optional HMM (never pick knobs on train Sharpe)."""
+    dates = pd.to_datetime(panel["date"])
+    train_mask = dates.isin(fold.train_dates)
+    mean_abs = 1.0
+    if cfg.size_mode != "equal" and score_column in panel.columns:
+        sl = panel.loc[train_mask, score_column]
+        if len(sl):
+            m = float(sl.astype(float).abs().mean())
+            if np.isfinite(m) and m > 0:
+                mean_abs = m
+    hmm = None
+    if cfg.entry_mode == "v3_hmm_innov":
+        hmm = fit_hmm_on_train_dates(panel, fold.train_dates)
+    return mean_abs, hmm
+
+
 def fold_val_metrics(
     panel: pd.DataFrame,
     folds: list[S2WalkForwardFold],
@@ -83,22 +106,16 @@ def fold_val_metrics(
     s1_weekly: pd.Series | None = None,
     score_column: str = "z",
 ) -> pd.DataFrame:
-    """Score each named config on each fold's **validation** dates only."""
+    """Score each named config on each fold's **validation** dates only.
+
+    Tier B arms: ``mean_abs_score`` and HMM are fit on fold-train only; val is scored
+    out-of-sample within the fold. Returns one row per arm × fold_id (full ``fold_df``).
+    """
     rows = []
     dates = pd.to_datetime(panel["date"])
-    need_hmm = any(c.entry_mode == "v3_hmm_innov" for c in configs.values())
     for name, cfg in configs.items():
         for f in folds:
-            train_mask = dates.isin(f.train_dates)
-            sl = panel.loc[train_mask, score_column] if score_column in panel.columns else None
-            mean_abs = 1.0
-            if sl is not None and cfg.size_mode != "equal":
-                m = float(sl.astype(float).abs().mean())
-                if np.isfinite(m) and m > 0:
-                    mean_abs = m
-            hmm = None
-            if need_hmm:
-                hmm = fit_hmm_on_train_dates(panel, f.train_dates)
+            mean_abs, hmm = _fold_train_state(panel, f, cfg, score_column=score_column)
             mask = dates.isin(f.val_dates)
             res = run_s2_backtest(
                 panel,
@@ -127,6 +144,95 @@ def fold_val_metrics(
                 }
             )
     return pd.DataFrame(rows)
+
+
+def full_is_metrics(
+    panel: pd.DataFrame,
+    configs: dict[str, S2SimConfig],
+    *,
+    s1_weekly: pd.Series | None = None,
+    score_column: str = "z",
+) -> pd.DataFrame:
+    """One backtest per arm on the full research-IS panel (reporting only; not for STAR auto-pick).
+
+    Tier B: sizing scale and HMM are fit on the entire ``panel`` IS window.
+    """
+    rows = []
+    dates = pd.DatetimeIndex(pd.to_datetime(panel["date"])).sort_values().unique()
+    for name, cfg in configs.items():
+        mean_abs = 1.0
+        if cfg.size_mode != "equal" and score_column in panel.columns:
+            m = float(panel[score_column].astype(float).abs().mean())
+            if np.isfinite(m) and m > 0:
+                mean_abs = m
+        hmm = (
+            fit_hmm_on_train_dates(panel, dates)
+            if cfg.entry_mode == "v3_hmm_innov"
+            else None
+        )
+        res = run_s2_backtest(
+            panel,
+            cfg,
+            s1_weekly=s1_weekly,
+            mean_abs_score=mean_abs,
+            hmm_params=hmm,
+        )
+        n_entries = int(sum(pr.n_entries for pr in res.book.pair_results.values()))
+        rows.append(
+            {
+                "arm": name,
+                "full_is_sharpe": res.metrics["ann_sharpe"],
+                "full_is_max_drawdown": res.metrics["max_drawdown"],
+                "full_is_corr_to_s1": res.metrics["corr_to_s1"],
+                "full_is_n_days": res.metrics["n_days"],
+                "full_is_n_entries": n_entries,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def arm_selection_table(
+    fold_df: pd.DataFrame,
+    full_is_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Join median val Sharpe, full-IS Sharpe, and val stability stats — no winner column."""
+    if fold_df.empty:
+        cols = [
+            "arm",
+            "median_val_sharpe",
+            "full_is_sharpe",
+            "max_drawdown",
+            "corr_to_s1",
+            "n_folds",
+        ]
+        return pd.DataFrame(columns=cols)
+    val = (
+        fold_df.groupby("arm", as_index=False)
+        .agg(
+            median_val_sharpe=("ann_sharpe", "median"),
+            max_drawdown=("max_drawdown", "median"),
+            corr_to_s1=("corr_to_s1", "median"),
+            n_folds=("fold_id", "nunique"),
+        )
+    )
+    if full_is_df is not None and not full_is_df.empty:
+        val = val.merge(
+            full_is_df[["arm", "full_is_sharpe"]],
+            on="arm",
+            how="left",
+        )
+    else:
+        val["full_is_sharpe"] = float("nan")
+    return val[
+        [
+            "arm",
+            "median_val_sharpe",
+            "full_is_sharpe",
+            "max_drawdown",
+            "corr_to_s1",
+            "n_folds",
+        ]
+    ]
 
 
 def median_sharpe_hint(fold_df: pd.DataFrame) -> str | None:

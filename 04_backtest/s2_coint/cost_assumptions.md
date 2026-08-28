@@ -108,3 +108,27 @@ IB SmartRoutingSM applies as on IBKR’s schedule. IBKR lists no separate JP reg
 
 
 **Note:** Access fees of JPY 2.70 per order apply to all stocks excluding single stocks and basket trading.
+
+---
+
+## US Alpaca — Universe D (realistic profile)
+
+Profile key: `US_ALPACA_D_REALISTIC` in `strategies.s2_coint.costs`. Default for Universe D when loading config from `s2_star_stack.json` (`config_from_stack`).
+
+| Component | Common US leg | Alt share-class (`.A`, `.B`, `NWSA`) |
+|-----------|---------------|--------------------------------------|
+| Commission | 0 bps | 0 bps |
+| Third-party (SEC + FINRA avg) | 0.1 bps | 0.1 bps |
+| Slippage (vs daily VWAP) | 3.2 bps | 8.0 bps |
+| **Per-leg total (round-trip ×2)** | ~6.6 bps | ~16.2 bps |
+
+| Borrow | Rate | Application |
+|--------|------|-------------|
+| General collateral short | 100 bps / year | Pro-rated daily on **net short leg weight** while position is open |
+
+**Included vs not (fairness):**
+
+- Included: tiered slippage by share class, flat annual borrow on shorts, calendar-dense Sharpe.
+- Not included (stress tier only): vol-scaled slippage, locate / HTB fee spikes, pair-specific bid–ask spread, dividend adjustment on one leg only.
+
+Baseline `US_ALPACA` (flat 3.2 bps/leg, no borrow) remains available via `S2SimConfig(cost_profile=None)` or explicit `COST_PROFILE_STAR` in the stack JSON.

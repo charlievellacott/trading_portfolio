@@ -11,6 +11,7 @@ LEG_NOTIONAL_LOCAL: dict[str, float] = {
     "C_HK_IBKR": 100_000.0,
     "C_JP_IBKR": 1_000_000.0,
     "US_ALPACA": 100_000.0,
+    "US_ALPACA_D_REALISTIC": 100_000.0,
     "F_EUR_IBKR": 100_000.0,
 }
 
@@ -65,6 +66,18 @@ COSTS: dict[str, dict] = {
         "commission_ccy": "USD",
         "third_party_fee_bps": 0.1,
         "slippage_bps_per_leg": 3.2,
+    },
+    # Universe D realistic: tiered slippage on alt share classes + daily borrow on shorts.
+    "US_ALPACA_D_REALISTIC": {
+        "model": "percent_commission_plus_min_plus_slippage",
+        "commission_bps": 0.0,
+        "commission_min_local": 0.0,
+        "commission_ccy": "USD",
+        "third_party_fee_bps": 0.1,
+        "slippage_bps_per_leg": 3.2,
+        "alt_slippage_bps_per_leg": 8.0,
+        "borrow_bps_annual": 100.0,
+        "trading_days_per_year": 252.0,
     },
     # Universe F (EUR large caps on IBKR). ASSUMPTION pending IBKR's European
     # cash-equity schedule: the published Reg-NMS metrics describe US stocks, and the
@@ -134,16 +147,64 @@ def fx_leg_cost_bps(ticker: str, price: float, cfg: dict) -> float:
     return 0.5 * spread_bps + slip_bps
 
 
-def percent_min_bps(cfg: dict, profile: str) -> float:
-    bps = (
-        float(cfg["commission_bps"])
-        + float(cfg["third_party_fee_bps"])
-        + float(cfg["slippage_bps_per_leg"])
+def is_alt_share_class_ticker(ticker: str) -> bool:
+    """Alt US share-class lines (lower liquidity) for tiered D slippage."""
+    t = str(ticker).upper()
+    if t.endswith(".B") or t.endswith(".A"):
+        return True
+    return t == "NWSA"
+
+
+def resolve_cost_profile(
+    pair_id: str,
+    ticker_y: str,
+    ticker_x: str,
+    *,
+    cost_profile: str | None = None,
+) -> str:
+    """Return the cost table key for a pair (optional override from S2SimConfig)."""
+    if cost_profile:
+        return str(cost_profile)
+    return market_profile_for_pair(pair_id, ticker_y, ticker_x)
+
+
+def _slippage_bps_for_leg(profile: str, ticker: str, cfg: dict) -> float:
+    slip = float(cfg["slippage_bps_per_leg"])
+    if profile == "US_ALPACA_D_REALISTIC" and is_alt_share_class_ticker(ticker):
+        slip = float(cfg.get("alt_slippage_bps_per_leg", slip))
+    return slip
+
+
+def percent_min_bps(cfg: dict, profile: str, *, ticker: str | None = None) -> float:
+    slip = (
+        _slippage_bps_for_leg(profile, ticker, cfg)
+        if ticker is not None
+        else float(cfg["slippage_bps_per_leg"])
     )
+    bps = float(cfg["commission_bps"]) + float(cfg["third_party_fee_bps"]) + slip
     min_local = float(cfg["commission_min_local"])
-    notional = float(LEG_NOTIONAL_LOCAL[profile])
+    notional = float(LEG_NOTIONAL_LOCAL.get(profile, LEG_NOTIONAL_LOCAL["US_ALPACA"]))
     min_bps = (min_local / max(notional, 1e-12)) * 10_000.0
     return max(bps, min_bps)
+
+
+def daily_borrow_return(
+    profile: str,
+    *,
+    y_weight: float,
+    x_weight: float,
+    scale: float = 1.0,
+) -> float:
+    """Pro-rated daily borrow drag on net short legs (return units, not bps)."""
+    cfg = COSTS.get(profile)
+    if not cfg or "borrow_bps_annual" not in cfg:
+        return 0.0
+    short_gross = max(0.0, -float(y_weight)) + max(0.0, -float(x_weight))
+    if short_gross <= 0:
+        return 0.0
+    days = float(cfg.get("trading_days_per_year", 252.0))
+    bps_daily = float(cfg["borrow_bps_annual"]) / days
+    return -(bps_daily / 10_000.0) * short_gross * float(scale)
 
 
 def leg_cost_bps(profile: str, ticker: str, price: float) -> float:
@@ -160,6 +221,6 @@ def leg_cost_bps(profile: str, ticker: str, price: float) -> float:
         return fee + float(cfg["slippage_bps_per_leg"])
 
     if model == "percent_commission_plus_min_plus_slippage":
-        return percent_min_bps(cfg, profile)
+        return percent_min_bps(cfg, profile, ticker=ticker)
 
     raise ValueError(f"unsupported cost model: {model}")

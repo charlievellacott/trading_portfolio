@@ -373,6 +373,8 @@ def config_from_stack(stack: dict, **overrides) -> S2SimConfig:
         "vol_mode": stack.get("VOL_STAR") or "fixed_k",
         "z_window_mode": stack.get("Z_WINDOW_MODE_STAR") or "fixed",
         "entry_mode": stack.get("ENTRY_STAR") or "trad_z",
+        "cost_profile": stack.get("COST_PROFILE_STAR")
+        or default_cost_profile_for_universe(stack.get("UNIVERSE_STAR")),
     }
     kwargs.update(overrides)
     return S2SimConfig(**kwargs)
@@ -475,3 +477,122 @@ def overlay_ols_hedge(
 
 def tearsheet_path(hyp_id: str, arm: str) -> str:
     return os.path.join(ARTIFACTS_DIR, f"{hyp_id}_{arm}.pdf")
+
+
+# Option 4 validation tiers (see s2_hypothesis_log.md).
+HYPOTHESIS_TIERS: dict[str, str] = {
+    "H-001": "C",
+    "H-004": "C",
+    "H-005": "C",
+    "H-006": "B",
+    "H-002": "A",
+    "H-003": "A",
+    "H-007": "A",
+    "H-008": "A",
+    "H-009": "A",
+    "H-010": "A",
+    "H-011": "A",
+    "H-012": "B",
+    "H-013": "B",
+    "H-015": "B",
+}
+
+
+def hypothesis_tier(hyp_id: str) -> str:
+    """Return validation tier A/B/C for a hypothesis id (raises if unknown)."""
+    key = str(hyp_id).strip().upper()
+    if key not in HYPOTHESIS_TIERS:
+        raise KeyError(f"no validation tier registered for {hyp_id!r}")
+    return HYPOTHESIS_TIERS[key]
+
+
+def default_cost_profile_for_universe(universe: str | None) -> str | None:
+    """Universe D uses realistic Alpaca costs (tiered slippage + borrow)."""
+    if str(universe or "").strip().upper() == "D":
+        return "US_ALPACA_D_REALISTIC"
+    return None
+
+
+def star_panel_paths(
+    *,
+    universe: str = "D",
+    bar: str = "1d",
+    root: str | None = None,
+) -> tuple[str, str, str]:
+    """Train, full, and manifest paths for cached star-stack panels."""
+    data = s2_data_dir(root)
+    train = os.path.join(data, f"s2_panel_{universe}_{bar}_train_star.parquet")
+    full = os.path.join(data, f"s2_panel_{universe}_{bar}_full_star.parquet")
+    manifest = os.path.join(data, f"s2_panel_{universe}_{bar}_star_manifest.json")
+    return train, full, manifest
+
+
+def load_star_panels(
+    *,
+    universe: str = "D",
+    bar: str = "1d",
+    pair_ids: Sequence[str] | None = None,
+    root: str | None = None,
+    require_manifest_match: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Load cached star-stack panels when manifest matches ``s2_star_stack.json``."""
+    import json
+
+    train_path, full_path, manifest_path = star_panel_paths(
+        universe=universe, bar=bar, root=root
+    )
+    if not os.path.isfile(train_path):
+        raise FileNotFoundError(
+            f"missing {train_path}. Run build_star_panels.ipynb after H-005/H-006 freeze."
+        )
+    manifest: dict = {}
+    if os.path.isfile(manifest_path):
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+    if require_manifest_match and os.path.isfile(DEFAULT_STAR_STACK):
+        with open(DEFAULT_STAR_STACK, encoding="utf-8") as f:
+            stack = json.load(f)
+        if manifest.get("stack_hash") and manifest.get("stack_hash") != _stack_hash(stack):
+            raise ValueError(
+                "star panel manifest does not match current s2_star_stack.json; rebuild panels"
+            )
+    train = pd.read_parquet(train_path)
+    full = pd.read_parquet(full_path) if os.path.isfile(full_path) else train.copy()
+    if pair_ids is not None:
+        train = filter_pairs(train, pair_ids)
+        full = filter_pairs(full, pair_ids)
+    train["date"] = pd.to_datetime(train["date"])
+    full["date"] = pd.to_datetime(full["date"])
+    return train, full, manifest
+
+
+def _stack_hash(stack: dict) -> str:
+    import hashlib
+    import json
+
+    payload = json.dumps(stack, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def write_star_panel_manifest(
+    path: str,
+    stack: dict,
+    *,
+    pair_ids: Sequence[str],
+    extra: dict | None = None,
+) -> None:
+    """Write manifest alongside star parquets (stack hash + pair list)."""
+    import json
+
+    payload = {
+        "stack_hash": _stack_hash(stack),
+        "universe": stack.get("UNIVERSE_STAR"),
+        "bar": stack.get("BAR_STAR"),
+        "pair_ids": list(pair_ids),
+    }
+    if extra:
+        payload.update(extra)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
+        f.write("\n")

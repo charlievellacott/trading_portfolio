@@ -626,3 +626,86 @@ def filter_pairs(panel: pd.DataFrame, pair_ids: Sequence[str]) -> pd.DataFrame:
     if panel.empty:
         return panel.copy()
     return _filter_pairs(panel, pair_ids)
+
+
+def stack_scorecard(
+    panel: pd.DataFrame,
+    stack: dict,
+    *,
+    use_oos: bool = False,
+    is_end: pd.Timestamp | str | None = None,
+    s1_weekly: pd.Series | None = None,
+    cost_profile: str | None = None,
+) -> dict:
+    """Full frozen-stack book metrics via ``run_s2_backtest`` (Universe D diagnosis)."""
+    from backtest.s2_coint.research import config_from_stack, is_end_for_stack
+    from backtest.s2_coint.runner import run_s2_backtest
+
+    window = slice_panel_window(
+        panel,
+        is_end or is_end_for_stack(stack, panel),
+        use_oos=use_oos,
+    )
+    cfg = config_from_stack(stack)
+    if cost_profile is not None:
+        from dataclasses import replace
+
+        cfg = replace(cfg, cost_profile=cost_profile)
+    mean_abs = 1.0
+    if cfg.size_mode != "equal" and "z" in window.columns:
+        m = float(window["z"].astype(float).abs().mean())
+        if np.isfinite(m) and m > 0:
+            mean_abs = m
+    res = run_s2_backtest(window, cfg, s1_weekly=s1_weekly, mean_abs_score=mean_abs)
+    pair_returns: dict[str, pd.Series] = {
+        str(pid): pr.returns for pid, pr in res.book.pair_results.items()
+    }
+    enriched_parts: list[pd.DataFrame] = []
+    for pid, pr in res.book.pair_results.items():
+        g = window.loc[window["pair_id"].astype(str) == str(pid)]
+        enriched_parts.append(enrich_trades(pr.trades, g, pr.returns))
+    pair_trades = (
+        pd.concat(enriched_parts, ignore_index=True)
+        if enriched_parts
+        else pd.DataFrame(columns=list(_ENRICHED_TRADE_COLS))
+    )
+    return {
+        "metrics": res.metrics,
+        "returns": res.returns,
+        "pair_trades": pair_trades,
+        "pair_returns": pair_returns,
+        "config": cfg,
+    }
+
+
+def pair_deployment_table(
+    pair_trades: pd.DataFrame,
+    *,
+    periods_per_year: float = PERIODS_PER_YEAR,
+) -> pd.DataFrame:
+    """Per-pair round-trip counts, median hold, and cost drag from enriched trades."""
+    cols = [
+        "pair_id",
+        "n_round_trips",
+        "median_hold_bars",
+        "median_entry_cost_bps",
+        "median_exit_cost_bps",
+        "median_pnl_pct",
+    ]
+    if pair_trades is None or pair_trades.empty:
+        return pd.DataFrame(columns=cols)
+    rows = []
+    for pid, g in pair_trades.groupby("pair_id", sort=False):
+        rows.append(
+            {
+                "pair_id": str(pid),
+                "n_round_trips": int(len(g)),
+                "median_hold_bars": float(g["hold_bars"].median()),
+                "median_entry_cost_bps": float(g["entry_cost_bps"].median()),
+                "median_exit_cost_bps": float(g["exit_cost_bps"].median()),
+                "median_pnl_pct": float(g["pnl_pct"].median())
+                if "pnl_pct" in g.columns
+                else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)

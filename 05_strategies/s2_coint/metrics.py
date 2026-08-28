@@ -17,6 +17,27 @@ from strategies.s2_coint.baseline import (
 from strategies.s2_coint.costs import market_profile_for_pair
 
 
+def panel_session_dates(panel: pd.DataFrame) -> pd.DatetimeIndex:
+    """Sorted unique session dates on a long pair panel (book return calendar)."""
+    if panel is None or panel.empty or "date" not in panel.columns:
+        return pd.DatetimeIndex([])
+    return pd.DatetimeIndex(pd.to_datetime(panel["date"])).sort_values().unique()
+
+
+def book_returns_to_calendar(
+    book_returns: pd.Series,
+    master_dates: pd.DatetimeIndex | pd.Series,
+) -> pd.Series:
+    """Reindex book returns to a full session calendar; missing days → 0."""
+    if book_returns.empty:
+        idx = pd.DatetimeIndex(pd.to_datetime(master_dates)).sort_values().unique()
+        return pd.Series(0.0, index=idx, dtype=float, name="ret")
+    idx = pd.DatetimeIndex(pd.to_datetime(master_dates)).sort_values().unique()
+    out = book_returns.astype(float).reindex(idx).fillna(0.0)
+    out.name = book_returns.name or "ret"
+    return out
+
+
 def metrics_from_returns(
     ret: pd.Series,
     *,

@@ -98,9 +98,11 @@ def _cache_key(
     label: str,
     *,
     interval: str = "1d",
+    auto_adjust: bool = True,
 ) -> str:
+    adj = "adj" if auto_adjust else "raw"
     payload = (
-        f"{label}|{interval}|{start.date()}|{end.date()}|{','.join(sorted(tickers))}"
+        f"{label}|{interval}|{adj}|{start.date()}|{end.date()}|{','.join(sorted(tickers))}"
     )
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
@@ -291,6 +293,7 @@ def _download_ohlcv(
     cache_label: str,
     isAsian: bool = False,
     interval: str = "1d",
+    auto_adjust: bool = True,
 ) -> pd.DataFrame:
     """Batch-download OHLCV for tickers in [start, end] at ``interval`` (``1d`` or ``1h``)."""
     if interval not in VALID_OHLCV_INTERVALS:
@@ -303,7 +306,7 @@ def _download_ohlcv(
         return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
 
     if cache_dir is not None:
-        key = _cache_key(tickers, start, end, cache_label, interval=interval)
+        key = _cache_key(tickers, start, end, cache_label, interval=interval, auto_adjust=auto_adjust)
         cached = _read_cache(cache_dir, key)
         if cached is not None:
             cached.columns.name = None
@@ -331,7 +334,7 @@ def _download_ohlcv(
                     start=start.date(),
                     end=end_exclusive.date(),
                     interval=interval,
-                    auto_adjust=True,
+                    auto_adjust=auto_adjust,
                     group_by="ticker",
                     threads=True,
                     progress=False,
@@ -502,11 +505,16 @@ def fetch_ohlcv(
     cache_dir: str | None = DEFAULT_CACHE_DIR,
     isAsian: bool = False,
     interval: str = "1d",
+    auto_adjust: bool = True,
 ) -> pd.DataFrame:
     """
     Return long-format OHLCV for a single ticker over ``[start_date, end_date]``.
 
     Columns: date, ticker, open, high, low, close, volume
+
+    ``auto_adjust`` is passed to yfinance (default True for S1-style panels).
+    S2 cointegration panels should pass ``auto_adjust=False`` for raw/unadjusted
+    closes on share-class and dividend names.
 
     ``interval`` is ``1d`` (default) or ``1h``. Hourly timestamps are **not**
     normalized to midnight; they are converted to **naive UTC** in
@@ -539,6 +547,7 @@ def fetch_ohlcv(
         cache_label=f"single_{symbol}",
         isAsian=isAsian,
         interval=interval,
+        auto_adjust=auto_adjust,
     )
 
     if panel.empty:
