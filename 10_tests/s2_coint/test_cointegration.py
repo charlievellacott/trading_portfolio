@@ -25,7 +25,10 @@ from data.processing.feature_implementation.cointegration import (
     test_cointegration,
     to_log_price,
 )
-from data.processing.feature_implementation.kalman import kalman_linear_regression
+from data.processing.feature_implementation.kalman import (
+    kalman_correlation,
+    kalman_linear_regression,
+)
 from data.processing.s2_coint_store import (
     COINT_METRICS,
     _validate_pair_inputs,
@@ -248,6 +251,32 @@ def test_kalman_recovers_constant_beta_after_burn_in():
     assert out["beta"].iloc[:50].isna().all()
     # After burn-in, mean beta near truth
     assert out["beta"].iloc[100:].mean() == pytest.approx(true_beta, rel=0.1, abs=0.15)
+
+
+def test_no_lookahead_kalman_correlation():
+    rng = np.random.default_rng(41)
+    n = 400
+    idx = _dates(n)
+    z = pd.Series(rng.normal(0.0, 1.0, size=n), index=idx)
+    a = z + pd.Series(rng.normal(0.0, 0.3, size=n), index=idx)
+    b = z + pd.Series(rng.normal(0.0, 0.3, size=n), index=idx)
+    full = kalman_correlation(a, b, burn_in=20, vol_span=40)
+    cut = 250
+    pref = kalman_correlation(a.iloc[:cut], b.iloc[:cut], burn_in=20, vol_span=40)
+    _assert_prefix_stable(full, pref)
+
+
+def test_kalman_correlation_recovers_high_rho():
+    rng = np.random.default_rng(42)
+    n = 600
+    idx = _dates(n)
+    z = pd.Series(rng.normal(0.0, 1.0, size=n), index=idx)
+    noise = pd.Series(rng.normal(0.0, 0.05, size=n), index=idx)
+    a, b = z, z + noise
+    rho = kalman_correlation(a, b, delta=1e-4, burn_in=40, vol_span=40)
+    assert rho.iloc[:40].isna().all()
+    assert float(rho.iloc[200:].mean()) > 0.85
+    assert float(rho.dropna().abs().max()) <= 1.0 + 1e-12
 
 
 def test_slower_kalman_delta_has_higher_spread_autocorr():

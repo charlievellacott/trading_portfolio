@@ -133,3 +133,62 @@ def kalman_linear_regression(
         },
         index=y.index,
     )
+
+
+def kalman_correlation(
+    a: pd.Series,
+    b: pd.Series,
+    *,
+    delta: float = 1e-4,
+    obs_var: float = 1.0,
+    burn_in: int = 30,
+    vol_span: int = 60,
+) -> pd.Series:
+    """Time-varying correlation via Kalman on EW-standardized products (H-011).
+
+    Standardize ``a`` / ``b`` with a causal EWM std, observe the product
+    ``u_t * v_t`` as a noisy measurement of scalar state ``ρ``, and return the
+    **posterior** ``ρ̂_t`` (info through ``t``), clipped to ``[-1, 1]``.
+    Burn-in rows are NaN. Uses ``_run_kalman`` only — no second KF core.
+
+    Default ``obs_var=1.0`` matches ``Var(u v) ≈ 1`` under independence for
+    approximately unit-variance inputs (unlike the hedge filter's ``1e-3``).
+    """
+    if delta <= 0.0 or delta >= 1.0:
+        raise ValueError(f"delta must be in (0, 1), got {delta!r}")
+    if obs_var <= 0.0:
+        raise ValueError(f"obs_var must be > 0, got {obs_var!r}")
+    if burn_in < 0:
+        raise ValueError(f"burn_in must be >= 0, got {burn_in!r}")
+    if vol_span < 2:
+        raise ValueError(f"vol_span must be >= 2, got {vol_span!r}")
+    if len(a) != len(b):
+        raise ValueError("a and b must have the same length")
+    if not a.index.equals(b.index):
+        raise ValueError("a and b must share an identical index")
+
+    a_s = a.astype(float)
+    b_s = b.astype(float)
+    sig_a = a_s.ewm(span=vol_span, min_periods=vol_span, adjust=False).std()
+    sig_b = b_s.ewm(span=vol_span, min_periods=vol_span, adjust=False).std()
+    u = a_s / sig_a
+    v = b_s / sig_b
+    product = (u * v).to_numpy(dtype=float)
+
+    n = len(product)
+    F = np.ones((n, 1), dtype=float)
+    q_scale = delta / (1.0 - delta)
+    Q = q_scale * np.eye(1)
+    theta0 = np.zeros(1, dtype=float)
+    P0 = np.eye(1, dtype=float)
+
+    _, theta_post, _, _, _ = _run_kalman(
+        product, F, Q, float(obs_var), theta0, P0
+    )
+    rho = np.clip(theta_post[:, 0], -1.0, 1.0)
+    if burn_in > 0:
+        rho[: min(burn_in, n)] = np.nan
+    # No finite product → no update; keep NaN rather than a stale zero state.
+    bad = ~np.isfinite(product)
+    rho[bad] = np.nan
+    return pd.Series(rho, index=a.index, dtype=float, name="rho")
