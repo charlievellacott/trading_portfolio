@@ -27,8 +27,23 @@ Good in-sample metrics are not evidence until validated without reuse of the tes
 
 ## Metric discipline
 
-- Prefer deflated Sharpe, PBO, or simple "variants tried vs. best" accounting when running many experiments.
-- Compare against a naive baseline (buy-and-hold, random timing, zero signal) on the same universe and costs.
+- **Primary:** net `ann_sharpe` (not deflated). **Co-primary:** `max_drawdown`, `corr_to_s1` on the same return series.
+- **Secondary (trial-aware):** `psr` = P(true SR > 1.0); `dsr_local` (N = current screen arms); `dsr_stack` (N = cumulative variant ledger). Not used for STAR ranking.
+- Maintain a **variant ledger** (`04_backtest/s2_coint/artifacts/s2_variant_ledger.json`) via `register_hypothesis_arms` when pre-registered arms change.
+- Compare against a naive baseline on the same universe and costs. **No PBO / CSCV** in this stack.
+
+## Canonical modules (do not reimplement inline)
+
+| Need | Module / API |
+|------|----------------|
+| PSR / DSR math | `09_performance/sharpe_inference.py` |
+| Net metrics + inference | `05_strategies/s2_coint/metrics.py` — `metrics_from_returns_inference` |
+| S2 runner | `04_backtest/s2_coint/runner.py` — `run_s2_backtest` |
+| Fold-val / selection | `04_backtest/s2_coint/report.py` |
+| Trial ledger | `04_backtest/s2_coint/research.py` |
+| Interpretation | `05_strategies/s2_coint/s2_algorithm_notes.md` — PSR/DSR + ledger |
+
+For mandatory column wiring in hypothesis/backtest notebooks, see `.cursor/rules/backtest-inference-metrics.mdc`.
 
 ## Red flags
 

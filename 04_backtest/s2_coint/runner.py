@@ -19,7 +19,7 @@ from data.processing.s2_coint_store import (
 from strategies.s2_coint.baseline import PERIODS_PER_YEAR
 from strategies.s2_coint.config import S2SimConfig
 from strategies.s2_coint.engine import BookSimResult, simulate_book
-from strategies.s2_coint.metrics import corr_to_s1, metrics_from_returns
+from strategies.s2_coint.metrics import corr_to_s1, metrics_from_returns, metrics_from_returns_inference
 from strategies.s2_coint.spread_ohlc import attach_spread_indicators
 
 
@@ -131,6 +131,8 @@ def run_s2_backtest(
     s1_weekly: pd.Series | None = None,
     mean_abs_score: float = 1.0,
     hmm_params: dict[str, GaussianHMM2Params] | None = None,
+    n_trials_local: int | None = None,
+    n_trials_stack: int | None = None,
 ) -> S2BacktestResult:
     """Simulate the book on ``panel`` (optionally masked to val/OOS dates)."""
     cfg = cfg or S2SimConfig()
@@ -149,7 +151,12 @@ def run_s2_backtest(
     ppy = periods_per_year_from_index(
         pd.DatetimeIndex(book.returns.index), bar=cfg.bar
     )
-    m = metrics_from_returns(book.returns, periods_per_year=ppy)
+    m = metrics_from_returns_inference(
+        book.returns,
+        periods_per_year=ppy,
+        n_trials_local=n_trials_local,
+        n_trials_stack=n_trials_stack,
+    )
     m["corr_to_s1"] = corr_to_s1(book.returns, s1_weekly)
     trades = []
     for res in book.pair_results.values():

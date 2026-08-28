@@ -4,11 +4,13 @@
 
 Purged expanding walk-forward on **research IS** (3 folds, 5-day embargo) → per-arm fold-val tables and boxplots → **discretionary STAR** at a typed freeze cell → full-IS report for the frozen arm → **one** sealed OOS tearsheet.
 
-**Core rules:** fold-train fits stateful objects only (Kalman, HMM, sizing scale); fold-val scores pre-registered arms on validation dates (calendar-dense returns); mandatory UI: `fold_df`, boxplots, `median_val_sharpe`, `full_is_sharpe`, `median_sharpe_hint()` (commentary only); STAR is **human discretionary** (no programmatic veto); sealed OOS once after STAR; maintain a **variant ledger** across the stack.
+**Core rules:** fold-train fits stateful objects only (Kalman, HMM, sizing scale); fold-val scores pre-registered arms on validation dates (calendar-dense returns); mandatory UI: `fold_df`, boxplots, `arm_selection_table(fold_df, full_is_df)`, `median_val_sharpe`, `full_is_sharpe`, `median_sharpe_hint()` (commentary only); STAR is **human discretionary** (no programmatic veto); sealed OOS once after STAR; maintain a **variant ledger** across the stack (`register_hypothesis_arms` before each screen).
+
+**Inference columns (secondary, not for STAR):** `psr` (P(true SR > 1.0)), `dsr_local`, `dsr_stack`. Interpretation: `05_strategies/s2_coint/s2_algorithm_notes.md`. We do **not** report PBO or P(true SR >= reported SR) (~0.5 when benchmark equals the point estimate).
 
 **Tiers** (`backtest.s2_coint.research.hypothesis_tier`): **C** H-001/004/005; **B** H-006/012 scale/013/015; **A** H-002/003/007–011/012 rule.
 
-**Helpers:** `fold_val_metrics`, `full_is_metrics`, `arm_selection_table` in `04_backtest/s2_coint/report.py`; `load_star_panels` after H-005/H-006 freeze.
+**Helpers:** `fold_val_metrics`, `full_is_metrics`, `arm_selection_table` in `04_backtest/s2_coint/report.py` (pass `hyp_id=` for PSR/DSR); variant ledger in `04_backtest/s2_coint/research.py`; `load_star_panels` after H-005/H-006 freeze.
 
 **Stale note:** H-009–H-012 OOS before calendar-Sharpe fix, raw D panels, and `US_ALPACA_D_REALISTIC` need re-run for decision-grade numbers.
 
@@ -22,6 +24,7 @@ Mirror `03_models/s1_equities/model_tests/06_training_gbm_lambdarank_wf.ipynb`: 
 - **Fold-val:** score each **pre-registered** candidate config (including knobs like ATR multiple) on that fold’s validation segment. Aggregate across folds (boxplots of Sharpe, max DD, corr to S1). Freeze the winner on research IS only; never tune on sealed OOS.
 - **Research IS / sealed OOS:** research IS is the sleeve train panel through that universe’s fixed `RESEARCH_IS_END` (A `2020-12-31`, B `2022-12-31`, C `2021-12-31`, **D / E / F** `2021-12-31`); sealed OOS is after it. Registered in `data.processing.s2_universe_pools.RESEARCH_IS_END_BY_UNIVERSE`. Under `BOOK_STAR = freeze` the pair list is frozen at discovery on `date <= T`; under `rotate` it is re-selected each quarter on data `<= T_rebalance` only (H-004).
 - **Primary metrics (every hyp):** net **Sharpe**, **max drawdown**, and **correlation to S1**. Rank on net Sharpe and report correlation beside it — **no combined score**. Read correlation directionally: **a negative correlation to S1 is strictly better than a low positive one** (−0.2 beats 0.0), because negative correlation adds diversification rather than merely avoiding overlap.
+- **Secondary inference (every hyp screen):** `psr`, `dsr_local`, `dsr_stack` on the same net return series; see algorithm notes. Ledger: `04_backtest/s2_coint/artifacts/s2_variant_ledger.json`; update via `register_hypothesis_arms` when arms add/remove (not when STAR changes).
 
 
 

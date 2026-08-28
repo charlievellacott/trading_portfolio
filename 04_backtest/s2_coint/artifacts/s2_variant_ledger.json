@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {"hyp_id": "H-001", "arms": ["A", "B", "C", "D", "E", "F"], "n_arms": 6},
+    {"hyp_id": "H-002", "arms": ["1d", "1h"], "n_arms": 2},
+    {"hyp_id": "H-003", "arms": ["off", "block_05_flat_10", "flat_05"], "n_arms": 3},
+    {"hyp_id": "H-004", "arms": ["freeze", "rotate"], "n_arms": 2},
+    {"hyp_id": "H-005", "arms": ["ols", "adf", "entry_z", "z_window"], "n_arms": 4},
+    {"hyp_id": "H-006", "arms": ["ols", "kalman"], "n_arms": 2},
+    {"hyp_id": "H-007", "arms": ["off", "adx_veto", "rsi_confirm"], "n_arms": 3},
+    {"hyp_id": "H-008", "arms": ["off", "5_60", "5_30"], "n_arms": 3},
+    {"hyp_id": "H-009", "arms": ["allow", "never_allow"], "n_arms": 2},
+    {"hyp_id": "H-010", "arms": ["mean_only", "hl3_atr_breaker"], "n_arms": 2},
+    {"hyp_id": "H-011", "arms": ["off", "corr_gate"], "n_arms": 2},
+    {"hyp_id": "H-012", "arms": ["equal", "score", "score_conf"], "n_arms": 3}
+  ],
+  "cumulative_arms": 34
+}

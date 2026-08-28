@@ -1,0 +1,48 @@
+---
+description: Mandatory PSR/DSR columns and canonical imports for hypothesis/backtest work
+globs:
+  - "02_research/**/hypothesis_tests/**"
+  - "02_research/s2_coint/notebooks/**"
+  - "02_research/notebooks/s1_equities/**"
+  - "04_backtest/**"
+  - "03_models/**/model_tests/**"
+alwaysApply: false
+---
+
+# Backtest inference metrics (PSR / DSR)
+
+When this rule attaches, wire trial-aware inference through the canonical modules — never hand-roll PSR or DSR in notebooks.
+
+## Canonical modules
+
+| Need | Module / API |
+|------|----------------|
+| PSR / DSR math | `09_performance/sharpe_inference.py` — `probabilistic_sharpe_ratio`, `deflated_sharpe_ratio` |
+| Net metrics + inference | `05_strategies/s2_coint/metrics.py` — `metrics_from_returns_inference` |
+| S2 backtest runner | `04_backtest/s2_coint/runner.py` — `run_s2_backtest` (`n_trials_local`, `n_trials_stack`) |
+| Fold-val / selection tables | `04_backtest/s2_coint/report.py` — `fold_val_metrics`, `full_is_metrics`, `arm_selection_table` |
+| Trial ledger | `04_backtest/s2_coint/research.py` — `register_hypothesis_arms`, `n_trials_local`, `n_trials_stack` |
+| Interpretation | `05_strategies/s2_coint/s2_algorithm_notes.md` — PSR/DSR + ledger only |
+
+## S2 hypothesis notebook pattern
+
+```python
+from backtest.s2_coint.research import register_hypothesis_arms, n_trials_local, n_trials_stack
+
+register_hypothesis_arms("H-009", list(configs.keys()), overwrite=True)
+fold_df = fold_val_metrics(panel, folds, configs, hyp_id="H-009", s1_weekly=s1_weekly)
+full_is_df = full_is_metrics(panel, configs, hyp_id="H-009", s1_weekly=s1_weekly)
+display(arm_selection_table(fold_df, full_is_df))
+# STAR selection stays manual; rank hints use median_val_sharpe only
+```
+
+## Rules
+
+1. Every arm screen must call `register_hypothesis_arms` before scoring (update ledger when pre-registered arms add/remove).
+2. Use `fold_val_metrics(..., hyp_id=...)` and `full_is_metrics(..., hyp_id=...)` so rows include `ann_sharpe`, `max_drawdown`, `corr_to_s1`, `psr`, `dsr_local`, `dsr_stack`, `n_trials_local`, `n_trials_stack`, `n_days`.
+3. Display `arm_selection_table(fold_df, full_is_df)` — keep `max_drawdown` and `corr_to_s1`; no programmatic winner column.
+4. When extending `04_backtest/` metrics code, use `metrics_from_returns_inference`; do not drop co-primary columns.
+5. STAR / ranking stays on median val `ann_sharpe` (Option 4); PSR/DSR are diagnostic only.
+6. Sealed OOS tearsheets: pass trial counts into `write_tearsheet_pdf` when reporting stack DSR.
+
+See also: `.cursor/rules/research-validation-bias.mdc` (validation discipline); `05_strategies/s2_coint/s2_algorithm_notes.md` for metric interpretation.

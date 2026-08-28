@@ -596,3 +596,110 @@ def write_star_panel_manifest(
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, default=str)
         f.write("\n")
+
+
+VARIANT_LEDGER_PATH = os.path.join(ARTIFACTS_DIR, "s2_variant_ledger.json")
+
+HYPOTHESIS_ORDER: tuple[str, ...] = (
+    "H-001",
+    "H-002",
+    "H-003",
+    "H-004",
+    "H-005",
+    "H-006",
+    "H-007",
+    "H-008",
+    "H-009",
+    "H-010",
+    "H-011",
+    "H-012",
+    "H-013",
+    "H-014",
+    "H-015",
+)
+
+
+def _normalize_hyp_id(hyp_id: str) -> str:
+    key = str(hyp_id).strip().upper()
+    if key not in HYPOTHESIS_ORDER:
+        raise KeyError(f"unknown hyp_id {hyp_id!r}; expected one of {HYPOTHESIS_ORDER}")
+    return key
+
+
+def load_variant_ledger(path: str | None = None) -> dict:
+    p = path or VARIANT_LEDGER_PATH
+    if not os.path.isfile(p):
+        return {"entries": [], "cumulative_arms": 0}
+    import json
+
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_variant_ledger(payload: dict, path: str | None = None) -> None:
+    import json
+
+    p = path or VARIANT_LEDGER_PATH
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    entries = payload.get("entries") or []
+    payload["cumulative_arms"] = int(
+        sum(int(e.get("n_arms", len(e.get("arms", [])))) for e in entries)
+    )
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
+        f.write("\n")
+
+
+def cumulative_trials_before(hyp_id: str, *, path: str | None = None) -> int:
+    """Sum registered arms for hyps strictly before ``hyp_id`` in stack order."""
+    key = _normalize_hyp_id(hyp_id)
+    idx = HYPOTHESIS_ORDER.index(key)
+    if idx == 0:
+        return 0
+    prior = set(HYPOTHESIS_ORDER[:idx])
+    ledger = load_variant_ledger(path)
+    total = 0
+    for entry in ledger.get("entries") or []:
+        eid = str(entry.get("hyp_id", "")).strip().upper()
+        if eid in prior:
+            total += int(entry.get("n_arms", len(entry.get("arms", []))))
+    return total
+
+
+def n_trials_local(configs: dict) -> int:
+    return len(configs)
+
+
+def n_trials_stack(hyp_id: str, configs: dict, *, path: str | None = None) -> int:
+    return cumulative_trials_before(hyp_id, path=path) + n_trials_local(configs)
+
+
+def register_hypothesis_arms(
+    hyp_id: str,
+    arm_names: Sequence[str],
+    *,
+    overwrite: bool = False,
+    path: str | None = None,
+) -> dict:
+    """Append or replace the ledger entry for a hypothesis screen."""
+    key = _normalize_hyp_id(hyp_id)
+    arms = [str(a) for a in arm_names]
+    ledger = load_variant_ledger(path)
+    entries: list[dict] = list(ledger.get("entries") or [])
+    row = {"hyp_id": key, "arms": arms, "n_arms": len(arms)}
+    replaced = False
+    for i, entry in enumerate(entries):
+        if str(entry.get("hyp_id", "")).strip().upper() == key:
+            if not overwrite:
+                raise ValueError(
+                    f"{key} already in variant ledger; pass overwrite=True to replace"
+                )
+            entries[i] = row
+            replaced = True
+            break
+    if not replaced:
+        entries.append(row)
+    entries.sort(key=lambda e: HYPOTHESIS_ORDER.index(_normalize_hyp_id(e["hyp_id"])))
+    ledger["entries"] = entries
+    save_variant_ledger(ledger, path)
+    return ledger

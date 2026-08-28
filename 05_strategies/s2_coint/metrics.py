@@ -62,6 +62,51 @@ def metrics_from_returns(
     }
 
 
+def metrics_from_returns_inference(
+    ret: pd.Series,
+    *,
+    periods_per_year: float = PERIODS_PER_YEAR,
+    n_trials_local: int | None = None,
+    n_trials_stack: int | None = None,
+    psr_benchmark: float = 1.0,
+) -> dict:
+    """Net Sharpe / DD / n_days plus PSR and deflated Sharpe (local + stack trial counts)."""
+    from performance.sharpe_inference import (
+        deflated_sharpe_ratio,
+        probabilistic_sharpe_ratio,
+        return_moments,
+    )
+
+    base = metrics_from_returns(ret, periods_per_year=periods_per_year)
+    out = {
+        **base,
+        "psr": float("nan"),
+        "dsr_local": float("nan"),
+        "dsr_stack": float("nan"),
+        "skew": float("nan"),
+        "excess_kurtosis": float("nan"),
+        "n_trials_local": n_trials_local,
+        "n_trials_stack": n_trials_stack,
+    }
+    if ret.empty:
+        return out
+    mom = return_moments(ret, periods_per_year=periods_per_year)
+    out["skew"] = mom["skew"]
+    out["excess_kurtosis"] = float(mom["kurtosis"] - 3.0) if np.isfinite(mom["kurtosis"]) else float("nan")
+    sr = mom["sr"]
+    n = mom["n_obs"]
+    sk = mom["skew"]
+    ku = mom["kurtosis"]
+    out["psr"] = probabilistic_sharpe_ratio(
+        sr, n, sk, ku, sr_benchmark=psr_benchmark
+    )
+    if n_trials_local is not None and int(n_trials_local) >= 1:
+        out["dsr_local"] = deflated_sharpe_ratio(sr, n, sk, ku, int(n_trials_local))
+    if n_trials_stack is not None and int(n_trials_stack) >= 1:
+        out["dsr_stack"] = deflated_sharpe_ratio(sr, n, sk, ku, int(n_trials_stack))
+    return out
+
+
 def cost_bps_per_year(
     ret: pd.Series,
     trades: pd.DataFrame,

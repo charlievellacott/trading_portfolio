@@ -13,7 +13,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from backtest.s2_coint.runner import fit_hmm_on_train_dates, run_s2_backtest
 from backtest.s2_coint.walkforward import S2WalkForwardFold
 from strategies.s2_coint.config import S2SimConfig
-from strategies.s2_coint.metrics import corr_to_s1, metrics_from_returns
+from strategies.s2_coint.metrics import corr_to_s1, metrics_from_returns, metrics_from_returns_inference
 
 
 def fold_table(folds: list[S2WalkForwardFold]) -> pd.DataFrame:
@@ -98,11 +98,25 @@ def _fold_train_state(
     return mean_abs, hmm
 
 
+def _inference_trial_counts(
+    hyp_id: str | None,
+    configs: dict[str, S2SimConfig],
+) -> tuple[int | None, int | None]:
+    if hyp_id is None:
+        return None, None
+    from backtest.s2_coint.research import n_trials_local, n_trials_stack
+
+    n_loc = n_trials_local(configs)
+    n_stk = n_trials_stack(hyp_id, configs)
+    return n_loc, n_stk
+
+
 def fold_val_metrics(
     panel: pd.DataFrame,
     folds: list[S2WalkForwardFold],
     configs: dict[str, S2SimConfig],
     *,
+    hyp_id: str | None = None,
     s1_weekly: pd.Series | None = None,
     score_column: str = "z",
 ) -> pd.DataFrame:
@@ -113,6 +127,7 @@ def fold_val_metrics(
     """
     rows = []
     dates = pd.to_datetime(panel["date"])
+    n_loc, n_stk = _inference_trial_counts(hyp_id, configs)
     for name, cfg in configs.items():
         for f in folds:
             mean_abs, hmm = _fold_train_state(panel, f, cfg, score_column=score_column)
@@ -124,6 +139,8 @@ def fold_val_metrics(
                 s1_weekly=s1_weekly,
                 mean_abs_score=mean_abs,
                 hmm_params=hmm,
+                n_trials_local=n_loc,
+                n_trials_stack=n_stk,
             )
             n_entries = int(sum(pr.n_entries for pr in res.book.pair_results.values()))
             stats = _fold_val_panel_stats(
@@ -136,6 +153,11 @@ def fold_val_metrics(
                     "ann_sharpe": res.metrics["ann_sharpe"],
                     "max_drawdown": res.metrics["max_drawdown"],
                     "corr_to_s1": res.metrics["corr_to_s1"],
+                    "psr": res.metrics.get("psr", float("nan")),
+                    "dsr_local": res.metrics.get("dsr_local", float("nan")),
+                    "dsr_stack": res.metrics.get("dsr_stack", float("nan")),
+                    "n_trials_local": res.metrics.get("n_trials_local"),
+                    "n_trials_stack": res.metrics.get("n_trials_stack"),
                     "n_days": res.metrics["n_days"],
                     "n_entries": n_entries,
                     "pct_z_finite": stats["pct_z_finite"],
@@ -150,6 +172,7 @@ def full_is_metrics(
     panel: pd.DataFrame,
     configs: dict[str, S2SimConfig],
     *,
+    hyp_id: str | None = None,
     s1_weekly: pd.Series | None = None,
     score_column: str = "z",
 ) -> pd.DataFrame:
@@ -159,6 +182,7 @@ def full_is_metrics(
     """
     rows = []
     dates = pd.DatetimeIndex(pd.to_datetime(panel["date"])).sort_values().unique()
+    n_loc, n_stk = _inference_trial_counts(hyp_id, configs)
     for name, cfg in configs.items():
         mean_abs = 1.0
         if cfg.size_mode != "equal" and score_column in panel.columns:
@@ -176,6 +200,8 @@ def full_is_metrics(
             s1_weekly=s1_weekly,
             mean_abs_score=mean_abs,
             hmm_params=hmm,
+            n_trials_local=n_loc,
+            n_trials_stack=n_stk,
         )
         n_entries = int(sum(pr.n_entries for pr in res.book.pair_results.values()))
         rows.append(
@@ -184,6 +210,9 @@ def full_is_metrics(
                 "full_is_sharpe": res.metrics["ann_sharpe"],
                 "full_is_max_drawdown": res.metrics["max_drawdown"],
                 "full_is_corr_to_s1": res.metrics["corr_to_s1"],
+                "full_is_psr": res.metrics.get("psr", float("nan")),
+                "full_is_dsr_local": res.metrics.get("dsr_local", float("nan")),
+                "full_is_dsr_stack": res.metrics.get("dsr_stack", float("nan")),
                 "full_is_n_days": res.metrics["n_days"],
                 "full_is_n_entries": n_entries,
             }
@@ -203,36 +232,55 @@ def arm_selection_table(
             "full_is_sharpe",
             "max_drawdown",
             "corr_to_s1",
+            "median_psr",
+            "median_dsr_local",
+            "median_dsr_stack",
+            "full_is_psr",
+            "full_is_dsr_local",
+            "full_is_dsr_stack",
             "n_folds",
         ]
         return pd.DataFrame(columns=cols)
-    val = (
-        fold_df.groupby("arm", as_index=False)
-        .agg(
-            median_val_sharpe=("ann_sharpe", "median"),
-            max_drawdown=("max_drawdown", "median"),
-            corr_to_s1=("corr_to_s1", "median"),
-            n_folds=("fold_id", "nunique"),
-        )
-    )
+    agg_spec: dict[str, tuple[str, str]] = {
+        "median_val_sharpe": ("ann_sharpe", "median"),
+        "max_drawdown": ("max_drawdown", "median"),
+        "corr_to_s1": ("corr_to_s1", "median"),
+        "n_folds": ("fold_id", "nunique"),
+    }
+    if "psr" in fold_df.columns:
+        agg_spec["median_psr"] = ("psr", "median")
+        agg_spec["median_dsr_local"] = ("dsr_local", "median")
+        agg_spec["median_dsr_stack"] = ("dsr_stack", "median")
+    val = fold_df.groupby("arm", as_index=False).agg(**agg_spec)
     if full_is_df is not None and not full_is_df.empty:
-        val = val.merge(
-            full_is_df[["arm", "full_is_sharpe"]],
-            on="arm",
-            how="left",
-        )
+        merge_cols = ["arm", "full_is_sharpe"]
+        for c in ("full_is_psr", "full_is_dsr_local", "full_is_dsr_stack"):
+            if c in full_is_df.columns:
+                merge_cols.append(c)
+        val = val.merge(full_is_df[merge_cols], on="arm", how="left")
     else:
         val["full_is_sharpe"] = float("nan")
-    return val[
-        [
-            "arm",
-            "median_val_sharpe",
-            "full_is_sharpe",
-            "max_drawdown",
-            "corr_to_s1",
-            "n_folds",
-        ]
+        for c in ("full_is_psr", "full_is_dsr_local", "full_is_dsr_stack"):
+            val[c] = float("nan")
+    out_cols = [
+        "arm",
+        "median_val_sharpe",
+        "full_is_sharpe",
+        "max_drawdown",
+        "corr_to_s1",
+        "n_folds",
     ]
+    for c in (
+        "median_psr",
+        "median_dsr_local",
+        "median_dsr_stack",
+        "full_is_psr",
+        "full_is_dsr_local",
+        "full_is_dsr_stack",
+    ):
+        if c in val.columns:
+            out_cols.append(c)
+    return val[out_cols]
 
 
 def median_sharpe_hint(fold_df: pd.DataFrame) -> str | None:
@@ -285,7 +333,14 @@ def save_star_stack(path: str, payload: dict) -> None:
         f.write("\n")
 
 
-def write_tearsheet_pdf(path: str, returns: pd.Series, *, title: str) -> None:
+def write_tearsheet_pdf(
+    path: str,
+    returns: pd.Series,
+    *,
+    title: str,
+    n_trials_local: int | None = None,
+    n_trials_stack: int | None = None,
+) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     orig_show = plt.show
     plt.show = lambda *a, **k: None
@@ -299,12 +354,20 @@ def write_tearsheet_pdf(path: str, returns: pd.Series, *, title: str) -> None:
             pdf.savefig(fig)
             plt.close(fig)
             fig, ax = plt.subplots(figsize=(8, 3))
-            m = metrics_from_returns(returns)
+            m = metrics_from_returns_inference(
+                returns,
+                n_trials_local=n_trials_local,
+                n_trials_stack=n_trials_stack,
+            )
             ax.axis("off")
             ax.text(
                 0.1,
                 0.5,
-                f"Sharpe={m['ann_sharpe']}\nmaxDD={m['max_drawdown']}\nn={m['n_days']}",
+                (
+                    f"Sharpe={m['ann_sharpe']}\nmaxDD={m['max_drawdown']}\n"
+                    f"psr={m.get('psr')}\ndsr_local={m.get('dsr_local')}\n"
+                    f"dsr_stack={m.get('dsr_stack')}\nn={m['n_days']}"
+                ),
                 fontsize=12,
             )
             pdf.savefig(fig)

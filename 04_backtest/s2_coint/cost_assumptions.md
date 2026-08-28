@@ -131,4 +131,4 @@ Profile key: `US_ALPACA_D_REALISTIC` in `strategies.s2_coint.costs`. Default for
 - Included: tiered slippage by share class, flat annual borrow on shorts, calendar-dense Sharpe.
 - Not included (stress tier only): vol-scaled slippage, locate / HTB fee spikes, pair-specific bid–ask spread, dividend adjustment on one leg only.
 
-Baseline `US_ALPACA` (flat 3.2 bps/leg, no borrow) remains available via `S2SimConfig(cost_profile=None)` or explicit `COST_PROFILE_STAR` in the stack JSON.
+Baseline `US_ALPACA` (flat 3.2 bps/leg, no borrow) remains available via `S2SimConfig(cost_profile=None)` or explicit `COST_PROFILE_STAR` in the stack JSON. **PSR / DSR / Sharpe / max DD** on research tables and tearsheets are computed on **net** returns after the active cost profile (including borrow when applicable).

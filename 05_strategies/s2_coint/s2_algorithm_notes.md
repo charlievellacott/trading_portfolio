@@ -6,7 +6,20 @@ When `overlap_mode = never_allow` or a corr gate is active, the joint book simul
 
 ## Option 4 research workflow
 
-See `02_research/s2_coint/s2_hypothesis_log.md`. Notebook sequence: `fold_val_metrics` → display `fold_df` + boxplots → `arm_selection_table(fold_df, full_is_df)` → **type STAR manually** → `full_is_metrics` report → sealed OOS once. Helpers live in `04_backtest/s2_coint/report.py`; tier map in `04_backtest/s2_coint/research.py`.
+See `02_research/s2_coint/s2_hypothesis_log.md`. Notebook sequence: `register_hypothesis_arms` → `fold_val_metrics(..., hyp_id=...)` → display `fold_df` + boxplots → `full_is_metrics` → `arm_selection_table(fold_df, full_is_df)` → **type STAR manually** → sealed OOS once. Helpers live in `04_backtest/s2_coint/report.py`; tier map and variant ledger in `04_backtest/s2_coint/research.py`.
+
+## Research inference metrics (PSR / DSR)
+
+**PSR** — `psr = P(true_SR > 1.0 | T, skew, kurt)` on net returns. Probability true Sharpe exceeds 1.0 given sample length T and return shape. Near 1: credible edge at that hurdle; near 0: plausibly luck. Not used for STAR ranking.
+
+**DSR (local)** — `dsr_local` = deflated Sharpe after `N_local` arms in **this** screen. If `dsr_local << ann_sharpe`, the local bake-off may inflate headline Sharpe.
+
+**DSR (stack)** — Same as local but `N_stack` = cumulative arms in `04_backtest/s2_coint/artifacts/s2_variant_ledger.json`. Penalizes sequential H-001 through current hyp search.
+
+**Variant ledger** — Update `s2_variant_ledger.json` via `register_hypothesis_arms(hyp_id, arms, overwrite=True)` when pre-registered **arms add/remove**; not when STAR choice changes. Re-run screens after ledger edits so `dsr_stack` matches. Math: `09_performance/sharpe_inference.py`.
+
+**Not reported:** PBO; `P(true_SR >= reported_SR)` (~0.5 if benchmark equals the point estimate).
+
 
 ## Raw vs adjusted prices (Universe D)
 
