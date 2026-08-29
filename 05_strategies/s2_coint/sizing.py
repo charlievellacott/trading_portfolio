@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 
 def pair_scale_from_score(
@@ -22,6 +23,25 @@ def pair_scale_from_score(
         s = s * (1.0 - p)
     denom = float(mean_abs_score) if np.isfinite(mean_abs_score) and mean_abs_score > 0 else 1.0
     return s / denom
+
+
+def rolling_mean_abs_score(score: pd.Series, window: int) -> pd.Series:
+    """PIT rolling mean of ``|score|`` with ``min_periods=window`` (NaN until full)."""
+    w = int(window)
+    if w < 1:
+        raise ValueError("window must be >= 1")
+    return score.astype(float).abs().rolling(w, min_periods=w).mean()
+
+
+def gross_normalized_legs(side: int, beta: float) -> tuple[float, float]:
+    """Dollar weights ``(y_w, x_w)`` with ``|y_w| + |x_w| = 1`` for a spread side."""
+    y_w = float(side)
+    x_w = -float(side) * float(beta)
+    gross = abs(y_w) + abs(x_w)
+    if gross > 0:
+        y_w /= gross
+        x_w /= gross
+    return y_w, x_w
 
 
 def atr_size_multiplier(

@@ -13,6 +13,7 @@ from data.repo_paths import repo_root
 
 # Constants
 STRATEGY_S1_EQUITIES = "s1_equities"
+STRATEGY_S2_COINT = "s2_coint"
 BROKER_ALPACA = "alpaca"
 DEFAULT_SLEEVE_WEIGHTS: dict[str, float] = {STRATEGY_S1_EQUITIES: 1.0}
 

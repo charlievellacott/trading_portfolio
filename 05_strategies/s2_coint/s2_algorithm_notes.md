@@ -89,5 +89,13 @@ S2 panels fetch **unadjusted** OHLCV (`fetch_ohlcv(..., auto_adjust=False)` in `
 - **Universe C shelved.** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table in `02_research/s2_coint/universe.md`; archived artifacts in `04_backtest/s2_coint/artifacts/asia_c/`.
 - Overlay check: compound IS daily book returns to S1 Monday–Monday weeks and correlate vs `01_data/data_files/s1_equities/s1_period_returns.parquet` (exported from `08_oos_tearsheet.ipynb`). Missing file → `corr_to_s1` is NaN.
 
+## Live paper (hardcoded STAR)
+
+Frozen recipe is `04_backtest/s2_coint/artifacts/s2_star_stack.json` (see `01_star_tearsheet.ipynb`). Paper runner: `07_execution/s2_coint/s2_paper_runner.py`. Dedicated Alpaca paper account (100% of that account equity). Credentials: `config/credentials_s2.env` (`ALPACA_API_KEY` / `ALPACA_SECRET_KEY`), or `ALPACA_S2_API_KEY` / `ALPACA_S2_SECRET_KEY` in `config/credentials.env`, or `S2_ALPACA_CREDENTIALS`. **Never falls back to S1 keys.** Logs: `07_execution/s2_coint/logs/s2_paper_YYYYMMDD.txt` (not the S1 log dir). Live ledger: `09_performance/cache/live_s2/`. Cache: `05_strategies/s2_coint/cache/` (`S2_CACHE_DIR` override).
+
+Clock: fill morning of `t+1`. Features from last completed close `t` (drop any `date >= fill_date`). Wait until 09:28 ET, then DAY market deltas (no resting stops; STAR `EXIT_STAR=mean_only`). `--dry-run` prints orders and does not submit.
+
+**Score sizing denominator (live, not in the STAR tearsheet):** `mean_abs_score` is the per-pair rolling mean of `|z|` with `window = Z_WINDOW_STAR` (frozen **90**, not the H-001 panel default 60) and `min_periods = window`, through close `t`. The sealed backtest (`01_star_tearsheet.ipynb`) instead freezes the **research-IS mean of `|z|`** via `fit_mean_abs_score` and does not refit on OOS. Rolling live scale was **not** walk-forwarded — backtest it before treating live sizing as research-parity.
+
 ## Notes
 - S1 returns are computed weekly and so the correlation was calculated weekly 

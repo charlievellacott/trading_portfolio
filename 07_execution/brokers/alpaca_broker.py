@@ -40,21 +40,28 @@ def _as_datetime(value):
     return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
-def load_alpaca_credentials(path=None):
+def load_alpaca_credentials(
+    path=None,
+    *,
+    api_key_name: str = "ALPACA_API_KEY",
+    secret_key_name: str = "ALPACA_SECRET_KEY",
+):
     creds_path = CREDENTIALS_PATH if path is None else path
     if not os.path.isfile(creds_path):
         raise FileNotFoundError(f"Credentials file not found: {creds_path}")
     api_key = secret_key = None
+    key_eq = f"{api_key_name}="
+    secret_eq = f"{secret_key_name}="
     with open(creds_path, encoding="utf-8") as f:
         for ln in f:
             ln = ln.strip()
-            if ln.startswith("ALPACA_API_KEY="):
+            if ln.startswith(key_eq):
                 api_key = ln.split("=", 1)[1].strip()
-            elif ln.startswith("ALPACA_SECRET_KEY="):
+            elif ln.startswith(secret_eq):
                 secret_key = ln.split("=", 1)[1].strip()
     if not api_key or not secret_key:
         raise ValueError(
-            f"Expected ALPACA_API_KEY=... and ALPACA_SECRET_KEY=... in {creds_path}"
+            f"Expected {api_key_name}=... and {secret_key_name}=... in {creds_path}"
         )
     return api_key, secret_key
 
@@ -62,9 +69,20 @@ def load_alpaca_credentials(path=None):
 # class
 class AlpacaBroker:
     # constructor
-    def __init__(self, paper: bool = True) -> None:
-        # 1. Read key/secret from config/credentials.env
-        api_key, secret_key = load_alpaca_credentials()
+    def __init__(
+        self,
+        paper: bool = True,
+        *,
+        credentials_path: str | None = None,
+        api_key_name: str = "ALPACA_API_KEY",
+        secret_key_name: str = "ALPACA_SECRET_KEY",
+    ) -> None:
+        # 1. Read key/secret (S1 default file/names; S2 passes dedicated keys)
+        api_key, secret_key = load_alpaca_credentials(
+            credentials_path,
+            api_key_name=api_key_name,
+            secret_key_name=secret_key_name,
+        )
         # 2. Build TradingClient(paper=paper)
         self.client = TradingClient(api_key, secret_key, paper=paper)
 
@@ -189,6 +207,9 @@ class AlpacaBroker:
 
     def cancel_order(self, order_id):
         return self.client.cancel_order_by_id(str(order_id))
+
+    def close_position(self, ticker):
+        return self.client.close_position(str(ticker).strip().upper())
 
     def liquidate_all_positions(self, timeout_sec=LIQUIDATE_TIMEOUT_SEC):
         # Returns {"names": [{"ticker", "qty", "seconds"}, ...], "total_seconds": float}
