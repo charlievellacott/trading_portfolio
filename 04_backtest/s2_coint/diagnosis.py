@@ -30,9 +30,15 @@ _ENRICHED_TRADE_COLS: tuple[str, ...] = (
     "hold_bars",
     "entry_cost_bps",
     "exit_cost_bps",
+    "exit_reason",
     "signal_date",
+    "exit_signal_date",
     "z_entry",
+    "z_exit",
     "spread_entry",
+    "spread_exit",
+    "adf_entry",
+    "adf_exit",
     "pnl_pct",
 )
 
@@ -66,6 +72,16 @@ def _signal_row_before_fill(g: pd.DataFrame, fill_date: pd.Timestamp) -> pd.Seri
     return prior.iloc[-1]
 
 
+def _finite_field(row: pd.Series | None, col: str) -> float:
+    if row is None or col not in row.index:
+        return float("nan")
+    try:
+        val = float(row[col])
+    except (TypeError, ValueError):
+        return float("nan")
+    return val if np.isfinite(val) else float("nan")
+
+
 def _compound_pnl_pct(returns: pd.Series, start: pd.Timestamp, end: pd.Timestamp) -> float:
     """Compound daily net returns over [start, end] inclusive → percent of pair capital."""
     if returns is None or returns.empty:
@@ -84,7 +100,7 @@ def enrich_trades(
     panel: pd.DataFrame,
     pair_returns: pd.Series,
 ) -> pd.DataFrame:
-    """Join blotter to panel signal bar; add z/spread at entry and net ``pnl_pct``."""
+    """Join blotter to panel signal bars; add z/ADF/spread at entry+exit and net ``pnl_pct``."""
     empty = pd.DataFrame(columns=list(_ENRICHED_TRADE_COLS))
     if trades is None or trades.empty:
         return empty
@@ -93,6 +109,10 @@ def enrich_trades(
         for col in _ENRICHED_TRADE_COLS:
             if col not in out.columns:
                 out[col] = np.nan
+        if "side_label" not in out.columns and "side" in out.columns:
+            out["side_label"] = out["side"].map(lambda s: "long" if int(s) > 0 else "short")
+        if "exit_reason" not in out.columns:
+            out["exit_reason"] = ""
         return out[list(_ENRICHED_TRADE_COLS)]
 
     p = panel.copy()
@@ -103,23 +123,17 @@ def enrich_trades(
         exit_date = pd.Timestamp(row.exit_date)
         side = int(row.side)
         pid = str(row.pair_id)
+        exit_reason = str(getattr(row, "exit_reason", "") or "")
         g = p.loc[p["pair_id"].astype(str) == pid].sort_values("date")
         if g.empty:
             g = p.sort_values("date")
         signal = _signal_row_before_fill(g, entry_date)
+        exit_signal = _signal_row_before_fill(g, exit_date)
         signal_date = (
             pd.Timestamp(signal["date"]) if signal is not None else pd.NaT
         )
-        z_entry = (
-            float(signal["z"])
-            if signal is not None and np.isfinite(float(signal["z"]))
-            else float("nan")
-        )
-        spread_entry = (
-            float(signal["spread"])
-            if signal is not None and "spread" in signal.index
-            and np.isfinite(float(signal["spread"]))
-            else float("nan")
+        exit_signal_date = (
+            pd.Timestamp(exit_signal["date"]) if exit_signal is not None else pd.NaT
         )
         rows.append(
             {
@@ -131,9 +145,15 @@ def enrich_trades(
                 "hold_bars": int(row.hold_bars),
                 "entry_cost_bps": float(row.entry_cost_bps),
                 "exit_cost_bps": float(row.exit_cost_bps),
+                "exit_reason": exit_reason,
                 "signal_date": signal_date,
-                "z_entry": z_entry,
-                "spread_entry": spread_entry,
+                "exit_signal_date": exit_signal_date,
+                "z_entry": _finite_field(signal, "z"),
+                "z_exit": _finite_field(exit_signal, "z"),
+                "spread_entry": _finite_field(signal, "spread"),
+                "spread_exit": _finite_field(exit_signal, "spread"),
+                "adf_entry": _finite_field(signal, "adf_pvalue"),
+                "adf_exit": _finite_field(exit_signal, "adf_pvalue"),
                 "pnl_pct": _compound_pnl_pct(pair_returns, entry_date, exit_date),
             }
         )

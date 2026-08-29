@@ -149,6 +149,28 @@ def _breaker_reentry_ok(row_adf: float, row_hl: float, cfg: S2SimConfig) -> bool
     return np.isfinite(row_hl) and lo <= row_hl <= hi
 
 
+def _classify_exit_reason(
+    *,
+    mean_revert: bool,
+    coint_break: bool,
+    hl_timeout: bool = False,
+    max_loss: bool = False,
+    atr_stop: bool = False,
+) -> str:
+    """Pick one blotter label; health/break beats mean-revert when both fire."""
+    if coint_break:
+        return "coint_break"
+    if max_loss:
+        return "max_loss"
+    if atr_stop:
+        return "atr_stop"
+    if hl_timeout:
+        return "hl_timeout"
+    if mean_revert:
+        return "mean_revert"
+    return "other"
+
+
 def simulate_pair(
     df: pd.DataFrame,
     cfg: S2SimConfig | None = None,
@@ -254,10 +276,17 @@ def simulate_pair(
         kin = _k_in(cfg, sig[i])
 
         do_exit = False
+        mean_revert = False
+        coint_break = False
+        hl_timeout = False
+        max_loss = False
+        atr_stop = False
         if pos != 0 and np.isfinite(z_t) and (float(pos) * z_t >= float(k_out)):
             do_exit = True
+            mean_revert = True
         if pos != 0 and _health_flattens(adf[i], vj[i], cfg):
             do_exit = True
+            coint_break = True
         if (
             cfg.exit_mode == "hl3_atr_breaker"
             and open_entry is not None
@@ -266,16 +295,20 @@ def simulate_pair(
             hold = (i + 1) - int(open_entry["entry_idx"])
             if hold >= float(cfg.n_half_lives) * float(open_entry["hl_at_entry"]):
                 do_exit = True
+                hl_timeout = True
             if float(open_entry.get("cum_pnl", 0.0)) <= float(cfg.pair_max_loss):
                 do_exit = True
+                max_loss = True
                 breaker_block = True
             # Path-check H/L on the fill bar (i+1) after entry open.
             if np.isfinite(open_entry.get("stop_spread", np.nan)) and np.isfinite(sl[i + 1]):
                 side = int(open_entry["side"])
                 if side > 0 and sl[i + 1] <= float(open_entry["stop_spread"]):
                     do_exit = True
+                    atr_stop = True
                 if side < 0 and sh[i + 1] >= float(open_entry["stop_spread"]):
                     do_exit = True
+                    atr_stop = True
 
         event_cost = 0.0
         if do_exit and pos != 0:
@@ -293,6 +326,13 @@ def simulate_pair(
                         "hold_bars": int((i + 1) - int(open_entry["entry_idx"])),
                         "entry_cost_bps": float(open_entry["entry_cost_bps"]),
                         "exit_cost_bps": exit_cost_bps,
+                        "exit_reason": _classify_exit_reason(
+                            mean_revert=mean_revert,
+                            coint_break=coint_break,
+                            hl_timeout=hl_timeout,
+                            max_loss=max_loss,
+                            atr_stop=atr_stop,
+                        ),
                     }
                 )
             open_entry = None
@@ -530,7 +570,7 @@ def _simulate_book_joint(
         return val if np.isfinite(val) else None
 
     for sig_date in signal_dates:
-        exit_ids: list[str] = []
+        exit_ids: list[tuple[str, str]] = []
         entry_cands: list[tuple[str, int, float]] = []
         for pid, g in by_pair.items():
             rows = g.index[pd.to_datetime(g["date"]) == sig_date]
@@ -557,22 +597,41 @@ def _simulate_book_joint(
             st = open_pos.get(pid)
             if st is not None:
                 pos = int(st["side"])
-                flatten = np.isfinite(score) and (pos * score >= kout)
-                flatten = flatten or _health_flattens(adf, vj, cfg)
+                mean_revert = np.isfinite(score) and (pos * score >= kout)
+                coint_break = _health_flattens(adf, vj, cfg)
+                hl_timeout = False
+                max_loss = False
+                atr_stop = False
+                flatten = mean_revert or coint_break
                 if cfg.exit_mode == "hl3_atr_breaker":
                     hold = (i + 1) - int(st["entry_idx"])
                     if np.isfinite(st.get("hl_at_entry", np.nan)) and hold >= cfg.n_half_lives * st["hl_at_entry"]:
                         flatten = True
+                        hl_timeout = True
                     if float(st.get("cum_pnl", 0.0)) <= cfg.pair_max_loss:
                         flatten = True
+                        max_loss = True
                         breaker_block[pid] = True
                     if np.isfinite(st.get("stop_spread", np.nan)) and np.isfinite(sl):
                         if pos > 0 and sl <= float(st["stop_spread"]):
                             flatten = True
+                            atr_stop = True
                         if pos < 0 and np.isfinite(sh) and sh >= float(st["stop_spread"]):
                             flatten = True
+                            atr_stop = True
                 if flatten:
-                    exit_ids.append(pid)
+                    exit_ids.append(
+                        (
+                            pid,
+                            _classify_exit_reason(
+                                mean_revert=bool(mean_revert),
+                                coint_break=bool(coint_break),
+                                hl_timeout=hl_timeout,
+                                max_loss=max_loss,
+                                atr_stop=atr_stop,
+                            ),
+                        )
+                    )
             else:
                 want_long = np.isfinite(score) and np.isfinite(kin) and score <= -kin
                 want_short = np.isfinite(score) and np.isfinite(kin) and score >= kin
@@ -591,7 +650,7 @@ def _simulate_book_joint(
                     sc = score_confidence(score, adf)
                     entry_cands.append((pid, side, sc))
 
-        for pid in exit_ids:
+        for pid, exit_reason in exit_ids:
             g = by_pair[pid]
             i = int(g.index[pd.to_datetime(g["date"]) == sig_date][0])
             fill_date = pd.Timestamp(g["date"].iloc[i + 1])
@@ -610,6 +669,7 @@ def _simulate_book_joint(
                     "hold_bars": int((i + 1) - int(st["entry_idx"])),
                     "entry_cost_bps": float(st["entry_cost_bps"]),
                     "exit_cost_bps": float(by + bx),
+                    "exit_reason": exit_reason,
                 }
             )
 

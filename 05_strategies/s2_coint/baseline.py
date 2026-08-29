@@ -25,6 +25,7 @@ _TRADE_COLS: tuple[str, ...] = (
     "hold_bars",
     "entry_cost_bps",
     "exit_cost_bps",
+    "exit_reason",
 )
 
 
@@ -128,6 +129,7 @@ def simulate_pair_baseline(
                         "hold_bars": int((i + 1) - entry_idx),
                         "entry_cost_bps": float(open_entry["entry_cost_bps"]),
                         "exit_cost_bps": exit_cost_bps,
+                        "exit_reason": "mean_revert",
                     }
                 )
             open_entry = None

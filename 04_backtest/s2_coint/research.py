@@ -670,6 +670,15 @@ def n_trials_local(configs: dict) -> int:
     return len(configs)
 
 
+def n_trials_ledger_total(*, path: str | None = None) -> int:
+    """Sum of all registered arms in the variant ledger (final tearsheet DSR N)."""
+    ledger = load_variant_ledger(path)
+    total = 0
+    for entry in ledger.get("entries") or []:
+        total += int(entry.get("n_arms", len(entry.get("arms", []))))
+    return int(total)
+
+
 def n_trials_stack(hyp_id: str, configs: dict, *, path: str | None = None) -> int:
     return cumulative_trials_before(hyp_id, path=path) + n_trials_local(configs)
 
