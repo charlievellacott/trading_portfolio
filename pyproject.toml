@@ -46,6 +46,7 @@ packages = [
   "strategies.s2_coint",
   "risk",
   "risk.monte_carlo",
+  "risk.prop_firm",
   "risk.s1_equities",
   "execution",
   "execution.brokers",

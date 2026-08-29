@@ -26,14 +26,21 @@ class MonteCarloSimulator(ABC):
         self.random_seed = random_seed
 
     @abstractmethod
-    def fit(self, returns: pd.Series) -> Self:
-        """Fit the simulator on historical period returns."""
+    def fit(self, returns: pd.Series | pd.DataFrame) -> Self:
+        """Fit the simulator on historical period returns.
+
+        ``returns`` is a single series (univariate) or a DataFrame of aligned
+        series (e.g. columns ``strategy`` and ``spy``). Rows are bars in time
+        order. No future information is used.
+        """
 
     @abstractmethod
     def simulate(self, horizon: int) -> pd.DataFrame:
-        """Generate simulated return paths.
+        """Generate simulated simple-return paths.
 
-        Returns a DataFrame with rows = trading days and columns = paths.
+        Univariate: rows = bars, columns = paths (``sim_0``, …).
+        Multivariate: the same, with MultiIndex columns
+        ``(simulation, asset)``.
         """
 
     @abstractmethod
