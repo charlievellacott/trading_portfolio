@@ -55,6 +55,7 @@ class BookSimResult:
     returns: pd.Series
     pair_results: dict[str, PairSimResult] = field(default_factory=dict)
     leverage: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
+    returns_base: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
 
 
 def _score_series(d: pd.DataFrame, cfg: S2SimConfig) -> np.ndarray:
@@ -444,6 +445,56 @@ def _densify_book_returns(
     return out, lev_out
 
 
+def _empty_book() -> BookSimResult:
+    empty = pd.Series(dtype=float, name="ret")
+    return BookSimResult(returns=empty, returns_base=empty)
+
+
+def _finalize_book(
+    raw: pd.Series,
+    panel: pd.DataFrame,
+    *,
+    pair_results: dict[str, PairSimResult],
+    vt_cfg: VolTargetConfig | None,
+) -> BookSimResult:
+    """Densify pre-VT ``raw`` as ``returns_base``; optionally overlay S1-style VT."""
+    base_out, _ = _densify_book_returns(raw, panel)
+    if vt_cfg is None or not vt_cfg.enabled:
+        return BookSimResult(
+            returns=base_out,
+            returns_base=base_out,
+            pair_results=pair_results,
+        )
+    scaled: list[float] = []
+    lev_vals: list[float] = []
+    lev_hist: list[float] = []
+    lev_index: list[pd.Timestamp] = []
+    prev_lev = 1.0
+    for t, r in raw.items():
+        leverage = leverage_from_history(
+            pd.Series(lev_hist, index=pd.DatetimeIndex(lev_index)),
+            vt_cfg,
+            prev_leverage=prev_lev,
+        )
+        scaled.append(float(r) * float(leverage))
+        lev_vals.append(leverage)
+        lev_hist.append(float(r))
+        lev_index.append(pd.Timestamp(t))
+        prev_lev = leverage
+    out = pd.Series(scaled, index=raw.index, name="ret")
+    out, lev_ser = _densify_book_returns(
+        out,
+        panel,
+        leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
+    )
+    return BookSimResult(
+        returns=out,
+        returns_base=base_out,
+        pair_results=pair_results,
+        leverage=lev_ser,
+    )
+
+
 def simulate_book(
     panel: pd.DataFrame,
     cfg: S2SimConfig | None = None,
@@ -454,14 +505,10 @@ def simulate_book(
     """Book-level sim with optional overlap / corr gates and S1-style VT."""
     cfg = cfg or S2SimConfig()
     if panel.empty:
-        return BookSimResult(returns=pd.Series(dtype=float, name="ret"))
+        return _empty_book()
 
     pairs = list(panel.groupby("pair_id", sort=False))
     n_pairs = max(len(pairs), 1)
-    lev_hist: list[float] = []
-    lev_index: list[pd.Timestamp] = []
-    leverage = 1.0
-    prev_lev = 1.0
     vt_cfg = VolTargetConfig(
         enabled=cfg.vol_mode == "s1_vt",
         target_ann_vol=cfg.vt_target_ann_vol,
@@ -484,36 +531,15 @@ def simulate_book(
             if not res.returns.empty:
                 parts.append(res.returns.rename(pid))
         if not parts:
-            return BookSimResult(returns=pd.Series(dtype=float, name="ret"))
+            return _empty_book()
         wide = pd.concat(parts, axis=1).fillna(0.0)
         raw = wide.mean(axis=1).rename("ret")
-        if cfg.vol_mode == "s1_vt":
-            scaled = []
-            lev_vals = []
-            for t, r in raw.items():
-                leverage = leverage_from_history(
-                    pd.Series(lev_hist, index=pd.DatetimeIndex(lev_index)),
-                    vt_cfg,
-                    prev_leverage=prev_lev,
-                )
-                scaled.append(float(r) * float(leverage))
-                lev_vals.append(leverage)
-                lev_hist.append(float(r))
-                lev_index.append(pd.Timestamp(t))
-                prev_lev = leverage
-            out = pd.Series(scaled, index=raw.index, name="ret")
-            out, lev_ser = _densify_book_returns(
-                out,
-                panel,
-                leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
-            )
-            return BookSimResult(
-                returns=out,
-                pair_results=pair_results,
-                leverage=lev_ser,
-            )
-        out, _ = _densify_book_returns(raw, panel)
-        return BookSimResult(returns=out, pair_results=pair_results)
+        return _finalize_book(
+            raw,
+            panel,
+            pair_results=pair_results,
+            vt_cfg=vt_cfg if cfg.vol_mode == "s1_vt" else None,
+        )
 
     return _simulate_book_joint(
         panel,
@@ -813,42 +839,23 @@ def _simulate_book_joint(
         if not ser.empty:
             parts.append(ser)
     if not parts:
-        return BookSimResult(returns=pd.Series(dtype=float, name="ret"), pair_results=pair_results)
+        empty = pd.Series(dtype=float, name="ret")
+        return BookSimResult(
+            returns=empty,
+            returns_base=empty,
+            pair_results=pair_results,
+        )
     wide = pd.concat(parts, axis=1).fillna(0.0)
     raw = wide.mean(axis=1).rename("ret")
-    if cfg.vol_mode != "s1_vt":
-        out, _ = _densify_book_returns(raw, panel)
-        return BookSimResult(returns=out, pair_results=pair_results)
     vt_cfg = VolTargetConfig(
-        enabled=True,
+        enabled=cfg.vol_mode == "s1_vt",
         target_ann_vol=cfg.vt_target_ann_vol,
         periods_per_year=float(periods_per_year),
         min_periods=max(13, int(cfg.sigma_window // 4)),
     )
-    scaled = []
-    lev_vals = []
-    lev_hist: list[float] = []
-    lev_index: list[pd.Timestamp] = []
-    prev_lev = 1.0
-    for t, r in raw.items():
-        leverage = leverage_from_history(
-            pd.Series(lev_hist, index=pd.DatetimeIndex(lev_index)),
-            vt_cfg,
-            prev_leverage=prev_lev,
-        )
-        scaled.append(float(r) * float(leverage))
-        lev_vals.append(leverage)
-        lev_hist.append(float(r))
-        lev_index.append(pd.Timestamp(t))
-        prev_lev = leverage
-    out = pd.Series(scaled, index=raw.index, name="ret")
-    out, lev_ser = _densify_book_returns(
-        out,
+    return _finalize_book(
+        raw,
         panel,
-        leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
-    )
-    return BookSimResult(
-        returns=out,
         pair_results=pair_results,
-        leverage=lev_ser,
+        vt_cfg=vt_cfg if cfg.vol_mode == "s1_vt" else None,
     )

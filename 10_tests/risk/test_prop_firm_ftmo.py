@@ -166,3 +166,70 @@ def test_pay_once_ev_do_not_take():
     assert abs(float(summary["ev"]) - 1400.0) < 1e-6
     assert "p_ev_le_0" in summary.index
     assert "do_not_take" in summary.index
+
+
+def test_leverage_grid_fail_rate_columns_and_ftmo_cap():
+    from risk.prop_firm.report import suggest_challenge_leverage
+
+    grid = pd.DataFrame(
+        {
+            "leverage": [0.5, 1.0, 2.0],
+            "ev_per_day": [1.0, 3.0, 10.0],
+            "p_both": [0.2, 0.3, 0.1],
+            "p_fail_daily_loss": [0.10, 0.20, 0.80],
+            "p_fail_max_loss": [0.05, 0.10, 0.20],
+            "do_not_take": [False, False, False],
+        }
+    )
+    sug = suggest_challenge_leverage(
+        grid, k_fair=1.5, max_p_fail_daily=0.30, max_p_fail_max=0.30
+    )
+    assert sug["k_ftmo"] == 1.0
+    assert sug["k_suggested"] == 1.0
+    assert sug["k_suggested"] <= sug["k_ftmo"]
+    row = grid.loc[grid["leverage"] == sug["k_ftmo"]].iloc[0]
+    assert float(row["p_fail_daily_loss"]) <= 0.30
+    assert float(row["p_fail_max_loss"]) <= 0.30
+
+
+def test_suggested_k_never_exceeds_fail_rate_survivor():
+    from risk.prop_firm.report import suggest_challenge_leverage
+
+    grid = pd.DataFrame(
+        {
+            "leverage": [0.25, 0.75, 1.5],
+            "ev_per_day": [0.5, 2.0, 9.0],
+            "p_both": [0.1, 0.2, 0.05],
+            "p_fail_daily_loss": [0.05, 0.15, 0.90],
+            "p_fail_max_loss": [0.02, 0.08, 0.40],
+            "do_not_take": [False, False, False],
+        }
+    )
+    sug = suggest_challenge_leverage(
+        grid, k_fair=3.0, max_p_fail_daily=0.20, max_p_fail_max=0.20
+    )
+    assert sug["k_ftmo"] == 0.75
+    assert sug["k_suggested"] == 0.75
+    assert sug["k_suggested"] < 1.5
+
+
+def test_leverage_ev_grid_includes_fail_rate_columns():
+    from risk.prop_firm.report import leverage_ev_grid
+
+    idx = pd.bdate_range("2020-01-01", periods=40)
+    r = pd.Series(0.002, index=idx)
+    grid = leverage_ev_grid(
+        r,
+        [0.5, 1.0],
+        n_simulations=6,
+        horizon=8,
+        horizon_funded=5,
+        initial_capital=100_000.0,
+        fee=540.0,
+        profit_split=0.8,
+        mean_block_length=4.0,
+        random_seed=3,
+    )
+    assert "p_fail_daily_loss" in grid.columns
+    assert "p_fail_max_loss" in grid.columns
+    assert list(grid["leverage"]) == [0.5, 1.0]

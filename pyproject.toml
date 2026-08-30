@@ -45,6 +45,7 @@ packages = [
   "strategies.s1_equities",
   "strategies.s2_coint",
   "risk",
+  "risk.leverage",
   "risk.monte_carlo",
   "risk.prop_firm",
   "risk.s1_equities",

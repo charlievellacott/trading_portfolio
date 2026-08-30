@@ -69,6 +69,23 @@ def test_never_allow_same_index_length_as_allow():
     assert len(res_never.returns) == len(cal)
     assert len(res_allow.returns) == len(res_never.returns)
     assert res_never.returns.index.equals(cal)
+    assert len(res_allow.returns_base) == len(res_allow.returns)
+    assert res_allow.returns_base.index.equals(res_allow.returns.index)
+
+
+def test_s1_vt_persists_returns_base():
+    panel = _toy_panel(40)
+    cfg = S2SimConfig(
+        overlap_mode="allow",
+        entry_z=1.5,
+        k_in=1.5,
+        vol_mode="s1_vt",
+        vt_target_ann_vol=0.10,
+    )
+    res = simulate_book(panel, cfg)
+    assert len(res.returns_base) == len(res.returns)
+    assert res.returns_base.index.equals(res.returns.index)
+    assert res.returns_base.name == "ret" or res.returns_base.name is not None
 
 
 def test_panel_session_dates_sorted_unique():
