@@ -20,6 +20,11 @@ from risk.monte_carlo.ev_stats import (
     simulate_joint_paths,
     underwater_probs,
 )
+from risk.monte_carlo.geometry import (
+    ev_concentration,
+    joint_shape_vs_spy,
+    pathwise_holes,
+)
 from risk.monte_carlo.hmm_simulator import GaussianHMMSimulator
 from risk.monte_carlo.simulator import MonteCarloSimulator
 
@@ -30,13 +35,16 @@ __all__ = [
     "apply_cost_haircut",
     "asset_paths",
     "cvar",
+    "ev_concentration",
     "ev_significance",
     "excess_returns",
     "hac_mean_inference",
     "horizon_ev",
     "is_joint_simulations",
+    "joint_shape_vs_spy",
     "p_not_beat_spy",
     "p_not_beat_spy_from_joint",
+    "pathwise_holes",
     "scale_simple_returns",
     "simulate_joint_paths",
     "split_joint_simulations",

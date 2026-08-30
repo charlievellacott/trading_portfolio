@@ -16,7 +16,24 @@ from risk.monte_carlo.ev_stats import (
     terminal_simple_return,
     underwater_probs,
 )
-from risk.monte_carlo.plots import equity_fan_figure, significance_frame, terminal_hist_figure
+from risk.monte_carlo.geometry import (
+    ev_concentration,
+    excess_wealth_paths,
+    holes_summary,
+    joint_shape_vs_spy,
+    pathwise_holes,
+    realized_first_window_wealth,
+    realized_terminal_percentile,
+    realized_wealth_for_fan,
+)
+from risk.monte_carlo.plots import (
+    equity_fan_figure,
+    excess_wealth_fan_figure,
+    max_dd_hist_figure,
+    significance_frame,
+    terminal_hist_figure,
+    terminal_vs_dd_scatter_figure,
+)
 
 
 def run_ev_vs_spy(
@@ -68,6 +85,21 @@ def run_ev_vs_spy(
     p_lose = p_not_beat_spy(s_paths, b_paths)
     uw = underwater_probs(s_paths)
     term = terminal_simple_return(s_paths)
+    holes = pathwise_holes(s_paths)
+    hole_sum = holes_summary(holes)
+    conc = ev_concentration(s_paths)
+    joint_shape = joint_shape_vs_spy(s_paths, b_paths)
+    xs_w = excess_wealth_paths(s_paths, b_paths)
+
+    r_s = realized_wealth_for_fan(strat_hist, horizon)
+    r_b = realized_wealth_for_fan(spy_hist, horizon)
+    r_s0 = realized_first_window_wealth(strat_hist, horizon)
+    r_b0 = realized_first_window_wealth(spy_hist, horizon)
+    r_xs = None
+    if len(r_s) and len(r_b) and len(r_s) == len(r_b):
+        r_xs = (r_s / r_b.replace(0.0, float("nan"))).rename("realized_excess")
+    oos_pct = realized_terminal_percentile(r_s, s_paths)
+
     headline = pd.Series(
         {
             "hist_mean": hist_sig["mean"],
@@ -80,10 +112,21 @@ def run_ev_vs_spy(
             "excess_p_value": excess_sig["p_value"],
             "excess_ci_excludes_zero": excess_sig["ci_excludes_zero"],
             "horizon_mean_terminal": hev["mean_terminal"],
+            "horizon_median_terminal": conc["median_terminal"],
             "horizon_ci_low": hev["ci_low"],
             "horizon_ci_high": hev["ci_high"],
             "p_not_beat_spy": p_lose,
             "cvar_5": cvar(term, alpha=0.05),
+            "max_dd_median": hole_sum["max_dd_median"],
+            "max_dd_p05": hole_sum["max_dd_p05"],
+            "top_decile_ev_share": conc["top_decile_ev_share"],
+            "beta_median": joint_shape["beta_median"],
+            "corr_median": joint_shape["corr_median"],
+            "down_capture_median": joint_shape["down_capture_median"],
+            "p_not_beat_given_spy_underwater": joint_shape[
+                "p_not_beat_given_spy_underwater"
+            ],
+            "oos_terminal_percentile": oos_pct,
             "p_terminal_underwater": uw["p_terminal_underwater"],
             "p_ever_underwater": uw["p_ever_underwater"],
             "leverage": float(leverage),
@@ -100,6 +143,20 @@ def run_ev_vs_spy(
         "excess_table": significance_frame(excess_sig),
         "strategy_paths": s_paths,
         "spy_paths": b_paths,
-        "fan": equity_fan_figure(s_paths, b_paths),
+        "holes": holes,
+        "holes_summary": hole_sum,
+        "concentration": conc,
+        "joint_shape": joint_shape,
+        "fan": equity_fan_figure(
+            s_paths,
+            b_paths,
+            realized_strategy=r_s,
+            realized_spy=r_b,
+            realized_strategy_first=r_s0,
+            realized_spy_first=r_b0,
+        ),
+        "excess_fan": excess_wealth_fan_figure(xs_w, realized_excess=r_xs),
+        "max_dd_hist": max_dd_hist_figure(holes["max_dd"]),
+        "dd_scatter": terminal_vs_dd_scatter_figure(holes),
         "terminals": terminal_hist_figure(s_paths, b_paths),
     }
