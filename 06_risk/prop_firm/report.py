@@ -128,6 +128,12 @@ def leverage_ev_grid(
             verification_fee=verification_fee,
         )
         h = pack["headline"]
+        res = pack["results"]
+        failed = res["chal_status"].eq("failed")
+        p_fail_daily = float((failed & res["chal_first_binding"].eq("daily_loss")).mean())
+        p_fail_max = float((failed & res["chal_first_binding"].eq("max_loss")).mean())
+        mix = res.loc[failed, "chal_first_binding"].value_counts(dropna=False)
+        first_binding = str(mix.index[0]) if len(mix) else ""
         rows.append(
             {
                 "leverage": float(k),
@@ -138,8 +144,97 @@ def leverage_ev_grid(
                 "p_ev_le_0": float(h["p_ev_le_0"]),
                 "do_not_take": bool(h["do_not_take"]),
                 "ci_low": float(h["ci_low"]),
+                "p_fail_daily_loss": p_fail_daily,
+                "p_fail_max_loss": p_fail_max,
+                "first_binding": first_binding,
             }
         )
+    return pd.DataFrame(rows)
+
+
+def suggest_challenge_leverage(
+    grid: pd.DataFrame,
+    *,
+    k_fair: float,
+    max_p_fail_daily: float = 0.40,
+    max_p_fail_max: float = 0.30,
+) -> dict[str, float | bool]:
+    """``k_suggested = min(k_fair, k_ftmo)`` among rows inside fail-rate caps.
+
+    ``k_ftmo`` maximises EV/day among leverages with
+    ``p_fail_daily_loss`` / ``p_fail_max_loss`` at or below the caps and
+    ``do_not_take`` false. Suggested k never exceeds the fail-rate cap set.
+    """
+    if grid is None or grid.empty:
+        return {
+            "k_fair": float(k_fair),
+            "k_ftmo": float("nan"),
+            "k_suggested": float("nan"),
+            "do_not_take": True,
+            "ev_per_day": float("nan"),
+        }
+    g = grid.copy()
+    ok = (
+        g["p_fail_daily_loss"].astype(float).le(float(max_p_fail_daily))
+        & g["p_fail_max_loss"].astype(float).le(float(max_p_fail_max))
+        & ~g["do_not_take"].astype(bool)
+    )
+    survivors = g.loc[ok]
+    if survivors.empty:
+        return {
+            "k_fair": float(k_fair),
+            "k_ftmo": float("nan"),
+            "k_suggested": float("nan"),
+            "do_not_take": True,
+            "ev_per_day": float("nan"),
+        }
+    best = survivors.sort_values("ev_per_day", ascending=False).iloc[0]
+    k_ftmo = float(best["leverage"])
+    k_suggested = min(float(k_fair), k_ftmo)
+    nearest_idx = (g["leverage"].astype(float) - k_suggested).abs().idxmin()
+    near = g.loc[nearest_idx]
+    return {
+        "k_fair": float(k_fair),
+        "k_ftmo": k_ftmo,
+        "k_suggested": float(k_suggested),
+        "do_not_take": bool(near.get("do_not_take", False)),
+        "ev_per_day": float(best["ev_per_day"]),
+        "p_fail_daily_loss": float(best["p_fail_daily_loss"]),
+        "p_fail_max_loss": float(best["p_fail_max_loss"]),
+        "p_both": float(best["p_both"]),
+    }
+
+
+def fair_vs_ftmo_row(
+    grid: pd.DataFrame,
+    suggestion: dict,
+) -> pd.DataFrame:
+    """Two-row compare: unconstrained fair VT vs FTMO-capped k."""
+    def _nearest(k: float) -> pd.Series | None:
+        if grid is None or grid.empty or not np.isfinite(k):
+            return None
+        idx = (grid["leverage"].astype(float) - float(k)).abs().idxmin()
+        return grid.loc[idx]
+
+    rows = []
+    for label, key in (
+        ("unconstrained fair VT", "k_fair"),
+        ("FTMO-capped", "k_suggested"),
+    ):
+        k = float(suggestion.get(key, float("nan")))
+        row = _nearest(k)
+        rec = {"label": label, "k": k}
+        if row is not None:
+            rec.update(
+                {
+                    "ev_per_day": float(row["ev_per_day"]),
+                    "p_both": float(row["p_both"]),
+                    "p_fail_daily_loss": float(row["p_fail_daily_loss"]),
+                    "p_fail_max_loss": float(row["p_fail_max_loss"]),
+                    "do_not_take": bool(row["do_not_take"]),
+                }
+            )
+        rows.append(rec)
     return pd.DataFrame(rows)
 
 

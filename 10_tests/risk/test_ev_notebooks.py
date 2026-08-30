@@ -11,8 +11,8 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-S1_NB = os.path.join(ROOT, "06_risk", "monte_carlo", "s1_equities", "01_ev_vs_spy.ipynb")
-S2_NB = os.path.join(ROOT, "06_risk", "monte_carlo", "s2_coint", "01_ev_vs_spy.ipynb")
+S1_NB = os.path.join(ROOT, "06_risk", "notebooks", "s1_equities", "02_ev_vs_spy.ipynb")
+S2_NB = os.path.join(ROOT, "06_risk", "notebooks", "s2_coint", "02_ev_vs_spy.ipynb")
 
 
 def _synthetic_frame(n: int, *, freq: str, seed: int) -> pd.DataFrame:

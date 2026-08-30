@@ -30,6 +30,7 @@ class S2BacktestResult:
     metrics: dict
     book: BookSimResult
     pair_trades: pd.DataFrame = field(default_factory=pd.DataFrame)
+    returns_base: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
 
 
 def fit_hmm_on_train_dates(
@@ -169,4 +170,5 @@ def run_s2_backtest(
         metrics=m,
         book=book,
         pair_trades=trade_df,
+        returns_base=book.returns_base if len(book.returns_base) else book.returns,
     )
