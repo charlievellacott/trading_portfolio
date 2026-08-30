@@ -11,6 +11,7 @@ config/credentials.env
 
 # Pipeline tester run dumps
 10_tests/s1_equities/s1_logs/
+05_strategies/s2_coint/cache/
 
 __pycache__/
 *.pyc

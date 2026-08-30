@@ -92,6 +92,6 @@ def test_median_sharpe_hint_is_commentary_only():
 
 def test_variant_ledger_seeded():
     ledger = load_variant_ledger()
-    assert ledger["cumulative_arms"] == 34
-    assert cumulative_trials_before("H-009") == 25
-    assert n_trials_stack("H-009", {"allow": 1, "never_allow": 2}) == 27
+    assert ledger["cumulative_arms"] == 46
+    assert cumulative_trials_before("H-009") == 26
+    assert n_trials_stack("H-009", {"allow": 1, "never_allow": 2}) == 28

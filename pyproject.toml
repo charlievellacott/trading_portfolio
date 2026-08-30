@@ -51,6 +51,7 @@ packages = [
   "execution",
   "execution.brokers",
   "execution.s1_equities",
+  "execution.s2_coint",
   "portfolio",
   "performance",
 ]
