@@ -149,6 +149,14 @@ def _ols_beta_corr(y: np.ndarray, x: np.ndarray) -> tuple[float, float]:
     return beta, corr
 
 
+def _nanmed(x: np.ndarray) -> float:
+    y = np.asarray(x, dtype=float)
+    y = y[np.isfinite(y)]
+    if y.size == 0:
+        return float("nan")
+    return float(np.median(y))
+
+
 def joint_shape_vs_spy(
     strategy_paths: pd.DataFrame,
     spy_paths: pd.DataFrame,
@@ -179,9 +187,9 @@ def joint_shape_vs_spy(
     p_spy_uw = float(spy_uw.mean())
     return pd.Series(
         {
-            "beta_median": float(np.nanmedian(betas)),
-            "corr_median": float(np.nanmedian(corrs)),
-            "down_capture_median": float(np.nanmedian(captures)),
+            "beta_median": _nanmed(betas),
+            "corr_median": _nanmed(corrs),
+            "down_capture_median": _nanmed(captures),
             "p_not_beat_given_spy_underwater": p_lose_given_spy_uw,
             "p_spy_terminal_underwater": p_spy_uw,
             "n_paths": float(n_paths),

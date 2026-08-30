@@ -26,19 +26,20 @@ def _synthetic_frame(n: int, *, freq: str, seed: int) -> pd.DataFrame:
     return pd.DataFrame({"strategy": strat, "spy": spy}, index=idx)
 
 
-def _assign_frame_cell(frame: pd.DataFrame) -> str:
-    payload = frame.to_json(orient="split", date_format="iso")
+def _assign_frame_cell(frame: pd.DataFrame, parquet_path: str) -> str:
+    frame.to_parquet(parquet_path)
     return (
         "import pandas as pd\n"
-        f"FRAME = pd.read_json(r'''{payload}''', orient='split')\n"
+        f"FRAME = pd.read_parquet(r{parquet_path!r})\n"
         "FRAME.index = pd.to_datetime(FRAME.index)\n"
         "print('synthetic FRAME', len(FRAME), FRAME.index.min().date(), FRAME.index.max().date())\n"
     )
 
 
-def _prepare_notebook(path: str, frame: pd.DataFrame) -> nbformat.NotebookNode:
+def _prepare_notebook(
+    path: str, frame: pd.DataFrame, parquet_path: str
+) -> nbformat.NotebookNode:
     nb = nbformat.read(path, as_version=4)
-    # Config: small storm so the always-run finishes in CI
     cfg = "".join(nb.cells[2].source)
     cfg = cfg.replace("DEFAULT_N_SIM = 400", "DEFAULT_N_SIM = 20")
     if "DEFAULT_H = 52" in cfg:
@@ -46,18 +47,13 @@ def _prepare_notebook(path: str, frame: pd.DataFrame) -> nbformat.NotebookNode:
     if "DEFAULT_H = 63" in cfg:
         cfg = cfg.replace("DEFAULT_H = 63", "DEFAULT_H = 10")
     nb.cells[2].source = cfg
-    # Replace data-load cell
-    nb.cells[4].source = _assign_frame_cell(frame)
-    # Fast HAC bootstrap inside run()
+    nb.cells[4].source = _assign_frame_cell(frame, parquet_path)
     run = "".join(nb.cells[9].source)
     run = run.replace("N_BOOTSTRAP = 600", "N_BOOTSTRAP = 40")
+    idx = run.find("\ntry:\n")
+    if idx >= 0:
+        run = run[: idx + 1]
     nb.cells[9].source = run
-    # Skip ipywidgets second pass
-    nb.cells[9].source = run.replace(
-        "ui = w.interactive(",
-        "raise RuntimeError('skip widgets in test')  # ui = w.interactive(",
-    )
-    # Smaller HMM
     hmm = "".join(nb.cells[-1].source)
     hmm = hmm.replace("n_simulations=200", "n_simulations=12")
     nb.cells[-1].source = hmm
@@ -81,9 +77,9 @@ def _execute(nb: nbformat.NotebookNode) -> None:
         pytest.skip("python3 jupyter kernel is not installed")
 
 
-def test_s1_ev_notebook_executes():
+def test_s1_ev_notebook_executes(tmp_path):
     frame = _synthetic_frame(36, freq="W", seed=5)
-    nb = _prepare_notebook(S1_NB, frame)
+    nb = _prepare_notebook(S1_NB, frame, os.path.join(str(tmp_path), "s1.parquet"))
     _execute(nb)
     # last geometry code cell should have run; PACK exists in a prior cell
     sources = ["".join(c.source) for c in nb.cells]
@@ -91,9 +87,9 @@ def test_s1_ev_notebook_executes():
     assert any("Joint shape vs SPY" in s for s in sources)
 
 
-def test_s2_ev_notebook_executes():
+def test_s2_ev_notebook_executes(tmp_path):
     frame = _synthetic_frame(40, freq="D", seed=6)
-    nb = _prepare_notebook(S2_NB, frame)
+    nb = _prepare_notebook(S2_NB, frame, os.path.join(str(tmp_path), "s2.parquet"))
     _execute(nb)
     sources = ["".join(c.source) for c in nb.cells]
     assert any("excess_fan" in s for s in sources)
