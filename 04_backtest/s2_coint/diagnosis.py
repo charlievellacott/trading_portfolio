@@ -729,3 +729,184 @@ def pair_deployment_table(
             }
         )
     return pd.DataFrame(rows, columns=cols)
+
+
+def mean_abs_score_summary(
+    panel: pd.DataFrame,
+    windows: Sequence[int],
+    *,
+    score_column: str = "z",
+    is_end: pd.Timestamp | str | None = None,
+) -> pd.DataFrame:
+    """Per-pair mean ``|score|`` and rolling-window stats for sizing-denom research.
+
+    Returns one row per ``pair_id`` × ``window`` plus a pooled ``frozen_is`` row per pair
+    (same book-level scalar on every pair row).
+    """
+    from backtest.s2_coint.tearsheet import fit_mean_abs_score
+    from strategies.s2_coint.sizing import rolling_mean_abs_score
+
+    if panel is None or panel.empty or score_column not in panel.columns:
+        return pd.DataFrame(
+            columns=[
+                "pair_id",
+                "window",
+                "mean_abs_z_full",
+                "mean_abs_z_is",
+                "frozen_is_scalar",
+                "rolling_mean_last_is",
+                "rolling_mean_full",
+            ]
+        )
+
+    d = panel.copy()
+    d["date"] = pd.to_datetime(d["date"])
+    if is_end is not None:
+        is_cut = pd.Timestamp(is_end).normalize()
+    else:
+        is_cut = pd.Timestamp(d["date"].max()).normalize()
+    is_mask = d["date"] <= is_cut
+    frozen = fit_mean_abs_score(d, score_column=score_column, date_mask=is_mask)
+
+    rows: list[dict] = []
+    for pair_id, g in d.groupby("pair_id", sort=False):
+        g = g.sort_values("date")
+        score = g[score_column].astype(float)
+        abs_z = score.abs()
+        is_mask_g = pd.to_datetime(g["date"]) <= is_cut
+        full_mean = float(abs_z[np.isfinite(abs_z)].mean()) if abs_z.notna().any() else float("nan")
+        is_abs = abs_z.loc[is_mask_g]
+        is_mean = (
+            float(is_abs[np.isfinite(is_abs)].mean())
+            if is_abs.notna().any()
+            else float("nan")
+        )
+        for w in windows:
+            roll = rolling_mean_abs_score(score, int(w))
+            roll_is = roll.loc[is_mask_g]
+            roll_is_valid = roll_is[np.isfinite(roll_is)]
+            last_is = float(roll_is_valid.iloc[-1]) if len(roll_is_valid) else float("nan")
+            roll_valid = roll[np.isfinite(roll)]
+            roll_full = float(roll_valid.mean()) if len(roll_valid) else float("nan")
+            rows.append(
+                {
+                    "pair_id": str(pair_id),
+                    "window": int(w),
+                    "mean_abs_z_full": full_mean,
+                    "mean_abs_z_is": is_mean,
+                    "frozen_is_scalar": float(frozen),
+                    "rolling_mean_last_is": last_is,
+                    "rolling_mean_full": roll_full,
+                }
+            )
+        rows.append(
+            {
+                "pair_id": str(pair_id),
+                "window": "frozen_is",
+                "mean_abs_z_full": full_mean,
+                "mean_abs_z_is": is_mean,
+                "frozen_is_scalar": float(frozen),
+                "rolling_mean_last_is": float("nan"),
+                "rolling_mean_full": float("nan"),
+            }
+        )
+    out = pd.DataFrame(rows)
+    return out.sort_values(["pair_id", "window"]).reset_index(drop=True)
+
+
+def plot_rolling_mean_abs(
+    panel: pd.DataFrame,
+    windows: Sequence[int],
+    *,
+    score_column: str = "z",
+    pairs: Sequence[str] | None = None,
+    is_end: pd.Timestamp | str | None = None,
+    frozen_is_scalar: float | None = None,
+) -> None:
+    """Per-pair time series of PIT rolling mean ``|score|`` for each window."""
+    import matplotlib.pyplot as plt
+
+    from backtest.s2_coint.tearsheet import fit_mean_abs_score
+    from strategies.s2_coint.sizing import rolling_mean_abs_score
+
+    if panel is None or panel.empty or score_column not in panel.columns:
+        raise ValueError("panel must contain score_column")
+
+    d = panel.copy()
+    d["date"] = pd.to_datetime(d["date"])
+    pair_ids = list(pairs) if pairs is not None else sorted(d["pair_id"].astype(str).unique())
+    if is_end is not None:
+        is_cut = pd.Timestamp(is_end).normalize()
+    else:
+        is_cut = pd.Timestamp(d["date"].max()).normalize()
+    if frozen_is_scalar is None:
+        frozen_is_scalar = fit_mean_abs_score(
+            d,
+            score_column=score_column,
+            date_mask=d["date"] <= is_cut,
+        )
+
+    n = len(pair_ids)
+    fig, axes = plt.subplots(n, 1, figsize=(12, 3.2 * n), sharex=True, squeeze=False)
+    for ax_i, pair_id in enumerate(pair_ids):
+        ax = axes[ax_i, 0]
+        g = d.loc[d["pair_id"].astype(str) == str(pair_id)].sort_values("date")
+        if g.empty:
+            continue
+        score = g[score_column].astype(float)
+        for w in windows:
+            roll = rolling_mean_abs_score(score, int(w))
+            ax.plot(g["date"], roll, label=f"rolling w={int(w)}", linewidth=1.0)
+        ax.axhline(
+            float(frozen_is_scalar),
+            color="black",
+            linestyle="--",
+            linewidth=1.0,
+            label=f"frozen IS mean={frozen_is_scalar:.3f}",
+        )
+        ax.axvline(is_cut, color="gray", linestyle=":", linewidth=0.9, label="IS end")
+        ax.set_title(str(pair_id))
+        ax.set_ylabel("mean |z|")
+        ax.legend(loc="upper right", fontsize=8)
+        ax.grid(True, alpha=0.25)
+    axes[-1, 0].set_xlabel("date")
+    fig.suptitle("Score-sizing denominator: rolling mean |z| vs frozen IS scalar", y=1.01)
+    fig.tight_layout()
+    plt.show()
+
+
+def run_score_denom_backtest(
+    panel: pd.DataFrame,
+    stack: dict,
+    *,
+    denom_mode: str,
+    rolling_window: int | None = None,
+    s1_weekly: pd.Series | None = None,
+    is_end: pd.Timestamp | str | None = None,
+    use_oos: bool = False,
+):
+    """Run frozen-stack backtest with IS-frozen or per-pair rolling ``mean_abs_score``."""
+    from backtest.s2_coint.research import config_from_stack, is_end_for_stack
+    from backtest.s2_coint.runner import run_s2_backtest
+    from backtest.s2_coint.tearsheet import fit_mean_abs_score
+    from strategies.s2_coint.live_decision import attach_rolling_mean_abs_score
+
+    window = slice_panel_window(
+        panel,
+        is_end or is_end_for_stack(stack, panel),
+        use_oos=use_oos,
+    )
+    cfg = config_from_stack(stack)
+    work = window.drop(columns=["mean_abs_score"], errors="ignore").copy()
+    is_cut = pd.Timestamp(is_end or is_end_for_stack(stack, panel)).normalize()
+    is_mask = pd.to_datetime(work["date"]) <= is_cut
+
+    if denom_mode == "frozen_is":
+        mean_abs = fit_mean_abs_score(work, date_mask=is_mask)
+        return run_s2_backtest(work, cfg, s1_weekly=s1_weekly, mean_abs_score=mean_abs)
+    if denom_mode == "rolling":
+        if rolling_window is None or int(rolling_window) < 1:
+            raise ValueError("rolling_window required when denom_mode='rolling'")
+        scored = attach_rolling_mean_abs_score(work, int(rolling_window), score_column="z")
+        return run_s2_backtest(scored, cfg, s1_weekly=s1_weekly, mean_abs_score=1.0)
+    raise ValueError(f"denom_mode must be 'frozen_is' or 'rolling', got {denom_mode!r}")

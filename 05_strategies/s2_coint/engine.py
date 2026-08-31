@@ -34,6 +34,22 @@ from strategies.s2_coint.sizing import atr_size_multiplier, pair_scale_from_scor
 _EMPTY_TRADES = pd.DataFrame(columns=list(_TRADE_COLS))
 
 
+def _mean_abs_at_entry(
+    g: pd.DataFrame,
+    i: int,
+    fallback: float,
+    *,
+    column: str = "mean_abs_score",
+) -> float:
+    """PIT row ``mean_abs_score`` when present; else scalar ``fallback``."""
+    if column in g.columns:
+        v = float(g[column].iloc[i])
+        if np.isfinite(v) and v > 0:
+            return v
+    fb = float(fallback)
+    return fb if np.isfinite(fb) and fb > 0 else 1.0
+
+
 def _entry_mask(
     mask: Sequence[bool] | np.ndarray | None,
     n: int,
@@ -356,7 +372,10 @@ def simulate_pair(
                 do_entry = False
 
         scale = pair_scale_from_score(
-            z_t, adf[i], size_mode=cfg.size_mode, mean_abs_score=mean_abs_score
+            z_t,
+            adf[i],
+            size_mode=cfg.size_mode,
+            mean_abs_score=_mean_abs_at_entry(d, i, mean_abs_score),
         )
         size_mult = 1.0
         if cfg.exit_mode == "hl3_atr_breaker" and do_entry:
@@ -732,7 +751,10 @@ def _simulate_book_joint(
             so = float(g["spread_open"].iloc[i + 1]) if "spread_open" in g.columns else float("nan")
             beta_fill = float(g[cfg.beta_column].iloc[i + 1])
             scale = pair_scale_from_score(
-                score, adf, size_mode=cfg.size_mode, mean_abs_score=mean_abs_score
+                score,
+                adf,
+                size_mode=cfg.size_mode,
+                mean_abs_score=_mean_abs_at_entry(g, i, mean_abs_score),
             )
             size_mult = 1.0
             if cfg.exit_mode == "hl3_atr_breaker":
