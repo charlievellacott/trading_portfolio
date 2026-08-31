@@ -109,6 +109,35 @@ def test_rolling_mean_abs_score_window():
     assert m.iloc[4] == pytest.approx(1.4)
 
 
+def test_engine_uses_panel_mean_abs_column():
+    from strategies.s2_coint.engine import simulate_pair
+
+    z = np.zeros(20, dtype=float)
+    z[12:] = 2.0
+    panel = _pair_panel(n=20, z=z, beta=1.0)
+    panel["mean_abs_score"] = 2.0
+    cfg = _star_like_cfg()
+    res_col = simulate_pair(panel, cfg, mean_abs_score=99.0)
+    panel2 = panel.drop(columns=["mean_abs_score"])
+    res_fb = simulate_pair(panel2, cfg, mean_abs_score=2.0)
+    assert len(res_col.trades) == len(res_fb.trades)
+    if not res_col.trades.empty:
+        assert res_col.trades["pnl_pct"].iloc[0] == pytest.approx(
+            res_fb.trades["pnl_pct"].iloc[0]
+        )
+
+
+def test_mean_abs_score_summary_smoke():
+    from backtest.s2_coint.diagnosis import mean_abs_score_summary
+
+    z = np.linspace(-2.0, 2.0, 30)
+    panel = _pair_panel(n=30, z=z)
+    out = mean_abs_score_summary(panel, [5, 10], is_end=panel["date"].iloc[-1])
+    assert not out.empty
+    assert set(out["pair_id"]) == {"AAA|BBB"}
+    assert "frozen_is" in set(out["window"].astype(str))
+
+
 def test_deterministic_z_short_side():
     z = np.zeros(20, dtype=float)
     z[12:] = 2.0
