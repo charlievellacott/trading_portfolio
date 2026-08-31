@@ -16,6 +16,10 @@ from data.repo_paths import repo_root
 
 # constants
 CREDENTIALS_PATH = os.path.join(repo_root(), "config", "credentials.env")
+S1_ALPACA_API_KEY = "S1_ALPACA_API_KEY"
+S1_ALPACA_SECRET_KEY = "S1_ALPACA_SECRET_KEY"
+S2_ALPACA_API_KEY = "S2_ALPACA_API_KEY"
+S2_ALPACA_SECRET_KEY = "S2_ALPACA_SECRET_KEY"
 LIQUIDATE_POLL_INTERVAL_SEC = 2.0
 LIQUIDATE_TIMEOUT_SEC = 15 * 60
 FILL_POLL_INTERVAL_SEC = 2.0
@@ -43,8 +47,8 @@ def _as_datetime(value):
 def load_alpaca_credentials(
     path=None,
     *,
-    api_key_name: str = "ALPACA_API_KEY",
-    secret_key_name: str = "ALPACA_SECRET_KEY",
+    api_key_name: str = S1_ALPACA_API_KEY,
+    secret_key_name: str = S1_ALPACA_SECRET_KEY,
 ):
     creds_path = CREDENTIALS_PATH if path is None else path
     if not os.path.isfile(creds_path):
@@ -74,10 +78,10 @@ class AlpacaBroker:
         paper: bool = True,
         *,
         credentials_path: str | None = None,
-        api_key_name: str = "ALPACA_API_KEY",
-        secret_key_name: str = "ALPACA_SECRET_KEY",
+        api_key_name: str = S1_ALPACA_API_KEY,
+        secret_key_name: str = S1_ALPACA_SECRET_KEY,
     ) -> None:
-        # 1. Read key/secret (S1 default file/names; S2 passes dedicated keys)
+        # 1. Read key/secret from config/credentials.env (S1 names by default)
         api_key, secret_key = load_alpaca_credentials(
             credentials_path,
             api_key_name=api_key_name,

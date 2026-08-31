@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from risk.monte_carlo.ev_stats import cvar, path_wealth, terminal_simple_return
+from risk.analytics.monte_carlo.ev_stats import cvar, path_wealth, terminal_simple_return
 
 
 def _align_path_frames(

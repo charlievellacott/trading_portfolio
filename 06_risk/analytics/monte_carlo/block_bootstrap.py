@@ -7,7 +7,7 @@ from typing import Self
 import numpy as np
 import pandas as pd
 
-from risk.monte_carlo.simulator import MonteCarloSimulator
+from risk.analytics.monte_carlo.simulator import MonteCarloSimulator
 
 
 def stationary_bootstrap_indices(

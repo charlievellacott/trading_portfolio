@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from risk.monte_carlo.ev_stats import path_wealth, terminal_simple_return
+from risk.analytics.monte_carlo.ev_stats import path_wealth, terminal_simple_return
 
 
 def _add_fan_band(fig, x, w: pd.DataFrame, *, label: str, color: str, fill) -> None:

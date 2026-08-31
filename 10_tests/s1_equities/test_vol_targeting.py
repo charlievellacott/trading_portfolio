@@ -1,4 +1,4 @@
-"""Tests for risk.s1_equities.vol_targeting / signal_conviction and runner wiring."""
+"""Tests for risk.analytics.s1_equities.vol_targeting / signal_conviction and runner wiring."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk.s1_equities.position_sizing import (
+from risk.analytics.s1_equities.position_sizing import (
     monday_gross_leverage,
     monday_inv_vol_weights,
 )
-from risk.s1_equities.signal_conviction import (
+from risk.analytics.s1_equities.signal_conviction import (
     ICScaleConfig,
     bayes_ic_series,
     ic_multiplier_from_history,
@@ -20,7 +20,7 @@ from risk.s1_equities.signal_conviction import (
     initial_bayes_ic_state,
     ic_from_state,
 )
-from risk.s1_equities.vol_targeting import (
+from risk.analytics.s1_equities.vol_targeting import (
     ESTIMATOR_BAYES,
     ESTIMATOR_ROLLING,
     VolTargetConfig,
@@ -149,7 +149,7 @@ def test_bayes_incremental_matches_batch() -> None:
     batch = leverage_from_history(r, cfg)
     # After full history, vol from state → leverage (no deadband)
     vol = vol_from_bayes_state(state, cfg)
-    from risk.s1_equities.vol_targeting import _leverage_from_vol
+    from risk.analytics.s1_equities.vol_targeting import _leverage_from_vol
 
     inc = _leverage_from_vol(vol, cfg)
     assert abs(batch - inc) < 1e-10

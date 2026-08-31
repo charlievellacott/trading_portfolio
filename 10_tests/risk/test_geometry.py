@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk.monte_carlo.geometry import (
+from risk.analytics.monte_carlo.geometry import (
     ev_concentration,
     excess_wealth_paths,
     joint_shape_vs_spy,
@@ -16,7 +16,7 @@ from risk.monte_carlo.geometry import (
     realized_wealth_for_fan,
     wealth_with_start,
 )
-from risk.monte_carlo.report import run_ev_vs_spy
+from risk.analytics.monte_carlo.report import run_ev_vs_spy
 
 
 def test_max_dd_includes_start_wealth():

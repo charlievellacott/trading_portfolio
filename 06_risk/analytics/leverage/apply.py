@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pandas as pd
 
-from risk.s1_equities.vol_targeting import (
+from risk.analytics.s1_equities.vol_targeting import (
     VolTargetConfig,
     leverage_series,
     parse_vol_target_star,

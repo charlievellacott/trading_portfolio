@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from risk.prop_firm.s1_calendar import weekly_to_weekday_returns
+from risk.analytics.prop_firm.s1_calendar import weekly_to_weekday_returns
 
 
 def test_weekly_ret_lands_on_monday_other_weekdays_zero():

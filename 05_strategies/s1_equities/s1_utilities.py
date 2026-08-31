@@ -20,7 +20,7 @@ from models.s1_equities.training_common import (
     feature_attrition_summary,
     week_start_dates,
 )
-from risk.s1_equities.position_sizing import monday_inv_vol_weights
+from risk.analytics.s1_equities.position_sizing import monday_inv_vol_weights
 
 _HLCV = ("high", "low", "close", "volume")
 

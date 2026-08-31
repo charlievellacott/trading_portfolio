@@ -23,6 +23,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 
+from execution.brokers.alpaca_broker import (
+    AlpacaBroker,
+    S2_ALPACA_API_KEY,
+    S2_ALPACA_SECRET_KEY,
+)
 from data.repo_paths import repo_root
 from performance.live_log import (
     BROKER_ALPACA,
@@ -50,8 +55,6 @@ LOG_DIR = os.path.join(_HERE, "logs")
 LIVE_LOG_DIR = os.path.join(repo_root(), "09_performance", "cache", "live_s2")
 STRATEGY_ID = STRATEGY_S2_COINT
 BROKER_ID = BROKER_ALPACA
-S2_CREDENTIALS_FILE = os.path.join(repo_root(), "config", "credentials_s2.env")
-MAIN_CREDENTIALS_FILE = os.path.join(repo_root(), "config", "credentials.env")
 
 
 def is_us_equity_trading_day(date: datetime.date) -> bool:
@@ -111,42 +114,6 @@ def log_line(log_path, msg):
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(line + "\n")
-
-
-def _file_has_key(path: str, name: str) -> bool:
-    prefix = f"{name}="
-    with open(path, encoding="utf-8") as f:
-        for ln in f:
-            if ln.strip().startswith(prefix):
-                return True
-    return False
-
-
-def resolve_s2_broker_kwargs() -> dict:
-    """Dedicated S2 keys only — never fall back to S1 ALPACA_API_KEY."""
-    env_path = os.environ.get("S2_ALPACA_CREDENTIALS", "").strip()
-    if env_path:
-        path = os.path.abspath(env_path)
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"S2_ALPACA_CREDENTIALS not found: {path}")
-        return {"credentials_path": path}
-    if os.path.isfile(S2_CREDENTIALS_FILE):
-        return {"credentials_path": S2_CREDENTIALS_FILE}
-    if os.path.isfile(MAIN_CREDENTIALS_FILE) and _file_has_key(
-        MAIN_CREDENTIALS_FILE, "ALPACA_S2_API_KEY"
-    ):
-        return {
-            "credentials_path": MAIN_CREDENTIALS_FILE,
-            "api_key_name": "ALPACA_S2_API_KEY",
-            "secret_key_name": "ALPACA_S2_SECRET_KEY",
-        }
-    raise FileNotFoundError(
-        "S2 paper runner requires a dedicated Alpaca paper account. "
-        "Create config/credentials_s2.env with ALPACA_API_KEY/ALPACA_SECRET_KEY, "
-        "or set ALPACA_S2_API_KEY and ALPACA_S2_SECRET_KEY in config/credentials.env, "
-        "or set S2_ALPACA_CREDENTIALS to that file. "
-        "Refusing to fall back to S1 ALPACA_API_KEY."
-    )
 
 
 def _signed_qty(weight: float, equity: float, px: float) -> int:
@@ -389,9 +356,11 @@ def main(argv: list[str] | None = None) -> None:
         if not args.skip_wait:
             ensure_nyse_preopen_submit()
             log_line(log_path, "SUBMIT WINDOW (pre-open / RTH)")
-        from execution.brokers.alpaca_broker import AlpacaBroker
-
-        broker = AlpacaBroker(paper=PAPER, **resolve_s2_broker_kwargs())
+        broker = AlpacaBroker(
+            paper=PAPER,
+            api_key_name=S2_ALPACA_API_KEY,
+            secret_key_name=S2_ALPACA_SECRET_KEY,
+        )
         equity = float(broker.get_account().equity)
         current = {
             str(p["ticker"]).strip().upper(): float(p["qty"])

@@ -11,7 +11,7 @@ from performance.sharpe_inference import (
     probabilistic_sharpe_ratio,
     return_moments,
 )
-from risk.monte_carlo.block_bootstrap import (
+from risk.analytics.monte_carlo.block_bootstrap import (
     StationaryBlockBootstrap,
     asset_paths,
     is_joint_simulations,

@@ -11,8 +11,8 @@ from data.processing.feature_implementation.hmm_regime import (
     GaussianHMM2Params,
     fit_gaussian_hmm_2state,
 )
-from risk.monte_carlo.block_bootstrap import _terminal_wealth_summary
-from risk.monte_carlo.simulator import MonteCarloSimulator
+from risk.analytics.monte_carlo.block_bootstrap import _terminal_wealth_summary
+from risk.analytics.monte_carlo.simulator import MonteCarloSimulator
 
 
 class GaussianHMMSimulator(MonteCarloSimulator):

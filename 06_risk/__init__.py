@@ -1,1 +1,1 @@
-"""Risk package (leverage policy, Monte Carlo EV, prop-firm engine, S1 sizing)."""
+"""Risk package (pct stops; analytics subpackage for leverage, MC, prop-firm, S1 sizing)."""

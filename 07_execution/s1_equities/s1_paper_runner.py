@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 
-from execution.brokers.alpaca_broker import AlpacaBroker
+from execution.brokers.alpaca_broker import AlpacaBroker, S1_ALPACA_API_KEY, S1_ALPACA_SECRET_KEY
 from performance.live_log import (
     BROKER_ALPACA,
     STRATEGY_S1_EQUITIES,
@@ -342,7 +342,11 @@ def main() -> None:
             f"Today ({today}) is not a tradable Monday for US equities (probably a holiday). Exiting."
         )
 
-    broker = AlpacaBroker(paper=PAPER)
+    broker = AlpacaBroker(
+        paper=PAPER,
+        api_key_name=S1_ALPACA_API_KEY,
+        secret_key_name=S1_ALPACA_SECRET_KEY,
+    )
     log_path = os.path.join(LOG_DIR, f"s1_paper_{today:%Y%m%d}.txt")
     run_id = str(uuid.uuid4())
 

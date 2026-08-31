@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from risk.prop_firm.economics import attach_economics, geometric_attempts_until_pass
-from risk.prop_firm.ftmo_two_step import simulate_ftmo_two_step
+from risk.analytics.prop_firm.economics import attach_economics, geometric_attempts_until_pass
+from risk.analytics.prop_firm.ftmo_two_step import simulate_ftmo_two_step
 
 
 def two_step_headline(results: pd.DataFrame) -> pd.Series:

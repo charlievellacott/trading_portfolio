@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from risk.s1_equities.vol_targeting import VolTargetConfig, leverage_from_history
+from risk.analytics.s1_equities.vol_targeting import VolTargetConfig, leverage_from_history
 from strategies.s2_coint.baseline import PERIODS_PER_YEAR
 from strategies.s2_coint.config import S2SimConfig
 from strategies.s2_coint.costs import daily_borrow_return, resolve_cost_profile

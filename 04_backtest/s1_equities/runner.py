@@ -34,12 +34,12 @@ from data.processing.feature_implementation.realized_vol import (
     DEFAULT_OPEN_VOL_WINDOW,
     trailing_open_vol_matrix,
 )
-from risk.s1_equities.signal_conviction import (
+from risk.analytics.s1_equities.signal_conviction import (
     ICScaleConfig,
     ic_multiplier_from_history,
     ic_posterior_from_history,
 )
-from risk.s1_equities.vol_targeting import (
+from risk.analytics.s1_equities.vol_targeting import (
     ESTIMATOR_BAYES,
     ESTIMATOR_EWM,
     ESTIMATOR_ROLLING,
@@ -160,7 +160,7 @@ def run_backtest(
     date_mask :
         Optional boolean Series; only entry dates where True are traded.
     vol_target :
-        Optional ``VolTargetConfig``; scales gross via ``risk.s1_equities.vol_targeting``.
+        Optional ``VolTargetConfig``; scales gross via ``risk.analytics.s1_equities.vol_targeting``.
     ic_scale :
         Optional ``ICScaleConfig``; multiplies vol leverage via IC conviction.
     ic_inputs :

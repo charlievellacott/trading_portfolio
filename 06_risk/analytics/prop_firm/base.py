@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 
 import pandas as pd
 
-from risk.prop_firm.state import PathOutcome, PhaseState, initial_state
+from risk.analytics.prop_firm.state import PathOutcome, PhaseState, initial_state
 
 
 def first_binding_reason(

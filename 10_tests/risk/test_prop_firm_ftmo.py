@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from risk.prop_firm.ftmo_two_step import (
+from risk.analytics.prop_firm.ftmo_two_step import (
     FtmoTwoStepChallenge,
     FtmoTwoStepFunded,
     FtmoTwoStepVerification,
     run_two_step,
 )
-from risk.prop_firm.registry import CHALLENGES, make_challenge
+from risk.analytics.prop_firm.registry import CHALLENGES, make_challenge
 
 
 def _path(*rets: float) -> pd.Series:
@@ -151,7 +151,7 @@ def test_two_step_both_pass_uses_funded_surplus():
 
 
 def test_pay_once_ev_do_not_take():
-    from risk.prop_firm.economics import attach_economics
+    from risk.analytics.prop_firm.economics import attach_economics
 
     df = pd.DataFrame(
         {
@@ -169,7 +169,7 @@ def test_pay_once_ev_do_not_take():
 
 
 def test_leverage_grid_fail_rate_columns_and_ftmo_cap():
-    from risk.prop_firm.report import suggest_challenge_leverage
+    from risk.analytics.prop_firm.report import suggest_challenge_leverage
 
     grid = pd.DataFrame(
         {
@@ -193,7 +193,7 @@ def test_leverage_grid_fail_rate_columns_and_ftmo_cap():
 
 
 def test_suggested_k_never_exceeds_fail_rate_survivor():
-    from risk.prop_firm.report import suggest_challenge_leverage
+    from risk.analytics.prop_firm.report import suggest_challenge_leverage
 
     grid = pd.DataFrame(
         {
@@ -214,7 +214,7 @@ def test_suggested_k_never_exceeds_fail_rate_survivor():
 
 
 def test_leverage_ev_grid_includes_fail_rate_columns():
-    from risk.prop_firm.report import leverage_ev_grid
+    from risk.analytics.prop_firm.report import leverage_ev_grid
 
     idx = pd.bdate_range("2020-01-01", periods=40)
     r = pd.Series(0.002, index=idx)

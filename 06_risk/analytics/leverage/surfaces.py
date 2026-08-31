@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 
 from backtest.s1_equities.runner import summarize_periods
-from risk.leverage.apply import cfg_with_target, overlay_vol_target
-from risk.monte_carlo.ev_stats import cvar
-from risk.s1_equities.vol_targeting import VolTargetConfig
+from risk.analytics.leverage.apply import cfg_with_target, overlay_vol_target
+from risk.analytics.monte_carlo.ev_stats import cvar
+from risk.analytics.s1_equities.vol_targeting import VolTargetConfig
 
 DEFAULT_TARGETS = (0.06, 0.08, 0.10, 0.12, 0.15, 0.18)
 

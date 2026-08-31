@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from risk.leverage.apply import cfg_with_target, overlay_vol_target
-from risk.leverage.artifacts import write_leverage_artifact
-from risk.leverage.policy import apply_policy, half_kelly_target_vol
-from risk.leverage.surfaces import leverage_surface
-from risk.s1_equities.vol_targeting import VolTargetConfig, vol_target_star
+from risk.analytics.leverage.apply import cfg_with_target, overlay_vol_target
+from risk.analytics.leverage.artifacts import write_leverage_artifact
+from risk.analytics.leverage.policy import apply_policy, half_kelly_target_vol
+from risk.analytics.leverage.surfaces import leverage_surface
+from risk.analytics.s1_equities.vol_targeting import VolTargetConfig, vol_target_star
 
 
 def run_leverage_policy(

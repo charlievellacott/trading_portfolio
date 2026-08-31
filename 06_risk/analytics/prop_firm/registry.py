@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from risk.prop_firm.base import ChallengePhase
-from risk.prop_firm.ftmo_two_step import (
+from risk.analytics.prop_firm.base import ChallengePhase
+from risk.analytics.prop_firm.ftmo_two_step import (
     FtmoTwoStepChallenge,
     FtmoTwoStepFunded,
     FtmoTwoStepVerification,

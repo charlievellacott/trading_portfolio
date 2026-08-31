@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from risk.monte_carlo.block_bootstrap import split_joint_simulations
-from risk.monte_carlo.ev_stats import (
+from risk.analytics.monte_carlo.block_bootstrap import split_joint_simulations
+from risk.analytics.monte_carlo.ev_stats import (
     cvar,
     ev_significance,
     excess_returns,

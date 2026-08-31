@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from risk.s1_equities.vol_targeting import VolTargetConfig, leverage_from_history
+from risk.analytics.s1_equities.vol_targeting import VolTargetConfig, leverage_from_history
 from strategies.s2_coint.baseline import (
     PERIODS_PER_YEAR,
     PairSimResult,

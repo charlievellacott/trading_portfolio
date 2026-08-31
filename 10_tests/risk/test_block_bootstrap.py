@@ -6,12 +6,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk.monte_carlo.block_bootstrap import (
+from risk.analytics.monte_carlo.block_bootstrap import (
     StationaryBlockBootstrap,
     split_joint_simulations,
     stationary_bootstrap_indices,
 )
-from risk.monte_carlo.hmm_simulator import GaussianHMMSimulator
+from risk.analytics.monte_carlo.hmm_simulator import GaussianHMMSimulator
 
 
 def test_indices_in_range_no_negative_lags():

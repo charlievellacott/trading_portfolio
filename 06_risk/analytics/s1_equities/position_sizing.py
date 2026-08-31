@@ -18,11 +18,11 @@ import pandas as pd
 from data.processing.feature_implementation.realized_vol import (
     trailing_open_vol_matrix,
 )
-from risk.s1_equities.signal_conviction import (
+from risk.analytics.s1_equities.signal_conviction import (
     ICScaleConfig,
     ic_multiplier_from_history,
 )
-from risk.s1_equities.vol_targeting import VolTargetConfig, compute_gross_leverage
+from risk.analytics.s1_equities.vol_targeting import VolTargetConfig, compute_gross_leverage
 
 DEFAULT_INV_VOL_WINDOW = 42
 
@@ -141,7 +141,7 @@ def monday_gross_leverage(
         max_gross=max_gross,
     )
     # Recover L_vol for diagnostics (without IC)
-    from risk.s1_equities.vol_targeting import leverage_from_history
+    from risk.analytics.s1_equities.vol_targeting import leverage_from_history
 
     l_vol = leverage_from_history(
         past_returns, vol_cfg, prev_leverage=prev_leverage

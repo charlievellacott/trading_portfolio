@@ -1,13 +1,13 @@
 """Monte Carlo edge-quality: EV, significance, joint P(beat SPY)."""
 
-from risk.monte_carlo.block_bootstrap import (
+from risk.analytics.monte_carlo.block_bootstrap import (
     StationaryBlockBootstrap,
     asset_paths,
     is_joint_simulations,
     split_joint_simulations,
     stationary_bootstrap_indices,
 )
-from risk.monte_carlo.ev_stats import (
+from risk.analytics.monte_carlo.ev_stats import (
     apply_cost_haircut,
     cvar,
     ev_significance,
@@ -20,13 +20,13 @@ from risk.monte_carlo.ev_stats import (
     simulate_joint_paths,
     underwater_probs,
 )
-from risk.monte_carlo.geometry import (
+from risk.analytics.monte_carlo.geometry import (
     ev_concentration,
     joint_shape_vs_spy,
     pathwise_holes,
 )
-from risk.monte_carlo.hmm_simulator import GaussianHMMSimulator
-from risk.monte_carlo.simulator import MonteCarloSimulator
+from risk.analytics.monte_carlo.hmm_simulator import GaussianHMMSimulator
+from risk.analytics.monte_carlo.simulator import MonteCarloSimulator
 
 __all__ = [
     "GaussianHMMSimulator",

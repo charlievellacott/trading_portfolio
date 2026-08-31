@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from risk.monte_carlo.ev_stats import (
+from risk.analytics.monte_carlo.ev_stats import (
     cvar,
     ev_significance,
     excess_returns,
@@ -16,7 +16,7 @@ from risk.monte_carlo.ev_stats import (
     terminal_simple_return,
     underwater_probs,
 )
-from risk.monte_carlo.geometry import (
+from risk.analytics.monte_carlo.geometry import (
     ev_concentration,
     excess_wealth_paths,
     holes_summary,
@@ -26,7 +26,7 @@ from risk.monte_carlo.geometry import (
     realized_terminal_percentile,
     realized_wealth_for_fan,
 )
-from risk.monte_carlo.plots import (
+from risk.analytics.monte_carlo.plots import (
     equity_fan_figure,
     excess_wealth_fan_figure,
     max_dd_hist_figure,

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from risk.monte_carlo.block_bootstrap import StationaryBlockBootstrap, asset_paths
-from risk.monte_carlo.ev_stats import scale_simple_returns
-from risk.prop_firm.base import ChallengePhase
+from risk.analytics.monte_carlo.block_bootstrap import StationaryBlockBootstrap, asset_paths
+from risk.analytics.monte_carlo.ev_stats import scale_simple_returns
+from risk.analytics.prop_firm.base import ChallengePhase
 
 
 class FtmoTwoStepChallenge(ChallengePhase):

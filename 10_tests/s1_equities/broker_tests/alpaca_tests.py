@@ -3,7 +3,7 @@
 Run:
     python 10_tests/s1_equities/broker_tests/alpaca_tests.py
 
-API keys are read from config/credentials.env (ALPACA_API_KEY= / ALPACA_SECRET_KEY=).
+API keys are read from config/credentials.env (S1_ALPACA_API_KEY= / S1_ALPACA_SECRET_KEY=).
 Uses paper trading by default; pass --live to hit the live endpoint (not recommended).
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ class CheckResult:
 
 
 def load_credentials(path: str = CREDENTIALS_PATH) -> tuple[str, str]:
-    """Return (api_key, secret_key) from ALPACA_API_KEY= / ALPACA_SECRET_KEY= lines."""
+    """Return (api_key, secret_key) from S1_ALPACA_API_KEY= / S1_ALPACA_SECRET_KEY= lines."""
     return load_alpaca_credentials(path)
 
 

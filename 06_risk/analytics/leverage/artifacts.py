@@ -6,12 +6,12 @@ import json
 import os
 from datetime import datetime, timezone
 
-from risk.monte_carlo.loaders import find_repo_root
+from risk.analytics.monte_carlo.loaders import find_repo_root
 
 
 def artifact_path(repo_root: str, sleeve: str) -> str:
     return os.path.join(
-        repo_root, "06_risk", "leverage", "artifacts", f"{sleeve}_leverage.json"
+        repo_root, "06_risk", "analytics", "leverage", "artifacts", f"{sleeve}_leverage.json"
     )
 
 

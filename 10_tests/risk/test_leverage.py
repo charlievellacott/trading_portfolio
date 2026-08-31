@@ -8,11 +8,11 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 
-from risk.leverage.apply import overlay_vol_target
-from risk.leverage.loaders import require_base_parquet
-from risk.leverage.policy import apply_policy, half_kelly_target_vol
-from risk.leverage.report import run_leverage_policy
-from risk.s1_equities.vol_targeting import ESTIMATOR_ROLLING, VolTargetConfig
+from risk.analytics.leverage.apply import overlay_vol_target
+from risk.analytics.leverage.loaders import require_base_parquet
+from risk.analytics.leverage.policy import apply_policy, half_kelly_target_vol
+from risk.analytics.leverage.report import run_leverage_policy
+from risk.analytics.s1_equities.vol_targeting import ESTIMATOR_ROLLING, VolTargetConfig
 
 
 def _quiet_weekly(n: int = 160, seed: int = 0) -> pd.Series:

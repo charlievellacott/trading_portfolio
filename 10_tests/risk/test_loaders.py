@@ -6,8 +6,8 @@ import os
 
 import pytest
 
-from risk.leverage.loaders import load_s2_period_returns_base
-from risk.monte_carlo.loaders import find_repo_root, load_s2_period_returns, require_parquet
+from risk.analytics.leverage.loaders import load_s2_period_returns_base
+from risk.analytics.monte_carlo.loaders import find_repo_root, load_s2_period_returns, require_parquet
 
 
 def test_find_repo_root():

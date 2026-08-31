@@ -6,7 +6,7 @@ import os
 
 import pandas as pd
 
-from risk.monte_carlo.loaders import find_repo_root
+from risk.analytics.monte_carlo.loaders import find_repo_root
 from strategies.s2_coint.metrics import load_s1_period_returns
 
 S1_BASE_EXPORT_NOTE = (
@@ -44,7 +44,7 @@ def s2_period_returns_base_path(repo_root: str) -> str:
         "01_data",
         "data_files",
         "s2_coint",
-        "s2_period_returns_base.parquet",
+        "s2_period_returns.parquet",
     )
 
 
