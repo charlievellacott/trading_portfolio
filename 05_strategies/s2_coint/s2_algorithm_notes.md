@@ -87,6 +87,8 @@ S2 panels fetch **unadjusted** OHLCV (`fetch_ohlcv(..., auto_adjust=False)` in `
 - Per-pair IS stats: trade count, median hold (completed round-trips), cost bps/year, Sharpe, max DD, rolling ADF (`adf_pvalue` from `compute_coint_metrics`).
 - Asia C IS postmortem → `02_research/s2_coint/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb` (helpers in `04_backtest/s2_coint/diagnosis.py`).
 - **Universe C shelved.** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table in `02_research/s2_coint/universe.md`; archived artifacts in `04_backtest/s2_coint/artifacts/asia_c/`.
+- **Universe D shelved.** WSO.B is not shortable via Alpaca or Interactive Brokers (IBKR). Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`; `WSO|WSO.B` delivered the entirety of the returns. No further broker search. H-001 drops US tickers with Alpaca `shortable=False` before EG screening.
+- **Alpaca `shortable` vs `easy_to_borrow`.** Gate is `shortable` (broker will take the short). `easy_to_borrow` is the ETB list; HTB names can be shortable but not ETB. Displayed in H-001, not a gate. Universes in `SKIP_SHORTABILITY_UNIVERSES` (currently `F`) are not queried.
 - Overlay check: compound IS daily book returns to S1 Monday–Monday weeks and correlate vs `01_data/data_files/s1_equities/s1_period_returns.parquet` (exported from `08_oos_tearsheet.ipynb`). Missing file → `corr_to_s1` is NaN.
 
 ## Live paper (hardcoded STAR)

@@ -93,6 +93,36 @@ class AlpacaBroker:
     def get_account(self):
         return self.client.get_account()
 
+    def get_asset_shortability(self, tickers):
+        """Return one dict per ticker: ticker, alpaca_symbol, shortable, easy_to_borrow, found, error."""
+        rows = []
+        for raw in tickers:
+            ticker = str(raw).strip()
+            try:
+                asset = self.client.get_asset(ticker)
+                rows.append(
+                    {
+                        "ticker": ticker,
+                        "alpaca_symbol": str(getattr(asset, "symbol", "") or ""),
+                        "shortable": bool(getattr(asset, "shortable", False)),
+                        "easy_to_borrow": bool(getattr(asset, "easy_to_borrow", False)),
+                        "found": True,
+                        "error": "",
+                    }
+                )
+            except Exception as exc:
+                rows.append(
+                    {
+                        "ticker": ticker,
+                        "alpaca_symbol": "",
+                        "shortable": False,
+                        "easy_to_borrow": False,
+                        "found": False,
+                        "error": str(exc),
+                    }
+                )
+        return rows
+
     def get_positions(self):
         return self.client.get_all_positions()
 
