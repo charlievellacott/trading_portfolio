@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from backtest.s2_coint.report import load_star_stack
 from backtest.s2_coint.research import DEFAULT_STAR_STACK, config_from_stack
+from backtest.star_stack_io import load_star_stack
 from data.ingestion.equity_fetcher import OHLCV_COLUMNS, fetch_ohlcv
 from data.processing.s2_coint_store import build_pair_panel
 from strategies.base.strategy import Strategy

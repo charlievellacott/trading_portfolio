@@ -1,0 +1,16 @@
+{
+  "N_STAR": 15,
+  "TIMING_STAR": "mon_open_mon_open",
+  "WEIGHT_STAR": "inv_vol",
+  "INV_VOL_WINDOW_STAR": 42,
+  "STOP_STAR": "pct_20",
+  "VT_STAR": "vt_bayes_0.9_10_q0.75_db0.05",
+  "IC_STAR": "ic_k15_0.94_f0.25_c1.25",
+  "VT_TARGET_ANN_VOL_STAR": 0.10,
+  "MAX_GROSS_STAR": 1.5,
+  "BENCHMARK_STAR": "RSP",
+  "STOP_PCT_LIVE_STAR": 20,
+  "MODEL_ARTIFACT_STAR": "03_models/s1_equities/model_artifacts/s1_production_linear_model.joblib",
+  "UNIVERSE_STAR": "05_strategies/s1_equities/s1_universe.csv",
+  "LIVE_HISTORY_START_STAR": "2020-01-01"
+}

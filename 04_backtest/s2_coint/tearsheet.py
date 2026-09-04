@@ -1115,7 +1115,11 @@ def export_s2_period_returns(
     returns: pd.Series,
     path: str,
 ) -> str:
-    """Write daily net book returns parquet (date index, column ``ret``)."""
+    """Write daily book returns parquet (date index, column ``ret``).
+
+    Used for sealed OOS net (``s2_period_returns.parquet``) and full-sample
+    pre-VT base (``s2_period_returns_base.parquet``).
+    """
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     s = pd.to_numeric(returns, errors="coerce").astype(float)
     s.index = pd.to_datetime(s.index)

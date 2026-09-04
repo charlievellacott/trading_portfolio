@@ -1,8 +1,12 @@
 # imports
 import os
+from dataclasses import replace
+
 import joblib
 import pandas as pd
 
+from backtest.s1_equities.research import DEFAULT_STAR_STACK
+from backtest.star_stack_io import load_star_stack, vt_target_ann_vol_from_stack
 from data.ingestion.alternative_data.fama_french_fetcher import fetch_ff_factors_daily
 from data.ingestion.equity_fetcher import OHLCV_COLUMNS, fetch_ohlcv
 from data.repo_paths import repo_root
@@ -62,31 +66,45 @@ _SEC_FFILL_COLS = (
 )
 _SEC_FFILL_LIMIT = 5
 
+def _repo_rel_path(raw: str) -> str:
+    s = str(raw).strip()
+    if os.path.isabs(s):
+        return s
+    return os.path.join(repo_root(), s.replace("/", os.sep))
+
+
 # class
 class S1Strategy(Strategy):
-    # Frozen OOS recipe (08 tearsheet)
-    N_STAR = 15
-    INV_VOL_WINDOW_STAR = 42
-    STOP_PCT_STAR = 20  # percent adverse move; paper runner after fill (risk.pct_stop)
-    VT_STAR = "vt_bayes_0.9_10_q0.75_db0.05"
-    IC_STAR = "ic_k15_0.94_f0.25_c1.25"
-    MAX_GROSS = 1.50
-    BENCHMARK = "RSP"
-
     # constructor
-    def __init__(self, start_date: str) -> None:
+    def __init__(self, start_date: str, *, star_stack_path: str | None = None) -> None:
+        path = star_stack_path or DEFAULT_STAR_STACK
+        self.star_stack_path = path
+        self.stack = load_star_stack(path)
+        self.N_STAR = int(self.stack["N_STAR"])
+        self.INV_VOL_WINDOW_STAR = int(self.stack["INV_VOL_WINDOW_STAR"])
+        self.STOP_PCT_STAR = int(self.stack.get("STOP_PCT_LIVE_STAR", 20))
+        self.VT_STAR = str(self.stack["VT_STAR"])
+        self.IC_STAR = str(self.stack["IC_STAR"])
+        self.MAX_GROSS = float(self.stack.get("MAX_GROSS_STAR", 1.50))
+        self.BENCHMARK = str(self.stack.get("BENCHMARK_STAR", "RSP"))
+        self.vt_target_ann_vol = vt_target_ann_vol_from_stack(self.stack)
+        live_start = str(self.stack.get("LIVE_HISTORY_START_STAR", LIVE_HISTORY_START))
+        self.universe_csv = _repo_rel_path(self.stack.get("UNIVERSE_STAR", UNIVERSE_CSV))
+        self.last_leverage = 1.0
+
         as_of = pd.Timestamp(start_date).normalize()
         self.decision_date = as_of
         self.end_date = as_of.strftime("%Y-%m-%d")
-        hist_start = pd.Timestamp(LIVE_HISTORY_START).normalize()
+        hist_start = pd.Timestamp(live_start).normalize()
         if as_of < hist_start:
             self.start_date = as_of.strftime("%Y-%m-%d")
         else:
-            self.start_date = LIVE_HISTORY_START
+            self.start_date = live_start
 
         self.tickers = self.get_tickers()
-        
-        self.model_artifact_path = DEFAULT_MODEL_ARTIFACT_PATH
+        self.model_artifact_path = _repo_rel_path(
+            self.stack.get("MODEL_ARTIFACT_STAR", DEFAULT_MODEL_ARTIFACT_PATH)
+        )
         self.feature_cols: list[str] = []
 
 
@@ -124,7 +142,7 @@ class S1Strategy(Strategy):
         data = to_s1_trade_date_panel(data)
 
         # 3. Market / FF side frames (alt_data for beta_factors)
-        bench = self.BENCHMARK.upper()
+        bench = str(self.BENCHMARK).upper()
         market_ohlcv = fetch_ohlcv(bench, self.start_date, self.end_date)
         market_ohlcv = ensure_decision_date_ohlcv(
             market_ohlcv, self.decision_date, [bench]
@@ -408,7 +426,10 @@ class S1Strategy(Strategy):
         prev_lev = load_prev_leverage()
 
         # 5. Gross leverage scalar (vol target x Bayesian IC)
-        vt_cfg = parse_vol_target_star(self.VT_STAR)
+        vt_cfg = replace(
+            parse_vol_target_star(self.VT_STAR),
+            target_ann_vol=float(self.vt_target_ann_vol),
+        )
         ic_cfg = parse_ic_scale_star(self.IC_STAR)
         sizing = monday_gross_leverage(
             past_returns,
@@ -419,6 +440,7 @@ class S1Strategy(Strategy):
             prev_leverage=prev_lev,
             max_gross=self.MAX_GROSS,
         )
+        self.last_leverage = float(sizing["leverage"])
         save_prev_leverage(sizing["leverage"])
 
         # 6. Signed levered weights
@@ -449,11 +471,12 @@ class S1Strategy(Strategy):
         return out
 
     def get_tickers(self) -> list[str]:
-        if not os.path.isfile(UNIVERSE_CSV):
-            raise FileNotFoundError(UNIVERSE_CSV)
+        universe_csv = getattr(self, "universe_csv", UNIVERSE_CSV)
+        if not os.path.isfile(universe_csv):
+            raise FileNotFoundError(universe_csv)
 
         tickers = (
-            pd.read_csv(UNIVERSE_CSV)["ticker"]
+            pd.read_csv(universe_csv)["ticker"]
             .astype(str)
             .str.strip()
             .str.upper()
@@ -461,7 +484,7 @@ class S1Strategy(Strategy):
         )
         if len(tickers) != EXPECTED_N_TICKERS:
             raise ValueError(
-                f"Expected {EXPECTED_N_TICKERS} tickers in {UNIVERSE_CSV}, "
+                f"Expected {EXPECTED_N_TICKERS} tickers in {universe_csv}, "
                 f"got {len(tickers)}"
             )
         return tickers

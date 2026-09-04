@@ -46,14 +46,18 @@ def _prepare_notebook(
         cfg = cfg.replace("DEFAULT_H = 52", "DEFAULT_H = 10")
     if "DEFAULT_H = 63" in cfg:
         cfg = cfg.replace("DEFAULT_H = 63", "DEFAULT_H = 10")
+    if "N_BOOTSTRAP = 600" in cfg:
+        cfg = cfg.replace("N_BOOTSTRAP = 600", "N_BOOTSTRAP = 40")
     nb.cells[2].source = cfg
     nb.cells[4].source = _assign_frame_cell(frame, parquet_path)
-    run = "".join(nb.cells[9].source)
-    run = run.replace("N_BOOTSTRAP = 600", "N_BOOTSTRAP = 40")
-    idx = run.find("\ntry:\n")
-    if idx >= 0:
-        run = run[: idx + 1]
-    nb.cells[9].source = run
+    if len(nb.cells) != 15:
+        # S1 (legacy widget MC cell)
+        run = "".join(nb.cells[9].source)
+        run = run.replace("N_BOOTSTRAP = 600", "N_BOOTSTRAP = 40")
+        idx = run.find("\ntry:\n")
+        if idx >= 0:
+            run = run[: idx + 1]
+        nb.cells[9].source = run
     hmm = "".join(nb.cells[-1].source)
     hmm = hmm.replace("n_simulations=200", "n_simulations=12")
     nb.cells[-1].source = hmm
@@ -92,4 +96,7 @@ def test_s2_ev_notebook_executes(tmp_path):
     nb = _prepare_notebook(S2_NB, frame, os.path.join(str(tmp_path), "s2.parquet"))
     _execute(nb)
     sources = ["".join(c.source) for c in nb.cells]
+    assert any("Joint paths vs SPY" in s for s in sources)
+    assert any("Pathwise holes" in s for s in sources)
     assert any("excess_fan" in s for s in sources)
+    assert any("run_ev_vs_spy" in s for s in sources)

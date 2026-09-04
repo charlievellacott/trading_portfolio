@@ -3,6 +3,7 @@
 - Monthly reshuffle backtest does not include any gdelt features. This is because I ran out of BigQuery tokens for the month - set USE_GDELT_FEATURES true to add the features.
 - Performs badly on bearish market regimes - might be worth while adding a regmine filter. Win rate drops to 30% when SPY is down.
 - Survivourship Bias is high in the backtest.
+- Live recipe is `04_backtest/s1_equities/artifacts/s1_star_stack.json` (I/O via `backtest.star_stack_io`; `S1Strategy` loads it). `VT_STAR` keeps the estimator family; `VT_TARGET_ANN_VOL_STAR` is the vol-target setpoint (pre-seeded 0.10). Paper runner: `07_execution/s1_equities/s1_paper_runner.py`.
 - Live universe (`s1_universe.csv`) is the 2015 frozen top-100 minus three 2018 delists Yahoo no longer serves for live OHLCV: AET (Aetna → CVS), ESRX (Express Scripts → Cigna), TWX (Time Warner → AT&T). Train/backtest panels still include them. `EXPECTED_N_TICKERS = 97`.
 - Live feature fetch starts at `2020-01-01` (`LIVE_HISTORY_START`) through the decision date for warm-up / complete-case scoring.
 - Live FINRA / SEC / GDELT / equity caches resolve under repo `01_data/cache/` (via `data.repo_paths.data_cache_dir`), not the editable `build/` farm.

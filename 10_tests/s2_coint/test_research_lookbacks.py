@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from backtest.s2_coint.research import (
     DAY_OLS_WINDOW,
     DAY_Z_WINDOW,
@@ -50,3 +52,10 @@ def test_config_from_stack_soft_defaults_when_stars_unset():
     assert cfg.adf_window == DAY_OLS_WINDOW
     assert cfg.entry_z == 2.0
     assert cfg.break_mode == "off"
+
+
+def test_config_from_stack_vt_target_ann_vol_star():
+    cfg = config_from_stack({"BAR_STAR": "1d", "VT_TARGET_ANN_VOL_STAR": 0.06})
+    assert cfg.vt_target_ann_vol == pytest.approx(0.06)
+    cfg_default = config_from_stack({"BAR_STAR": "1d", "PAIRS_STAR": []})
+    assert cfg_default.vt_target_ann_vol == pytest.approx(0.10)

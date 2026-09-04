@@ -88,6 +88,20 @@ def test_s1_vt_persists_returns_base():
     assert res.returns_base.name == "ret" or res.returns_base.name is not None
 
 
+def test_simulate_book_from_stack_cfg():
+    from backtest.s2_coint.research import DEFAULT_STAR_STACK, config_from_stack
+    from backtest.star_stack_io import load_star_stack
+
+    stack = load_star_stack(DEFAULT_STAR_STACK)
+    cfg = config_from_stack(
+        stack, z_window=10, ols_window=20, adf_window=20, sigma_window=20
+    )
+    assert cfg.vt_target_ann_vol == pytest.approx(0.06)
+    res = simulate_book(_toy_panel(40), cfg)
+    assert len(res.returns) == len(panel_session_dates(_toy_panel(40)))
+    assert len(res.returns_base) == len(res.returns)
+
+
 def test_panel_session_dates_sorted_unique():
     panel = _toy_panel(10)
     cal = panel_session_dates(panel)

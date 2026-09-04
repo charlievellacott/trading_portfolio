@@ -1,0 +1,17 @@
+---
+description: Frozen live/backtest recipe lives in sleeve star-stack JSON; use shared I/O only.
+globs:
+  - "04_backtest/**"
+  - "05_strategies/**"
+  - "06_risk/notebooks/**"
+  - "07_execution/**"
+alwaysApply: false
+---
+
+# Star stack
+
+Frozen live and sealed-backtest recipe for a sleeve is `{sleeve}_star_stack.json` under `04_backtest/{sleeve}/artifacts/`.
+
+- Load and save only via `backtest.star_stack_io` (`load_star_stack`, `save_star_stack`, `require_star`, `update_star_stack_key`).
+- Map `*_STAR` keys to sim/live config in that sleeve (`backtest.s2_coint.research.config_from_stack`, or the strategy class for S1). Do not import `backtest.s1_equities` from `s2_coint` or vice versa.
+- Desk vol target is `VT_TARGET_ANN_VOL_STAR` on the stack, not a separate leverage JSON.

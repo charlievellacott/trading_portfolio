@@ -7,7 +7,11 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from backtest.s2_coint.report import load_star_stack, require_star
+from backtest.star_stack_io import (
+    load_star_stack,
+    require_star,
+    vt_target_ann_vol_from_stack,
+)
 from data.ingestion.equity_fetcher import ohlcv_dates_to_naive_utc
 from data.processing.s2_universe import (
     RESEARCH_IS_END_BY_UNIVERSE,
@@ -375,6 +379,7 @@ def config_from_stack(stack: dict, **overrides) -> S2SimConfig:
         "entry_mode": stack.get("ENTRY_STAR") or "trad_z",
         "cost_profile": stack.get("COST_PROFILE_STAR")
         or default_cost_profile_for_universe(stack.get("UNIVERSE_STAR")),
+        "vt_target_ann_vol": vt_target_ann_vol_from_stack(stack),
     }
     kwargs.update(overrides)
     return S2SimConfig(**kwargs)

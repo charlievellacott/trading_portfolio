@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 
 import matplotlib.pyplot as plt
@@ -10,8 +9,17 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 
-from backtest.s2_coint.runner import fit_hmm_on_train_dates, run_s2_backtest
 from backtest.s2_coint.walkforward import S2WalkForwardFold
+from backtest.star_stack_io import (
+    load_star_stack,
+    require_star,
+    save_star_stack,
+    update_star_stack_key,
+    vt_target_ann_vol_from_stack,
+)
+
+# Re-exports for hypothesis notebooks and S2Strategy.
+from backtest.s2_coint.runner import fit_hmm_on_train_dates, run_s2_backtest
 from strategies.s2_coint.config import S2SimConfig
 from strategies.s2_coint.metrics import corr_to_s1, metrics_from_returns, metrics_from_returns_inference
 
@@ -306,31 +314,6 @@ def plot_fold_boxplots(fold_df: pd.DataFrame, *, title: str = "") -> None:
         ax.set_xlabel("")
     fig.suptitle(title or "Fold-val metrics (you type STAR after review)")
     plt.tight_layout()
-
-
-def require_star(name: str, value) -> None:
-    if value is None:
-        raise ValueError(
-            f"{name} is None. Type it in the freeze cell after reviewing fold-val metrics."
-        )
-
-
-def load_star_stack(path: str) -> dict:
-    if not os.path.isfile(path):
-        raise FileNotFoundError(
-            f"star stack not found: {path}. "
-            "Use DEFAULT_STAR_STACK from backtest.s2_coint.research "
-            "(04_backtest/s2_coint/artifacts/s2_star_stack.json)."
-        )
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_star_stack(path: str, payload: dict) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, default=str)
-        f.write("\n")
 
 
 def write_tearsheet_pdf(

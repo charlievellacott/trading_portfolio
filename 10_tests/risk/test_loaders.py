@@ -6,8 +6,16 @@ import os
 
 import pytest
 
-from risk.analytics.leverage.loaders import load_s2_period_returns_base
-from risk.analytics.monte_carlo.loaders import find_repo_root, load_s2_period_returns, require_parquet
+from risk.analytics.leverage.loaders import (
+    load_s2_period_returns_base,
+    s2_period_returns_base_path,
+)
+from risk.analytics.monte_carlo.loaders import (
+    find_repo_root,
+    load_s2_period_returns,
+    require_parquet,
+    s2_period_returns_path,
+)
 
 
 def test_find_repo_root():
@@ -22,6 +30,15 @@ def test_missing_parquet_is_loud(tmp_path):
         require_parquet(missing, "export hint")
     with pytest.raises(FileNotFoundError, match="Sealed period returns missing"):
         load_s2_period_returns(missing)
+
+
+def test_s2_base_path_is_not_sealed_net():
+    root = find_repo_root(os.path.dirname(os.path.abspath(__file__)))
+    base = s2_period_returns_base_path(root)
+    sealed = s2_period_returns_path(root)
+    assert base.endswith(os.path.join("s2_coint", "s2_period_returns_base.parquet"))
+    assert sealed.endswith(os.path.join("s2_coint", "s2_period_returns.parquet"))
+    assert base != sealed
 
 
 def test_missing_base_parquet_is_loud(tmp_path):

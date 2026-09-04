@@ -1,50 +1,20 @@
-"""Tiny JSON artifacts so MC / prop-firm notebooks can default to the desk pick."""
+"""Load desk vol-target pick from the sleeve star stack (legacy JSON shape)."""
 
 from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
 
+from backtest.star_stack_io import (
+    default_star_stack_path,
+    vt_target_ann_vol_from_stack,
+)
 from risk.analytics.monte_carlo.loaders import find_repo_root
 
 
 def artifact_path(repo_root: str, sleeve: str) -> str:
-    return os.path.join(
-        repo_root, "06_risk", "analytics", "leverage", "artifacts", f"{sleeve}_leverage.json"
-    )
-
-
-def write_leverage_artifact(
-    path: str,
-    *,
-    sleeve: str,
-    target_ann_vol: float | None,
-    vt_star: str | None = None,
-    vt_fields: dict | None = None,
-    is_end: str | None = None,
-    max_oos_dd: float | None = None,
-    half_kelly_vol: float | None = None,
-    pick: str = "calmar",
-    extra: dict | None = None,
-) -> str:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    payload: dict = {
-        "sleeve": sleeve,
-        "target_ann_vol": target_ann_vol,
-        "vt_star": vt_star,
-        "vt_fields": vt_fields or {},
-        "is_end": is_end,
-        "max_oos_dd": max_oos_dd,
-        "half_kelly_vol": half_kelly_vol,
-        "pick": pick,
-        "written_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if extra:
-        payload.update(extra)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, default=str)
-    return path
+    """Star-stack path for ``sleeve`` (kept name for prop-firm notebooks)."""
+    return default_star_stack_path(sleeve, repo_root_dir=repo_root)
 
 
 def load_leverage_artifact(
@@ -53,10 +23,36 @@ def load_leverage_artifact(
     *,
     path: str | None = None,
 ) -> dict | None:
-    """Return the JSON dict, or ``None`` if the file is missing."""
+    """Return a dict with ``target_ann_vol`` / ``vt_star``, or ``None`` if missing."""
     root = find_repo_root(repo_root) if path is None else repo_root
-    loc = path if path is not None else artifact_path(str(root), sleeve)
+    loc = path if path is not None else default_star_stack_path(sleeve, repo_root_dir=str(root))
     if not os.path.isfile(loc):
         return None
     with open(loc, encoding="utf-8") as f:
-        return json.load(f)
+        raw = json.load(f)
+    if not isinstance(raw, dict):
+        return None
+    if "VT_TARGET_ANN_VOL_STAR" in raw or "N_STAR" in raw or "PAIRS_STAR" in raw:
+        return {
+            "sleeve": sleeve,
+            "target_ann_vol": vt_target_ann_vol_from_stack(raw),
+            "vt_star": raw.get("VT_STAR") or raw.get("VOL_STAR"),
+            "pick": raw.get("VT_TARGET_PICK_STAR"),
+            "written_at": raw.get("VT_TARGET_WRITTEN_AT_STAR"),
+            "star_stack_path": loc,
+        }
+    if "target_ann_vol" in raw:
+        return raw
+    return {
+        "sleeve": sleeve,
+        "target_ann_vol": vt_target_ann_vol_from_stack(raw),
+        "vt_star": raw.get("VT_STAR") or raw.get("VOL_STAR"),
+        "star_stack_path": loc,
+    }
+
+
+def write_leverage_artifact(*args, **kwargs) -> str:
+    raise RuntimeError(
+        "write_leverage_artifact is retired; persist VT_TARGET_ANN_VOL_STAR "
+        "via backtest.star_stack_io.update_star_stack_key / run_leverage_policy(star_stack_path=...)."
+    )

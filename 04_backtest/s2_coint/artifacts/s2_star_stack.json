@@ -22,6 +22,10 @@
   "CORR_GATE_STAR": "off",
   "SIZE_STAR": "score",
   "VOL_STAR": "s1_vt",
+  "VT_TARGET_ANN_VOL_STAR": 0.06,
   "Z_WINDOW_MODE_STAR": "fixed",
-  "ENTRY_STAR": "trad_z"
+  "ENTRY_STAR": "trad_z",
+  "VT_TARGET_WRITTEN_AT_STAR": "2026-09-01T20:16:07.731619+00:00",
+  "VT_TARGET_SOURCE_STAR": "manual",
+  "VT_TARGET_PICK_STAR": "calmar"
 }

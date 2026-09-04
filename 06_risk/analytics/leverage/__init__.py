@@ -22,13 +22,19 @@ from risk.analytics.leverage.policy import (
     half_kelly_target_vol,
     k_fair_from_artifact,
 )
-from risk.analytics.leverage.report import run_leverage_policy
+from risk.analytics.leverage.report import (
+    compute_leverage_surface,
+    freeze_vt_target_ann_vol,
+    run_leverage_policy,
+)
 from risk.analytics.leverage.surfaces import leverage_surface, period_metrics, split_is_oos
 
 __all__ = [
     "apply_policy",
     "artifact_path",
     "cfg_with_target",
+    "compute_leverage_surface",
+    "freeze_vt_target_ann_vol",
     "half_kelly_target_vol",
     "k_fair_from_artifact",
     "leverage_surface",

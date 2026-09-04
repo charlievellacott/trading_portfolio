@@ -50,8 +50,10 @@ def _prepare_notebook(
         "DEFAULT_TARGETS = [0.08, 0.12]",
     )
     cfg = cfg.replace("DEFAULT_DD_CAP = 0.25", "DEFAULT_DD_CAP = 0.80")
-    # keep artifact_path assignment but override after
-    nb.cells[2].source = cfg + f"\nARTIFACT_PATH = r{artifact_path!r}\n"
+    if "STAR_STACK_PATH" in cfg:
+        nb.cells[2].source = cfg + f"\nSTAR_STACK_PATH = r{artifact_path!r}\n"
+    else:
+        nb.cells[2].source = cfg + f"\nARTIFACT_PATH = r{artifact_path!r}\n"
     nb.cells[4].source = _assign_base_cell(series, parquet_path)
     return nb
 

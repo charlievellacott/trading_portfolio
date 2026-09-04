@@ -355,6 +355,10 @@ def main() -> None:
     panel = strategy.generate_features()
     weights = strategy.get_weights(panel=panel)
     log_line(log_path, "PREDICTIONS AND WEIGHTS")
+    log_line(
+        log_path,
+        f"  vt_target={strategy.vt_target_ann_vol}  leverage={strategy.last_leverage}",
+    )
     for _, row in weights.iterrows():
         score = row["score"] if "score" in weights.columns else float("nan")
         log_line(

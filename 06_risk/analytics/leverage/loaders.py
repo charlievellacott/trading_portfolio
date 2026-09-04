@@ -44,7 +44,7 @@ def s2_period_returns_base_path(repo_root: str) -> str:
         "01_data",
         "data_files",
         "s2_coint",
-        "s2_period_returns.parquet",
+        "s2_period_returns_base.parquet",
     )
 
 
