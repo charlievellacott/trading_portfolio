@@ -147,7 +147,7 @@ S2_POOLS: dict[str, object] = {
 
 # Universes shelved or failed at H-001. Kept in S2_POOLS as documented learning
 # points; never re-selected as UNIVERSE_STAR.
-SHELVED_UNIVERSES: frozenset[str] = frozenset({"A", "B", "C"})
+SHELVED_UNIVERSES: frozenset[str] = frozenset({"A", "B", "C", "D"})
 
 # Pre-registered research IS end per universe (screen + train split).
 RESEARCH_IS_END_BY_UNIVERSE: dict[str, str] = {

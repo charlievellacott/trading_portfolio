@@ -20,6 +20,32 @@
 - Applies to **universe F only** (Madrid / Milan / Paris in 2011–12 and 2020). A–E have no records, so their masks are all-True and their results are byte-identical with or without them. Amsterdam and Xetra were never banned (AFM and BaFin declined in 2020).
 - Not modelled: market-maker exemptions, the 2020 net-short thresholds, and the SEC's 2008 US ban (list membership uncertain for REITs and share classes). **Short borrow is still not modelled** in any cost profile.
 
+## H-001 baseline costs / IS diagnostics
+
+- Source of truth: `strategies.s2_coint.costs` (`COSTS`, routing, `leg_cost_bps`). Simulator: `strategies.s2_coint.baseline`. Per-pair IS tables: `strategies.s2_coint.metrics`.
+- H-001 notebook (`02_research/s2_coint/notebooks/hypothesis_tests/H-001_universes.ipynb`) calls those modules. Evaluation is **research IS only** (OHLC clipped to `RESEARCH_IS_END` before the pair panel is built).
+- Costs are modeled per leg at entry and exit via `COSTS`:
+  - `A_FX_OANDA`: spread+slippage model with pair-level spread pips.
+  - `B_CRYPTO_KRAKEN`: maker/taker + slippage model (baseline assumes taker).
+  - `C_HK_IBKR` / `C_JP_IBKR`: percent commission + minimum + third-party fee + slippage.
+  - `US_ALPACA` (universes D / E): **commission-free**, so cost is regulatory fees (SEC Section 31 + FINRA TAF, 0.1 bps) plus 3.2 bps execution → **3.3 bps/leg, ~13 bps per pair round trip**. Execution cost is broker-agnostic slippage against a VWAP benchmark, and the upper end of the published band is used deliberately because a pair fills two legs at once and one is a short. Roughly **9x less friction than C's HK 116 bps/RT**, which is the quantitative case for the universe pivot.
+  - `US_ALPACA_D_REALISTIC` (Universe D default via `config_from_stack`): common leg **3.2 bps** slippage; alt share-class lines (`.A`, `.B`, `NWSA`) **8.0 bps**; **100 bps/year** borrow pro-rated daily on net short leg weight. **Not modelled:** vol-scaled slippage, locate fees, HTB spikes, pair-specific spread — document as stress-only fairness bounds in research notes.
+  - `F_EUR_IBKR` (universe F): percent commission + EUR minimum + third-party + slippage → ~10.5 bps/leg. **This is an assumption**, not a confirmed schedule: IBKR's published Reg-NMS metrics describe US stocks and the 0.1% / EUR 4 / EUR 29 table is the mutual-fund schedule, so neither applies to EUR cash equities. Confirm Fixed vs Tiered and per-exchange minimums for Madrid / Milan / Amsterdam / Xetra / Paris before treating F's net Sharpe as decision-grade; F is the most cost-fragile universe.
+- Market routing is deterministic:
+  - `=X` -> `A_FX_OANDA`
+  - `-USD` -> `B_CRYPTO_KRAKEN`
+  - `.HK` -> `C_HK_IBKR`
+  - `.T` -> `C_JP_IBKR`
+  - `.MC` / `.MI` / `.AS` / `.DE` / `.PA` -> `F_EUR_IBKR`
+  - plain US symbols and US share-class lines (`GOOGL`, `AMT`, `BF.B`) -> `US_ALPACA`
+- Baseline sizing uses hedge ratio (`beta`) per bar: long spread `+y, -beta*x`; short spread `-y, +beta*x`. Trad-z exit is a signed recross of `EXIT_Z` (default 0): flatten a long spread when `z >= 0`, a short when `z <= 0`.
+- Per-pair IS stats: trade count, median hold (completed round-trips), cost bps/year, Sharpe, max DD, rolling ADF (`adf_pvalue` from `compute_coint_metrics`).
+- Asia C IS postmortem → `02_research/s2_coint/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb` (helpers in `04_backtest/s2_coint/diagnosis.py`).
+- **Universe C shelved.** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table in `02_research/s2_coint/universe.md`; archived artifacts in `04_backtest/s2_coint/artifacts/asia_c/`.
+- **Universe D shelved.** WSO.B is not shortable via Alpaca or Interactive Brokers (IBKR). Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`; `WSO|WSO.B` delivered the entirety of the returns. No further broker search. H-001 drops US tickers with Alpaca `shortable=False` before EG screening.
+- **Alpaca `shortable` vs `easy_to_borrow`.** Gate is `shortable` (broker will take the short). `easy_to_borrow` is the ETB list; HTB names can be shortable but not ETB. Displayed in H-001, not a gate. Universes in `SKIP_SHORTABILITY_UNIVERSES` (currently `F`) are not queried.
+- Overlay check: compound IS daily book returns to S1 Monday–Monday weeks and correlate vs `01_data/data_files/s1_equities/s1_period_returns.parquet` (exported from `08_oos_tearsheet.ipynb`). Missing file → `corr_to_s1` is NaN.
+
 ## Live paper (hardcoded STAR)
 
 - Frozen recipe is `04_backtest/s2_coint/artifacts/s2_star_stack.json` (see `01_star_tearsheet.ipynb`). Paper runner: `07_execution/s2_coint/s2_paper_runner.py`. Dedicated Alpaca paper account (100% of that account equity). Credentials: `S2_ALPACA_API_KEY` / `S2_ALPACA_SECRET_KEY` in `config/credentials.env` (same file as S1; **never** falls back to S1 keys). Logs: `07_execution/s2_coint/logs/s2_paper_YYYYMMDD.txt` (not the S1 log dir). Live ledger: `09_performance/cache/live_s2/`. Cache: `05_strategies/s2_coint/cache/` (`S2_CACHE_DIR` override).

@@ -9,7 +9,7 @@ Pair-book construction (frozen at IS end vs quarterly rotating) is decided by **
 Rolling-ADF health gating is decided by **H-003** (`BREAK_STAR`). Discovery Engle-Granger stays out of
 the live trading loop in both cases.
 
-A / B / C are kept below as documented learning points. They are **not** hidden and **not** re-selected.
+A / B / C / D are kept below as documented learning points. They are **not** hidden and **not** re-selected.
 
 ## Results
 
@@ -18,7 +18,7 @@ A / B / C are kept below as documented learning points. They are **not** hidden 
 | A | FX majors | OANDA | Failed | 0 EG passers at IS end |
 | B | Crypto | Kraken | Failed | Best pair p=0.0501 and HL > `Z_WINDOW` (60) — untradable horizon |
 | C | Asia EM cash equities | IBKR HK / JP | **Shelved** | Gross Sharpe ≈ 0, net negative after 271–439 bps/yr costs; ADF health did not persist (see below) |
-| D | US share-class twins | Alpaca | Pending H-001 | — |
+| D | US share-class twins | Alpaca | **Shelved** | WSO.B not shortable on Alpaca or IBKR; WSO\|WSO.B delivered the entire book return |
 | E | US REIT sub-sectors | Alpaca | Pending H-001 | — |
 | F | EUR large caps | IBKR EUR | Pending H-001 | — |
 
@@ -77,7 +77,7 @@ Archived Asia artifacts: `04_backtest/s2_coint/artifacts/asia_c/`.
 
 ---
 
-# D: US share-class / structural twins
+# D: US share-class / structural twins — shelved
 
 Leaf pool = one twin set (same issuer, different share class), so the economic tether is a claim on the
 same cash flows rather than a statistical coincidence. 10 pools, 20 names, **10 candidate pairs**.
@@ -99,6 +99,16 @@ same cash flows rather than a statistical coincidence. 10 pools, 20 names, **10 
 - Excluded: BRK.A/BRK.B (share notional), Paramount and Lions Gate (2024 restructurings).
 - DISCA/DISCK and RDS.A/RDS.B were genuine twins that **delisted** (WBD merger 2022, Shell
   unification 2022). They are absent from the pools, which is exactly the survivorship gap noted below.
+
+## D outcome (shelved)
+
+Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`.
+
+- WSO.B is not shortable via Alpaca or Interactive Brokers (IBKR). No further broker was searched.
+- The pair `WSO|WSO.B` delivered the entirety of the algorithm's returns. The other two locked pairs did not.
+- Lesson: EG/IS performance is not tradable if either leg cannot be shorted at the execution venue. H-001 now gates US names on Alpaca `shortable` before screening.
+
+Diagnosis notebook: `02_research/s2_coint/notebooks/other_tests/02_universe_d_pair_diagnosis.ipynb`.
 
 # E: US REIT sub-sectors
 
@@ -154,7 +164,8 @@ Risks specific to F:
 - **Survivorship bias (documented, not fixed).** Pools are hand-curated from currently listed names, so
   quarterly rotation selects among survivors. Yahoo does not serve delisted tickers, so PIT membership
   is unavailable. D's absent DISCA/DISCK and RDS.A/RDS.B illustrate the size of the gap.
-- **Short borrow is not modelled** in any cost profile. Relevant to all of D / E / F.
+- **Short borrow is not modelled** as a cost (bps) in any profile. Universe D was shelved on a harder constraint: WSO.B is not shortable on Alpaca or IBKR. H-001 now drops US tickers with Alpaca `shortable=False` before EG screening. Universes in `SKIP_SHORTABILITY_UNIVERSES` (currently `F`) are not queried.
+- **Alpaca `shortable` vs `easy_to_borrow`.** `shortable` means the broker will accept a short (a locate exists). `easy_to_borrow` means the name is on the easy-to-borrow list (typically cheaper / more reliable locates). A name can be `shortable=True` and `easy_to_borrow=False` (hard-to-borrow). H-001 **gates on `shortable` only**; `easy_to_borrow` is displayed so HTB names stay visible. Not-found assets are treated as not shortable.
 - **SEC September 2008 US ban** (~799 financial stocks, 2008-09-19 → 2008-10-08) is not modelled for
   D / E. The published list was amended repeatedly and its coverage of equity REITs and share-class
   twins is uncertain; asserting membership would be worse than omitting it. Adding a record later is a
