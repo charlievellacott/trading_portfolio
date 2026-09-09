@@ -12,7 +12,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from data.ingestion.alternative_data import fred_fetcher as fred_mod
 from data.ingestion.alternative_data.fred_fetcher import _cache_path, fetch_fred_series
 from data.ingestion.credentials_env import read_credential, require_credential
 
