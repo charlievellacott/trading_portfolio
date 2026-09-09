@@ -16,10 +16,17 @@ Same institutional hybrid as core / S2: purged expanding walk-forward on **resea
 
 ### Timing / clocks
 
-- **Event trigger** = economic release print (not London open).
-- **Core contract** (close \(t\) → open \(t+1\)) still applies to any **daily** event decision bar.
-- **Intraday** arms (E-003) document their own bar close → next-bar open lag on 1H (or vendor) bars.
+- **Event trigger** = economic release print time τ (not London open).
+- **E-003 bake-off:** `daily_post_event` \| `1h` only — **floor is 1h** (no 5m / 1m). Winner → `EVENT_BAR_STAR`.
+- **Fill rule (both arms):** open of the **first bar whose open is strictly after τ** on the chosen grid (`map_event_to_next_bar_fill`). Surprise is known at τ; never enter on a bar that opened at or before τ.
+- **Core contract** (close \(t\) → open \(t+1\) on NY 17:00 days) still applies when the event bar is daily.
 - Do **not** default to hold-until-next-news.
+
+**Data caveat (CSV):** research calendar
+`01_data/data_files/s3_fx_trend/economic_calendar.csv` is **not vintage-safe** —
+`actual` / `forecast` / `previous` can reflect later revisions. Use for research /
+diagnostics only; do **not** paper-trade events off this CSV alone (see
+`s3_algorithm_notes.md` · Live Event Calendar Viability).
 
 **Quote convention:** map surprise onto each pair so “stronger currency X” has the correct sign on BASE/QUOTE. If X is base → positive surprise → long bias; if X is quote → flip sign. Without this, EURXXX and XXXEUR disagree on the same macro surprise.
 
@@ -94,11 +101,11 @@ z = \frac{s}{\hat\sigma_{N,\text{release}}}
 | Field                  | |
 | ---------------------- | --- |
 | **Status**             | NOT IMPLEMENTED |
-| **What it is**         | Decision/execution on **daily** post-event bars vs **intraday** (1H / vendor) around the print, after costs. |
-| **Hypothesis**         | One bar size wins on net Sharpe / DD; vendor 1H is faithful enough vs yfinance where overlap exists. |
-| **Economic rationale** | Surprise alpha may be fast (minutes–hours) or persist into the next daily session; costs rise with finer bars. |
-| **Data required**      | Event vendor bars; yfinance 1H for overlap validation. |
-| **Test to complete**   | (1) Validate vendor: resample vendor bars to 1H and compare to yfinance 1H over the overlap window per pair. (2) Arms: `daily_post_event` \| `1h_vendor` under frozen E-001/E-002. |
+| **What it is**         | Decision/execution on **daily** post-event bars vs **1h** around the print, after costs. Floor: no sub-1h. |
+| **Hypothesis**         | One bar size wins on net Sharpe / DD; OANDA 1H is faithful enough vs yfinance where overlap exists. |
+| **Economic rationale** | Surprise alpha may be fast (hours) or persist into the next daily session; costs rise with finer bars. |
+| **Data required**      | OANDA 1D + 1H; yfinance 1H for overlap validation. |
+| **Test to complete**   | (1) Vendor validation notebook. (2) Arms: `daily_post_event` \| `1h` under frozen E-001/E-002. Fill = next-bar open after τ on that grid. Freeze `EVENT_BAR_STAR`. |
 | **Notes**              | Notebook: `notebooks/event_sleeve/E-003_bar_size.ipynb` (planned). |
 
 

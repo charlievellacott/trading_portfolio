@@ -21,7 +21,25 @@ Consider:
 > Event Pricing (forecast/expected vs actual = surprise score: good or bad for pair? conidering currency order) -->  trend aligns OR breakout (period needs to be further considered)
 
 ## How will the time frame and trading sessions effect implementation?
-- 
+
+**Day boundary (locked):** CTA-style **17:00 America/New_York**. OANDA daily
+candles use `alignmentTimezone=America/New_York` and `dailyAlignment=17`.
+Timestamps are stored as naive UTC (same clock convention as S2).
+
+**Core timing:** features / signal / decision known at **close of bar `t`**
+(after the NY 17:00 close). Orders queue just before the next open; **fill at
+open of `t+1`**. First PnL accrues from open `t+1` onward. Do **not** use
+same-bar close-fill.
+
+**Sessions / liquidity:** London–NY overlap is the deepest G10 book; Asia-only
+extremes can print noisy Donchian highs/lows (see H-007). Event sleeve uses
+release print time τ with fill at the **next bar open after τ** on the E-003
+grid (`1d` or `1h`) — not the London open.
+
+**Bar size:** core hyps are **daily** on the NY close. Event E-003 bake-off is
+daily vs 1h only (no sub-1h). Changing the day boundary after STAR freezes
+invalidates those STARs.
+
 
 ## Why it happens?
 - Underreaction / Slow reaction to economic news
