@@ -76,12 +76,15 @@ def value_signal_monthly(
     if reer_df is None or reer_df.empty:
         return pd.Series(dtype=float, name="value")
     try:
-        from data.ingestion.alternative_data.fred_fetcher import (
-            pair_reer_value_signal,
-        )
+        from data.ingestion.alternative_data.bis_reer import pair_reer_value_signal
     except ImportError:
-        # Fallback when BIS/FRED helpers are not yet on this branch.
-        pair_reer_value_signal = _pair_reer_value_signal_fallback
+        try:
+            from data.ingestion.alternative_data.fred_fetcher import (
+                pair_reer_value_signal,
+            )
+        except ImportError:
+            # Fallback when BIS/FRED helpers are not yet on this branch.
+            pair_reer_value_signal = _pair_reer_value_signal_fallback
 
     raw = pair_reer_value_signal(pair, reer_df)
     if raw is None or (isinstance(raw, pd.Series) and raw.empty):
