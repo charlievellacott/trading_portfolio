@@ -44,6 +44,7 @@ packages = [
   "strategies.base",
   "strategies.s1_equities",
   "strategies.s2_coint",
+  "strategies.s3_fx_trend",
   "risk",
   "risk.analytics",
   "risk.analytics.leverage",
