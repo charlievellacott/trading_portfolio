@@ -40,6 +40,7 @@ packages = [
   "backtest",
   "backtest.s1_equities",
   "backtest.s2_coint",
+  "backtest.s3_fx_trend",
   "strategies",
   "strategies.base",
   "strategies.s1_equities",
