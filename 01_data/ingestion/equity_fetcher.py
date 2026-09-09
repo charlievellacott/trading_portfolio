@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 OHLCV_COLUMNS = ("open", "high", "low", "close", "volume")
 _YF_FIELDS = frozenset({"Open", "High", "Low", "Close", "Volume"})
 CHUNK_SIZE = 50
-MAX_RETRIES = 5
+MAX_RETRIES = 3
 RETRY_DELAY_SEC = 3.0
 
 DEFAULT_CACHE_DIR = data_cache_dir()

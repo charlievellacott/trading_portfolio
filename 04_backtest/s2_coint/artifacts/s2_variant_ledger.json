@@ -51,9 +51,12 @@
       "hyp_id": "H-006",
       "arms": [
         "ols",
-        "kalman"
+        "kalman_0.0001",
+        "kalman_1e-05",
+        "kalman_1e-06",
+        "kalman_1e-07"
       ],
-      "n_arms": 2
+      "n_arms": 5
     },
     {
       "hyp_id": "H-007",
@@ -69,7 +72,7 @@
       "hyp_id": "H-008",
       "arms": [
         "off",
-        "5_60",
+        "10_60",
         "5_30"
       ],
       "n_arms": 3
@@ -137,5 +140,5 @@
       "n_arms": 5
     }
   ],
-  "cumulative_arms": 46
+  "cumulative_arms": 49
 }

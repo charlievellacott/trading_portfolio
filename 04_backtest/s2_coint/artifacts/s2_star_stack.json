@@ -1,31 +1,15 @@
 {
-  "UNIVERSE_STAR": "D",
+  "UNIVERSE_STAR": "E",
   "BAR_STAR": "1d",
-  "RESEARCH_IS_END_STAR": "2021-12-31",
   "BREAK_STAR": "block_05_flat_10",
   "BOOK_STAR": "freeze",
-  "PAIRS_STAR": [
-    "WSO|WSO.B",
-    "HEI|HEI.A",
-    "NWS|NWSA"
-  ],
-  "OLS_WINDOW_STAR": 252,
+  "OLS_WINDOW_STAR": 504,
   "ADF_WINDOW_STAR": 252,
   "ENTRY_Z_STAR": 1.5,
   "Z_WINDOW_STAR": 90,
-  "HEDGE_STAR": "ols",
-  "KALMAN_DELTA_STAR": null,
-  "TREND_STAR": "off",
+  "HEDGE_STAR": "kalman",
+  "KALMAN_DELTA_STAR": 1e-07,
+  "TREND_STAR": "adx_veto",
   "HL_GATE_STAR": "off",
-  "OVERLAP_STAR": "never_allow",
-  "EXIT_STAR": "mean_only",
-  "CORR_GATE_STAR": "off",
-  "SIZE_STAR": "score",
-  "VOL_STAR": "s1_vt",
-  "VT_TARGET_ANN_VOL_STAR": 0.06,
-  "Z_WINDOW_MODE_STAR": "fixed",
-  "ENTRY_STAR": "trad_z",
-  "VT_TARGET_WRITTEN_AT_STAR": "2026-09-01T20:16:07.731619+00:00",
-  "VT_TARGET_SOURCE_STAR": "manual",
-  "VT_TARGET_PICK_STAR": "calmar"
+  "OVERLAP_STAR": "allow"
 }

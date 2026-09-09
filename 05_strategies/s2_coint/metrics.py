@@ -68,9 +68,12 @@ def metrics_from_returns_inference(
     periods_per_year: float = PERIODS_PER_YEAR,
     n_trials_local: int | None = None,
     n_trials_stack: int | None = None,
-    psr_benchmark: float = 1.0,
+    psr_benchmark: float = 0.0,
 ) -> dict:
-    """Net Sharpe / DD / n_days plus PSR and deflated Sharpe (local + stack trial counts)."""
+    """Net Sharpe / DD / n_days plus PSR and deflated Sharpe (local + stack trial counts).
+
+    ``psr`` defaults to P(true SR > 0) via ``psr_benchmark=0.0``.
+    """
     from performance.sharpe_inference import (
         deflated_sharpe_ratio,
         probabilistic_sharpe_ratio,
