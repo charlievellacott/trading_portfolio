@@ -11,25 +11,30 @@ Every simulation must answer: **what could this strategy have known and traded a
 
 1. **Time order** — Train, validate, and test on chronological splits only. Never shuffle bars or random-split time series.
 2. **Decision vs execution** — Convention is **per strategy**; document it and never mix.
-   - **Default (all strategies unless listed below):** features/signals known at close of bar `t`; decision and fill at close `t` (after the close of `t`). The prediction target is the next bar (`t+1`, e.g. next-close return).
+   - **Default for daily (and most bar-based) sleeves:** features/signals known at **close of bar `t`**; decision after that close; **fill at open of `t+1`** (next bar’s OHLCV open on venues with no auction). First PnL from open `t+1` onward. Do **not** use same-bar close-fill unless the sleeve explicitly documents that convention and can actually trade that close.
+   - **Same-bar close-fill** (decide and fill at close `t`) is an **opt-in** only when intentionally documented (thin research diagnostics, or a market where that close is the executable price). It is **not** the default for new daily work.
    - **S1 equities GBM only** (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, and the S1 pooled-GBM strategy):
      - Panel `date` = trade / fill date.
      - Features on that row use only information known before the open of `date` (stored OHLCV bars are from `feature_date`; alt data merges on `feature_date`).
      - Decision pre-open of `date`; fill at `open` of `date`.
      - Label: `Open_{date+h} / Open_date - 1` (columns `fwd_ret_{h}` or Alphalens on opens with **no** price-frame `shift(-1)`).
      - Purge/embargo `>= h`.
-   - **S2 cointegration** (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_strategies/s2_coint/*`, future `04_backtest/s2_coint/*`):
+     - Economically the same *lag idea* as close-`t` → open-`t+1` (info before the fill open); indexing uses the trade-date / `feature_date` panel, not the S2/S3 signal-bar panel.
+   - **S2 cointegration** (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_strategies/s2_coint/*`, `04_backtest/s2_coint/*`):
      - Panel row `date = t` is the **signal** bar (not an S1-style trade-date / `feature_date` panel).
      - Features / signal / decision known at **close of `t`**. Hedge, z, ADF, half-life use **`close_y` / `close_x` only** (panel also stores open/high/low for execution; never feed those into β / spread math).
      - Optional alt data allowed **after close `t` and before open `t+1`** if it could have been known then. Orders are queued just before open `t+1`.
      - Fill at **open of `t+1`** on both legs (venues with no auction open: next bar’s OHLCV open). First PnL from open `t+1` onward.
-     - Same causal lag at every bar size (1D / 4H / 1H — H-002). Do **not** use Default same-bar close-fill and do **not** inherit the S1 trade-date convention.
+     - Same causal lag at every bar size (1D / 4H / 1H — H-002). Do **not** use same-bar close-fill and do **not** inherit the S1 trade-date convention.
      - Backtest stops: path-check high/low after entry (S1-style). Live/paper: resting stop/limit after fill.
-   - No other sleeve (FX, crypto, commodities) inherits the S1 or S2 convention; they use Default unless listed above.
+   - **S3 FX trend** (`01_data/data_files/s3_fx_trend/*`, `02_research/s3_fx_trend/*`, `05_strategies/s3_fx_trend/*`, future `04_backtest/s3_fx_trend/*`):
+     - Same timing as S2: signal / decision at **close of `t`**; fill at **open of `t+1`**.
+     - **Day boundary must be pre-registered** in the algorithm / hyp log (recommend CTA-style **17:00 America/New_York**, or document and freeze the broker candle TZ such as OANDA). Every daily TSMOM lookback, Donchian high/low, and `t+1` open is defined off that clock; changing it later invalidates STARs.
+     - Do **not** use same-bar close-fill; do **not** inherit the S1 trade-date convention.
 3. **Point-in-time data** — At date `t`, use only rows with `timestamp <= t`. No restated fundamentals, revised index membership, or full-sample stats.
 4. **Honest universe** — Backtest the tradable set that existed at `t`, including names later delisted or failed.
 5. **Realistic friction** — Default to commissions, spread/slippage, and borrow/short constraints; document if omitted. The opening auction is thinner than the close — **S1 slippage assumptions must be higher** than a close-fill equivalent, not lower.
-6. **Pre-registration** — Log hypothesis in `02_research/hypothesis_log.md` before deep tuning; record variants tried to avoid data snooping.
+6. **Pre-registration** — Log hypothesis in `02_research/hypothesis_log.md` (or the sleeve hyp log) before deep tuning; record variants tried to avoid data snooping.
 
 ## Before merging simulation code, verify
 
@@ -38,7 +43,7 @@ Every simulation must answer: **what could this strategy have known and traded a
 - [ ] Labels do not leak future returns into features at the same timestamp
 - [ ] Walk-forward or purged CV for any hyperparameter search (not one in-sample optimum)
 - [ ] Under the S1 trade-date convention, purge/embargo is `>= h` (label on trade date `d` spans `[d, d+h]`)
-- [ ] Under the S2 contract: fill uses next-bar open (not same-bar close); no extra `.shift(1)` on close-`t` features; open/high/low are not inputs to hedge / z / ADF
+- [ ] Under the S2 / S3 contract: fill uses next-bar open (not same-bar close); no extra `.shift(1)` on close-`t` features; for S2, open/high/low are not inputs to hedge / z / ADF
 
 ## Red flags — stop and fix
 

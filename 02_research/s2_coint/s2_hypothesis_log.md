@@ -6,7 +6,7 @@ Purged expanding walk-forward on **research IS** (3 folds, 5-day embargo) → pe
 
 **Core rules:** fold-train fits stateful objects only (Kalman, HMM, sizing scale); fold-val scores pre-registered arms on validation dates (calendar-dense returns); mandatory UI: `fold_df`, boxplots, `arm_selection_table(fold_df, full_is_df)`, `median_val_sharpe`, `full_is_sharpe`, `median_sharpe_hint()` (commentary only); STAR is **human discretionary** (no programmatic veto); sealed OOS once after STAR; maintain a **variant ledger** across the stack (`register_hypothesis_arms` before each screen).
 
-**Inference columns (secondary, not for STAR):** `psr` (P(true SR > 1.0)), `dsr_local`, `dsr_stack`. Interpretation: `05_strategies/s2_coint/s2_algorithm_notes.md`. We do **not** report PBO or P(true SR >= reported SR) (~0.5 when benchmark equals the point estimate).
+**Inference columns (secondary, not for STAR):** `psr` (P(true SR > 0)), `dsr_local`, `dsr_stack`. Interpretation: `05_strategies/s2_coint/s2_algorithm_notes.md`. We do **not** report PBO or P(true SR >= reported SR) (~0.5 when benchmark equals the point estimate).
 
 **Tiers** (`backtest.s2_coint.research.hypothesis_tier`): **C** H-001/004/005; **B** H-006/012 scale/013/015; **A** H-002/003/007–011/012 rule.
 

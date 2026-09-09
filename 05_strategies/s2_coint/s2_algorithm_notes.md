@@ -2,7 +2,7 @@
 
 - S1 returns are computed weekly and so the correlation was calculated using S2's returns resampled weekly. 
 - When `overlap_mode = never_allow` the book simulator makes sure that the days where cash is held flat are still included in the sharpe (such to not over inflate the sharpe by excluding the number of flat days).
-- `psr = P(true_SR > 1.0 | T, skew, kurt)` which means probability true Sharpe exceeds 1.0 given sample length T and return shape. Near 1 is good near 0 is bad.
+- `psr = P(true_SR > 0 | T, skew, kurt)` — probability the true Sharpe exceeds **zero** given sample length T and return shape (Bailey & Lopez de Prado PSR with benchmark 0). Near 1 is good; near 0 is bad. Optional diagnostic `psr_vs_1` in EV helpers still reports P(true SR > 1.0).
 - **DSR (local)** — `dsr_local` = deflated Sharpe after `N_local` arms in **a single** screen/hypothesis. If `dsr_local << ann_sharpe`, the local bake-off may inflate the recorded Sharpe (while only overfitting).
 - **DSR (stack)** — Same as local but `N_stack` = cumulative arms in `04_backtest/s2_coint/artifacts/s2_variant_ledger.json`. Penalizes sequential H-001 through current hyp search.
 - The **variant ledger** records the permutations for each notebook/hypothesis tested and is used to product the DSR metrics. If a new hypothesis is added this needs to be updated.
@@ -12,6 +12,9 @@
 - Uses a screen IS for pairs and freeze (checked a quaterly resample but provided no clear benefit for the risk of much more flase positives).
 - **Orientation:** Engle-Granger tests both `y~x` and `x~y` and keeps the lower p-value; the winning direction sets `pair_id`. Orientation is **frozen while a pair is active** and only re-evaluated if the pair is demoted and later re-promoted.
 - **Universe C shelved.** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table in `02_research/s2_coint/universe.md`; archived artifacts in `04_backtest/s2_coint/artifacts/asia_c/`.
+- **Universe D shelved.** WSO.B is not shortable via Alpaca or Interactive Brokers (IBKR). Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`; `WSO|WSO.B` delivered the entirety of the returns. No further broker search. H-001 drops US tickers with Alpaca `shortable=False` before EG screening.
+- Currently excluding SBAC|CCI in universe so 5 pairs. -ve Sharpe suggested removing plus created a 10+% drawdown on its own.
+- Currently chosen 1d not 1h but 1h has a much higher full is sharpe ratio - so there is reason to suggest using it. When revisitng this algorithm I will look to use 1d instead. 
 
 ## Short-selling bans (mainly EUR)
 

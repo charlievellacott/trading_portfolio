@@ -270,10 +270,19 @@ def load_universe_c_panels(
     return train, full
 
 
+def _session_dates(dates: pd.Series | pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """Unique calendar days (midnight-normalized) from a timestamp series."""
+    return pd.DatetimeIndex(pd.to_datetime(dates)).normalize().unique().sort_values()
+
+
 def overlap_calendar_bounds(a: pd.Series, b: pd.Series) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """Inclusive calendar min/max shared by two timestamp series."""
-    a_d = pd.to_datetime(a)
-    b_d = pd.to_datetime(b)
+    """Inclusive calendar-date min/max shared by two timestamp series.
+
+    Bounds are midnight-normalized so a daily bar at ``2024-09-09 00:00`` is not
+    dropped when the 1h series starts at ``2024-09-09 13:30``.
+    """
+    a_d = _session_dates(a)
+    b_d = _session_dates(b)
     start = max(a_d.min(), b_d.min())
     end = min(a_d.max(), b_d.max())
     if end < start:
@@ -286,8 +295,45 @@ def clip_panel_calendar(
     start: pd.Timestamp,
     end: pd.Timestamp,
 ) -> pd.DataFrame:
-    d = pd.to_datetime(panel["date"])
-    return panel.loc[(d >= start) & (d <= end)].copy()
+    """Keep rows whose calendar day is in ``[start, end]`` (inclusive, date-level)."""
+    d = pd.to_datetime(panel["date"]).dt.normalize()
+    start_n = pd.Timestamp(start).normalize()
+    end_n = pd.Timestamp(end).normalize()
+    return panel.loc[(d >= start_n) & (d <= end_n)].copy()
+
+
+def clip_panel_to_session_dates(
+    panel: pd.DataFrame,
+    session_dates: pd.DatetimeIndex | set | list,
+) -> pd.DataFrame:
+    """Keep rows whose calendar day is in ``session_dates``."""
+    allowed = pd.DatetimeIndex(pd.to_datetime(list(session_dates))).normalize().unique()
+    d = pd.to_datetime(panel["date"]).dt.normalize()
+    return panel.loc[d.isin(allowed)].copy()
+
+
+def common_session_dates(a: pd.Series, b: pd.Series) -> pd.DatetimeIndex:
+    """Intersection of calendar days present in both timestamp series."""
+    return _session_dates(a).intersection(_session_dates(b)).sort_values()
+
+
+def align_panels_to_common_sessions(
+    panel_a: pd.DataFrame,
+    panel_b: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DatetimeIndex]:
+    """Trim both panels to the intersection of their calendar session days.
+
+    Use for 1d vs 1h bake-offs so both arms evaluate over the same trading days
+    (not merely a shared timestamp min/max that drops boundary sessions).
+    """
+    common = common_session_dates(panel_a["date"], panel_b["date"])
+    if len(common) == 0:
+        raise ValueError("no common session dates between panels")
+    return (
+        clip_panel_to_session_dates(panel_a, common),
+        clip_panel_to_session_dates(panel_b, common),
+        common,
+    )
 
 
 def split_is_oos(
@@ -295,8 +341,10 @@ def split_is_oos(
     *,
     is_end: pd.Timestamp,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    d = pd.to_datetime(panel["date"])
-    return panel.loc[d <= is_end].copy(), panel.loc[d > is_end].copy()
+    """Split on calendar day: all bars on ``is_end`` stay in IS (incl. intraday)."""
+    d = pd.to_datetime(panel["date"]).dt.normalize()
+    end = pd.Timestamp(is_end).normalize()
+    return panel.loc[d <= end].copy(), panel.loc[d > end].copy()
 
 
 def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
@@ -315,7 +363,7 @@ def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
         if universe:
             return pd.Timestamp(research_is_end_for(str(universe)))
         return pd.Timestamp(RESEARCH_IS_END_C)
-    dates = pd.DatetimeIndex(pd.to_datetime(panel["date"])).sort_values().unique()
+    dates = _session_dates(panel["date"])
     if len(dates) < 10:
         raise ValueError("1H panel too short for a 70/30 IS:OOS split")
     cut = int(len(dates) * 0.70) - 1
@@ -324,7 +372,8 @@ def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
 
 
 def overlap_is_end(panel: pd.DataFrame, *, frac: float = 0.70) -> pd.Timestamp:
-    dates = pd.DatetimeIndex(pd.to_datetime(panel["date"])).sort_values().unique()
+    """70/30 cut on unique calendar days (midnight-normalized)."""
+    dates = _session_dates(panel["date"])
     cut = int(len(dates) * frac) - 1
     cut = min(max(cut, 0), len(dates) - 2)
     return pd.Timestamp(dates[cut])

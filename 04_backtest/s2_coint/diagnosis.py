@@ -578,6 +578,304 @@ def plotly_pair_diagnosis(
     return fig
 
 
+def _pair_returns_from_result(res, pair_id: str) -> pd.Series:
+    book = getattr(res, "book", None)
+    if book is None:
+        return pd.Series(dtype=float)
+    pr = book.pair_results.get(str(pair_id))
+    if pr is None or pr.returns is None or pr.returns.empty:
+        return pd.Series(dtype=float)
+    out = pd.to_numeric(pr.returns, errors="coerce").astype(float)
+    out.index = pd.to_datetime(out.index)
+    return out
+
+
+def _trade_hold_sessions(trades: pd.DataFrame, *, bar: str) -> float:
+    from backtest.s2_coint.research import half_life_to_sessions
+
+    if trades is None or trades.empty or "hold_bars" not in trades.columns:
+        return float("nan")
+    holds = pd.to_numeric(trades["hold_bars"], errors="coerce")
+    holds = holds[np.isfinite(holds.to_numpy(dtype=float))]
+    if holds.empty:
+        return float("nan")
+    return float(half_life_to_sessions(float(holds.median()), bar=bar))
+
+
+def _z_entry_abs_median(trades_enriched: pd.DataFrame) -> float:
+    if trades_enriched is None or trades_enriched.empty or "z_entry" not in trades_enriched.columns:
+        return float("nan")
+    z = pd.to_numeric(trades_enriched["z_entry"], errors="coerce").abs()
+    z = z[np.isfinite(z.to_numpy(dtype=float))]
+    if z.empty:
+        return float("nan")
+    return float(z.median())
+
+
+def _arm_z_traces(
+    panel: pd.DataFrame,
+    trades_enriched: pd.DataFrame,
+    *,
+    arm_label: str,
+    visible: bool,
+):
+    """Build z + entry/exit traces for one arm (visible flag for dropdown frames)."""
+    import plotly.graph_objects as go
+
+    traces = []
+    if panel is None or panel.empty:
+        return traces
+    g = panel.sort_values("date").reset_index(drop=True)
+    dates = pd.to_datetime(g["date"])
+    z = (
+        pd.to_numeric(g["z"], errors="coerce")
+        if "z" in g.columns
+        else pd.Series(np.nan, index=g.index)
+    )
+    traces.append(
+        go.Scatter(
+            x=dates,
+            y=z,
+            name=f"{arm_label} z",
+            line=dict(color="#1f77b4" if arm_label == "1d" else "#ff7f0e"),
+            visible=visible,
+            legendgroup=arm_label,
+        )
+    )
+    if trades_enriched is None or trades_enriched.empty:
+        return traces
+    t = trades_enriched.copy()
+    t["entry_date"] = pd.to_datetime(t["entry_date"])
+    t["exit_date"] = pd.to_datetime(t["exit_date"])
+    z_by_date = pd.Series(z.to_numpy(), index=pd.DatetimeIndex(dates))
+    for side, color, label in (
+        (1, "#2ca02c", "long"),
+        (-1, "#d62728", "short"),
+    ):
+        sub = t.loc[t["side"] == side]
+        if sub.empty:
+            continue
+        entry_y = [
+            float(z_by_date.get(pd.Timestamp(d), np.nan)) for d in sub["entry_date"]
+        ]
+        exit_y = [
+            float(z_by_date.get(pd.Timestamp(d), np.nan)) for d in sub["exit_date"]
+        ]
+        traces.append(
+            go.Scatter(
+                x=list(sub["entry_date"]),
+                y=entry_y,
+                mode="markers",
+                name=f"{arm_label} {label} entry",
+                marker=dict(
+                    symbol="triangle-up",
+                    size=9,
+                    color=color,
+                    line=dict(width=1, color="#000000"),
+                ),
+                visible=visible,
+                legendgroup=arm_label,
+                showlegend=True,
+            )
+        )
+        traces.append(
+            go.Scatter(
+                x=list(sub["exit_date"]),
+                y=exit_y,
+                mode="markers",
+                name=f"{arm_label} {label} exit",
+                marker=dict(
+                    symbol="x",
+                    size=8,
+                    color=color,
+                    line=dict(width=2, color=color),
+                ),
+                visible=visible,
+                legendgroup=arm_label,
+                showlegend=True,
+            )
+        )
+    return traces
+
+
+def plotly_bar_size_trade_compare(
+    panel_1d: pd.DataFrame,
+    panel_1h: pd.DataFrame,
+    result_1d,
+    result_1h,
+    *,
+    pair_ids: Sequence[str] | None = None,
+    title: str | None = None,
+):
+    """Side-by-side 1d vs 1h z + trade markers with a pair dropdown.
+
+    Reuses ``enrich_trades`` marker semantics from ``plotly_pair_diagnosis``.
+    Hold stats are in **sessions** (1h bars ÷ 6) so arms are comparable.
+    """
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    p1d = panel_1d.copy() if panel_1d is not None else pd.DataFrame()
+    p1h = panel_1h.copy() if panel_1h is not None else pd.DataFrame()
+    if not p1d.empty:
+        p1d["date"] = pd.to_datetime(p1d["date"])
+        p1d["pair_id"] = p1d["pair_id"].astype(str)
+    if not p1h.empty:
+        p1h["date"] = pd.to_datetime(p1h["date"])
+        p1h["pair_id"] = p1h["pair_id"].astype(str)
+
+    ids_1d = set(p1d["pair_id"].unique()) if not p1d.empty else set()
+    ids_1h = set(p1h["pair_id"].unique()) if not p1h.empty else set()
+    if pair_ids is None:
+        ordered = sorted(ids_1d & ids_1h) or sorted(ids_1d | ids_1h)
+    else:
+        ordered = [str(p) for p in pair_ids]
+    if not ordered:
+        fig = go.Figure()
+        fig.update_layout(title=title or "no pairs")
+        return fig
+
+    # Precompute enriched blotters per pair for subtitle stats + traces.
+    cache: dict[str, dict] = {}
+    for pid in ordered:
+        g1d = p1d.loc[p1d["pair_id"] == pid] if not p1d.empty else pd.DataFrame()
+        g1h = p1h.loc[p1h["pair_id"] == pid] if not p1h.empty else pd.DataFrame()
+        t1d_all = getattr(result_1d, "pair_trades", pd.DataFrame())
+        t1h_all = getattr(result_1h, "pair_trades", pd.DataFrame())
+        if t1d_all is None:
+            t1d_all = pd.DataFrame()
+        if t1h_all is None:
+            t1h_all = pd.DataFrame()
+        t1d = (
+            t1d_all.loc[t1d_all["pair_id"].astype(str) == pid].copy()
+            if not t1d_all.empty and "pair_id" in t1d_all.columns
+            else pd.DataFrame()
+        )
+        t1h = (
+            t1h_all.loc[t1h_all["pair_id"].astype(str) == pid].copy()
+            if not t1h_all.empty and "pair_id" in t1h_all.columns
+            else pd.DataFrame()
+        )
+        e1d = enrich_trades(t1d, g1d, _pair_returns_from_result(result_1d, pid))
+        e1h = enrich_trades(t1h, g1h, _pair_returns_from_result(result_1h, pid))
+        n1d = int(len(e1d)) if e1d is not None else 0
+        n1h = int(len(e1h)) if e1h is not None else 0
+        hold1d = _trade_hold_sessions(e1d if n1d else t1d, bar="1d")
+        hold1h = _trade_hold_sessions(e1h if n1h else t1h, bar="1h")
+        z1d = _z_entry_abs_median(e1d)
+        z1h = _z_entry_abs_median(e1h)
+
+        def _fmt(x: float) -> str:
+            return f"{x:.2f}" if np.isfinite(x) else "nan"
+
+        cache[pid] = {
+            "g1d": g1d,
+            "g1h": g1h,
+            "e1d": e1d,
+            "e1h": e1h,
+            "subtitle": (
+                f"1d: n={n1d}, med hold={_fmt(hold1d)} sess, med |z_entry|={_fmt(z1d)}  |  "
+                f"1h: n={n1h}, med hold={_fmt(hold1h)} sess, med |z_entry|={_fmt(z1h)}"
+            ),
+        }
+
+    first = ordered[0]
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        shared_yaxes=True,
+        subplot_titles=(f"1d — {first}", f"1h — {first}"),
+        horizontal_spacing=0.06,
+    )
+
+    # Trace layout: for each pair, append 1d traces then 1h traces.
+    # Only the first pair is visible initially.
+    traces_per_pair: list[int] = []
+    for i, pid in enumerate(ordered):
+        visible = i == 0
+        c = cache[pid]
+        before = len(fig.data)
+        for tr in _arm_z_traces(c["g1d"], c["e1d"], arm_label="1d", visible=visible):
+            fig.add_trace(tr, row=1, col=1)
+        for tr in _arm_z_traces(c["g1h"], c["e1h"], arm_label="1h", visible=visible):
+            fig.add_trace(tr, row=1, col=2)
+        traces_per_pair.append(len(fig.data) - before)
+
+    # Build visibility masks for dropdown.
+    buttons = []
+    offset = 0
+    n_total = len(fig.data)
+    for i, pid in enumerate(ordered):
+        n = traces_per_pair[i]
+        vis = [False] * n_total
+        for j in range(offset, offset + n):
+            vis[j] = True
+        buttons.append(
+            dict(
+                label=pid,
+                method="update",
+                args=[
+                    {"visible": vis},
+                    {
+                        "title": (
+                            f"{title or '1d vs 1h trades'} — {pid}<br>"
+                            f"<sup>{cache[pid]['subtitle']}</sup>"
+                        ),
+                        "annotations": [
+                            dict(
+                                text=f"1d — {pid}",
+                                x=0.225,
+                                y=1.0,
+                                xref="paper",
+                                yref="paper",
+                                showarrow=False,
+                                xanchor="center",
+                                yanchor="bottom",
+                            ),
+                            dict(
+                                text=f"1h — {pid}",
+                                x=0.775,
+                                y=1.0,
+                                xref="paper",
+                                yref="paper",
+                                showarrow=False,
+                                xanchor="center",
+                                yanchor="bottom",
+                            ),
+                        ],
+                    },
+                ],
+            )
+        )
+        offset += n
+
+    fig.update_layout(
+        title=(
+            f"{title or '1d vs 1h trades'} — {first}<br>"
+            f"<sup>{cache[first]['subtitle']}</sup>"
+        ),
+        height=420,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25),
+        hovermode="x unified",
+        updatemenus=[
+            dict(
+                buttons=buttons,
+                direction="down",
+                showactive=True,
+                x=0.0,
+                xanchor="left",
+                y=1.18,
+                yanchor="top",
+            )
+        ],
+        margin=dict(t=100),
+    )
+    fig.update_yaxes(title_text="z", row=1, col=1)
+    fig.update_xaxes(title_text="date", row=1, col=1)
+    fig.update_xaxes(title_text="date", row=1, col=2)
+    return fig
+
+
 def check_fill_timing(
     trades: pd.DataFrame,
     panel: pd.DataFrame,

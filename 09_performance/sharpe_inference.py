@@ -88,9 +88,9 @@ def probabilistic_sharpe_ratio(
     skew: float,
     kurtosis: float,
     *,
-    sr_benchmark: float = 1.0,
+    sr_benchmark: float = 0.0,
 ) -> float:
-    """PSR = P(true SR > sr_benchmark)."""
+    """PSR = P(true SR > sr_benchmark). Default benchmark is 0 (P(true SR > 0))."""
     se = sharpe_std_error(sr, n, skew, kurtosis)
     if not np.isfinite(se) or se <= 0:
         return float("nan")
