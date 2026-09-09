@@ -120,7 +120,9 @@ def pair_reer_value_signal(
         raise KeyError("reer_df must include availability_date column")
 
     slim = reer_df[[base, quote, "availability_date"]].dropna(subset=[base, quote]).copy()
-    slim = slim.sort_values("availability_date")
+    # Drop a named DatetimeIndex (often ``date``) so merge_asof on column
+    # ``date`` is unambiguous after renaming ``availability_date``.
+    slim = slim.reset_index(drop=True).sort_values("availability_date")
     log_spread = np.log(slim[base].astype(float)) - np.log(slim[quote].astype(float))
     slim["log_reer_spread"] = log_spread
 
@@ -133,11 +135,15 @@ def pair_reer_value_signal(
     start = pd.Timestamp(slim["availability_date"].min())
     end = pd.Timestamp(slim["availability_date"].max())
     daily = pd.DataFrame({"date": pd.date_range(start, end, freq="D")})
+    right = (
+        slim[["availability_date", "signal_m"]]
+        .rename(columns={"availability_date": "date"})
+        .reset_index(drop=True)
+        .sort_values("date")
+    )
     merged = pd.merge_asof(
         daily.sort_values("date"),
-        slim[["availability_date", "signal_m"]].rename(
-            columns={"availability_date": "date"}
-        ),
+        right,
         on="date",
         direction="backward",
     )
