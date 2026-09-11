@@ -346,10 +346,36 @@ def _corr_k(raw) -> float | None:
     return float(raw)
 
 
+def _atr_exit_star(raw) -> float | None:
+    if raw in (None, "off", "None", False, ""):
+        return None
+    return float(raw)
+
+
+def _hl_exit_star(raw) -> float | None:
+    """``off`` → None; ``on`` → default 3.0 half-lives; numeric → that n."""
+    if raw in (None, "off", "None", False, ""):
+        return None
+    if raw in ("on", "true", "True", True):
+        return 3.0
+    return float(raw)
+
+
+def _legacy_exit_stars(stack: dict) -> tuple[float | None, float | None]:
+    """Map legacy composite ``EXIT_STAR`` when orthogonal keys are absent."""
+    if "ATR_EXIT_STAR" in stack or "HL_EXIT_STAR" in stack:
+        return _atr_exit_star(stack.get("ATR_EXIT_STAR")), _hl_exit_star(stack.get("HL_EXIT_STAR"))
+    legacy = stack.get("EXIT_STAR")
+    if legacy == "hl3_atr_breaker":
+        return 1.0, 3.0
+    return None, None
+
+
 def config_from_stack(stack: dict, **overrides) -> S2SimConfig:
     """Build a sim config from frozen STARs; unset knobs keep H-001 defaults."""
     bar = overrides.pop("bar", None) or stack.get("BAR_STAR") or "1d"
     hl_min, hl_max = _hl_gate(stack.get("HL_GATE_STAR"))
+    atr_mult, hl_n = _legacy_exit_stars(stack)
     lb = lookbacks_for_bar(
         str(bar),
         ols_days=_day_star(stack, "OLS_WINDOW_STAR", DAY_OLS_WINDOW),
@@ -371,7 +397,13 @@ def config_from_stack(stack: dict, **overrides) -> S2SimConfig:
         "hl_gate_min": hl_min,
         "hl_gate_max": hl_max,
         "overlap_mode": stack.get("OVERLAP_STAR") or "allow",
-        "exit_mode": stack.get("EXIT_STAR") or "mean_only",
+        "atr_stop_mult": atr_mult,
+        "hl_exit_n": hl_n,
+        "pair_max_loss": float(
+            stack["PAIR_MAX_LOSS_STAR"]
+            if stack.get("PAIR_MAX_LOSS_STAR") is not None
+            else -0.10
+        ),
         "corr_k": _corr_k(stack.get("CORR_GATE_STAR")),
         "size_mode": stack.get("SIZE_STAR") or "equal",
         "vol_mode": stack.get("VOL_STAR") or "fixed_k",

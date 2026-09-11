@@ -49,7 +49,7 @@
 ## Live paper (hardcoded STAR)
 
 - Frozen recipe is `04_backtest/s2_coint/artifacts/s2_star_stack.json` (see `01_star_tearsheet.ipynb`). Paper runner: `07_execution/s2_coint/s2_paper_runner.py`. Dedicated Alpaca paper account (100% of that account equity). Credentials: `S2_ALPACA_API_KEY` / `S2_ALPACA_SECRET_KEY` in `config/credentials.env` (same file as S1; **never** falls back to S1 keys). Logs: `07_execution/s2_coint/logs/s2_paper_YYYYMMDD.txt` (not the S1 log dir). Live ledger: `09_performance/cache/live_s2/`. Cache: `05_strategies/s2_coint/cache/` (`S2_CACHE_DIR` override).
-- Clock: fill morning of `t+1`. Features from last completed close `t` (drop any `date >= fill_date`). Wait until 09:28 ET, then DAY market deltas (no resting stops; STAR `EXIT_STAR=mean_only`). `--dry-run` prints orders and does not submit.
+- Clock: fill morning of `t+1`. Features from last completed close `t` (drop any `date >= fill_date`). Wait until 09:28 ET, then DAY market deltas. When ATR exit is on, stop is evaluated on **spread close** at `t` (same decision clock; no resting/intrabar H/L stop). `--dry-run` prints orders and does not submit.
 
 - **Score sizing denominator (live, not in the STAR tearsheet):** `mean_abs_score` is the per-pair rolling mean of `|z|` with `window = Z_WINDOW_STAR` (frozen **90**, not the H-001 panel default 60) and `min_periods = window`, through close `t`. The sealed backtest (`01_star_tearsheet.ipynb`) instead freezes the **research-IS mean of `|z|`** via `fit_mean_abs_score` and does not refit on OOS. Rolling live scale was **not** walk-forwarded — backtest it before treating live sizing as research-parity.
 

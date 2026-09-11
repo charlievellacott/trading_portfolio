@@ -86,17 +86,23 @@
       "hyp_id": "H-010",
       "arms": [
         "mean_only",
-        "hl3_atr_breaker"
+        "atr_1.5",
+        "atr_2",
+        "atr_2.5",
+        "hl_off",
+        "hl_on"
       ],
-      "n_arms": 2
+      "n_arms": 6
     },
     {
       "hyp_id": "H-011",
       "arms": [
         "off",
-        "corr_gate"
+        "k0.50",
+        "k0.70",
+        "k0.90"
       ],
-      "n_arms": 2
+      "n_arms": 4
     },
     {
       "hyp_id": "H-012",
@@ -137,5 +143,5 @@
       "n_arms": 5
     }
   ],
-  "cumulative_arms": 46
+  "cumulative_arms": 52
 }

@@ -73,7 +73,7 @@ def _prepare_panel(
 ) -> pd.DataFrame:
     d = panel.copy()
     d["date"] = pd.to_datetime(d["date"])
-    need_spread_ind = cfg.trend_mode != "off" or cfg.exit_mode == "hl3_atr_breaker"
+    need_spread_ind = cfg.trend_mode != "off" or cfg.atr_stop_enabled()
     if need_spread_ind and "atr_spread" not in d.columns:
         d = attach_spread_indicators(
             d,

@@ -437,12 +437,51 @@ def main() -> None:
     stack["OVERLAP_STAR"] = overlap
     report["selections"]["H-009"] = {"OVERLAP_STAR": overlap}
 
-    exit_star, _ = run_simple(
-        stack, is_panel, folds, s1, "H-010",
-        {"mean_only": {"exit_mode": "mean_only"}, "hl3_atr_breaker": {"exit_mode": "hl3_atr_breaker"}},
+    exit_atr, fold_h010_atr = run_simple(
+        stack,
+        is_panel,
+        folds,
+        s1,
+        "H-010",
+        {
+            "mean_only": {"atr_stop_mult": None, "hl_exit_n": None},
+            "atr_2": {"atr_stop_mult": 2.0, "hl_exit_n": None, "pair_max_loss": -0.10},
+            "atr_2.5": {"atr_stop_mult": 2.5, "hl_exit_n": None, "pair_max_loss": -0.10},
+            "atr_3": {"atr_stop_mult": 3.0, "hl_exit_n": None, "pair_max_loss": -0.10},
+        },
     )
-    stack["EXIT_STAR"] = exit_star
-    report["selections"]["H-010"] = {"EXIT_STAR": exit_star}
+    atr_star = "off" if exit_atr == "mean_only" else float(exit_atr.replace("atr_", ""))
+    stack["ATR_EXIT_STAR"] = atr_star
+    stack["PAIR_MAX_LOSS_STAR"] = -0.10 if atr_star != "off" else stack.get("PAIR_MAX_LOSS_STAR", -0.10)
+    stack.pop("EXIT_STAR", None)
+
+    atr_frozen = None if atr_star == "off" else float(atr_star)
+    exit_hl, fold_h010_hl = run_simple(
+        stack,
+        is_panel,
+        folds,
+        s1,
+        "H-010",
+        {
+            "hl_off": {"atr_stop_mult": atr_frozen, "hl_exit_n": None, "pair_max_loss": -0.10},
+            "hl_on": {"atr_stop_mult": atr_frozen, "hl_exit_n": 3.0, "pair_max_loss": -0.10},
+        },
+    )
+    # Combine rule: keep ATR from screen A; enable HL only if hl_on wins screen B.
+    hl_star = "on" if exit_hl == "hl_on" else "off"
+    stack["HL_EXIT_STAR"] = hl_star
+    register_hypothesis_arms(
+        "H-010",
+        ["mean_only", "atr_2", "atr_2.5", "atr_3", "hl_off", "hl_on"],
+        overwrite=True,
+    )
+    report["selections"]["H-010"] = {
+        "ATR_EXIT_STAR": atr_star,
+        "HL_EXIT_STAR": hl_star,
+        "PAIR_MAX_LOSS_STAR": stack.get("PAIR_MAX_LOSS_STAR"),
+        "hint_atr": median_sharpe_hint(fold_h010_atr),
+        "hint_hl": median_sharpe_hint(fold_h010_hl),
+    }
 
     corr, _ = run_simple(
         stack, is_panel, folds, s1, "H-011",
@@ -506,7 +545,8 @@ def main() -> None:
         "BREAK_STAR", "BOOK_STAR", "PAIRS_STAR",
         "OLS_WINDOW_STAR", "ADF_WINDOW_STAR", "ENTRY_Z_STAR", "Z_WINDOW_STAR",
         "HEDGE_STAR", "KALMAN_DELTA_STAR",
-        "TREND_STAR", "HL_GATE_STAR", "OVERLAP_STAR", "EXIT_STAR",
+        "TREND_STAR", "HL_GATE_STAR", "OVERLAP_STAR",
+        "ATR_EXIT_STAR", "HL_EXIT_STAR", "PAIR_MAX_LOSS_STAR",
         "CORR_GATE_STAR", "SIZE_STAR", "VOL_STAR", "Z_WINDOW_MODE_STAR", "ENTRY_STAR",
     ]
     for key in star_keys:

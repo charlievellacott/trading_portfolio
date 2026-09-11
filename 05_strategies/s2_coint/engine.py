@@ -230,10 +230,6 @@ def simulate_pair(
     beta = d[cfg.beta_column].to_numpy(dtype=float)
     oy = d["open_y"].to_numpy(dtype=float)
     ox = d["open_x"].to_numpy(dtype=float)
-    hy = d["high_y"].to_numpy(dtype=float) if "high_y" in d.columns else oy
-    ly = d["low_y"].to_numpy(dtype=float) if "low_y" in d.columns else oy
-    hx = d["high_x"].to_numpy(dtype=float) if "high_x" in d.columns else ox
-    lx = d["low_x"].to_numpy(dtype=float) if "low_x" in d.columns else ox
     hl = d["half_life"].to_numpy(dtype=float) if "half_life" in d.columns else np.full(len(d), np.nan)
     adf = (
         d["adf_pvalue"].to_numpy(dtype=float)
@@ -266,9 +262,14 @@ def simulate_pair(
         if "spread" in d.columns
         else np.full(len(d), np.nan)
     )
-    sh = d["spread_high"].to_numpy(dtype=float) if "spread_high" in d.columns else np.full(len(d), np.nan)
-    sl = d["spread_low"].to_numpy(dtype=float) if "spread_low" in d.columns else np.full(len(d), np.nan)
     so = d["spread_open"].to_numpy(dtype=float) if "spread_open" in d.columns else np.full(len(d), np.nan)
+    # Close-t ATR stop uses spread close (live parity: no intrabar H/L path-check).
+    if "spread_close" in d.columns:
+        sc = d["spread_close"].to_numpy(dtype=float)
+    elif "spread" in d.columns:
+        sc = d["spread"].to_numpy(dtype=float)
+    else:
+        sc = np.full(len(d), np.nan)
 
     allow_long = _entry_mask(long_entry_allowed, len(d), "long_entry_allowed")
     allow_short = _entry_mask(short_entry_allowed, len(d), "short_entry_allowed")
@@ -304,28 +305,31 @@ def simulate_pair(
         if pos != 0 and _health_flattens(adf[i], vj[i], cfg):
             do_exit = True
             coint_break = True
-        if (
-            cfg.exit_mode == "hl3_atr_breaker"
-            and open_entry is not None
-            and np.isfinite(open_entry.get("hl_at_entry", np.nan))
-        ):
+        if open_entry is not None:
             hold = (i + 1) - int(open_entry["entry_idx"])
-            if hold >= float(cfg.n_half_lives) * float(open_entry["hl_at_entry"]):
+            if (
+                cfg.hl_exit_enabled()
+                and np.isfinite(open_entry.get("hl_at_entry", np.nan))
+                and hold >= float(cfg.hl_exit_n) * float(open_entry["hl_at_entry"])
+            ):
                 do_exit = True
                 hl_timeout = True
-            if float(open_entry.get("cum_pnl", 0.0)) <= float(cfg.pair_max_loss):
-                do_exit = True
-                max_loss = True
-                breaker_block = True
-            # Path-check H/L on the fill bar (i+1) after entry open.
-            if np.isfinite(open_entry.get("stop_spread", np.nan)) and np.isfinite(sl[i + 1]):
-                side = int(open_entry["side"])
-                if side > 0 and sl[i + 1] <= float(open_entry["stop_spread"]):
+            if cfg.atr_stop_enabled():
+                if float(open_entry.get("cum_pnl", 0.0)) <= float(cfg.pair_max_loss):
                     do_exit = True
-                    atr_stop = True
-                if side < 0 and sh[i + 1] >= float(open_entry["stop_spread"]):
-                    do_exit = True
-                    atr_stop = True
+                    max_loss = True
+                    breaker_block = True
+                # Close-t vs stop; exit fills at open t+1 (no intrabar H/L).
+                stop_lvl = float(open_entry.get("stop_spread", np.nan))
+                close_s = float(sc[i]) if np.isfinite(sc[i]) else float("nan")
+                if np.isfinite(stop_lvl) and np.isfinite(close_s):
+                    side = int(open_entry["side"])
+                    if side > 0 and close_s <= stop_lvl:
+                        do_exit = True
+                        atr_stop = True
+                    if side < 0 and close_s >= stop_lvl:
+                        do_exit = True
+                        atr_stop = True
 
         event_cost = 0.0
         if do_exit and pos != 0:
@@ -379,7 +383,8 @@ def simulate_pair(
             mean_abs_score=_mean_abs_at_entry(d, i, mean_abs_score),
         )
         size_mult = 1.0
-        if cfg.exit_mode == "hl3_atr_breaker" and do_entry:
+        atr_mult = float(cfg.atr_stop_mult) if cfg.atr_stop_enabled() else float("nan")
+        if cfg.atr_stop_enabled() and do_entry:
             size_mult = atr_size_multiplier(
                 atr=float(atr[i]) if np.isfinite(atr[i]) else float("nan"),
                 beta=float(beta_fill),
@@ -387,6 +392,7 @@ def simulate_pair(
                 pair_scale=scale,
                 leverage=leverage,
                 risk_frac=cfg.atr_risk_frac,
+                atr_mult=atr_mult,
             )
 
         if do_entry:
@@ -397,8 +403,13 @@ def simulate_pair(
             event_cost += entry_cost_bps / 10_000.0
             n_entries += 1
             stop_spread = float("nan")
-            if np.isfinite(so[i + 1]) and np.isfinite(atr[i]) and atr[i] > 0:
-                stop_spread = float(so[i + 1] - pos * atr[i])
+            if (
+                cfg.atr_stop_enabled()
+                and np.isfinite(so[i + 1])
+                and np.isfinite(atr[i])
+                and atr[i] > 0
+            ):
+                stop_spread = float(so[i + 1] - pos * atr_mult * atr[i])
             open_entry = {
                 "side": pos,
                 "entry_idx": i + 1,
@@ -630,8 +641,12 @@ def _simulate_book_joint(
             hl = float(g["half_life"].iloc[i]) if "half_life" in g.columns else float("nan")
             rsi = float(g["rsi_spread"].iloc[i]) if "rsi_spread" in g.columns else float("nan")
             adx = float(g["adx_spread"].iloc[i]) if "adx_spread" in g.columns else float("nan")
-            sl = float(g["spread_low"].iloc[i + 1]) if "spread_low" in g.columns else float("nan")
-            sh = float(g["spread_high"].iloc[i + 1]) if "spread_high" in g.columns else float("nan")
+            if "spread_close" in g.columns:
+                close_s = float(g["spread_close"].iloc[i])
+            elif "spread" in g.columns:
+                close_s = float(g["spread"].iloc[i])
+            else:
+                close_s = float("nan")
             sig = float("nan")
             if "spread" in g.columns:
                 s = g["spread"].astype(float)
@@ -648,20 +663,26 @@ def _simulate_book_joint(
                 max_loss = False
                 atr_stop = False
                 flatten = mean_revert or coint_break
-                if cfg.exit_mode == "hl3_atr_breaker":
-                    hold = (i + 1) - int(st["entry_idx"])
-                    if np.isfinite(st.get("hl_at_entry", np.nan)) and hold >= cfg.n_half_lives * st["hl_at_entry"]:
-                        flatten = True
-                        hl_timeout = True
-                    if float(st.get("cum_pnl", 0.0)) <= cfg.pair_max_loss:
+                hold = (i + 1) - int(st["entry_idx"])
+                if (
+                    cfg.hl_exit_enabled()
+                    and np.isfinite(st.get("hl_at_entry", np.nan))
+                    and hold >= float(cfg.hl_exit_n) * float(st["hl_at_entry"])
+                ):
+                    flatten = True
+                    hl_timeout = True
+                if cfg.atr_stop_enabled():
+                    if float(st.get("cum_pnl", 0.0)) <= float(cfg.pair_max_loss):
                         flatten = True
                         max_loss = True
                         breaker_block[pid] = True
-                    if np.isfinite(st.get("stop_spread", np.nan)) and np.isfinite(sl):
-                        if pos > 0 and sl <= float(st["stop_spread"]):
+                    # Close-t vs stop; exit fills at open t+1 (no intrabar H/L).
+                    stop_lvl = float(st.get("stop_spread", np.nan))
+                    if np.isfinite(stop_lvl) and np.isfinite(close_s):
+                        if pos > 0 and close_s <= stop_lvl:
                             flatten = True
                             atr_stop = True
-                        if pos < 0 and np.isfinite(sh) and sh >= float(st["stop_spread"]):
+                        if pos < 0 and close_s >= stop_lvl:
                             flatten = True
                             atr_stop = True
                 if flatten:
@@ -783,7 +804,8 @@ def _simulate_book_joint(
                 mean_abs_score=_mean_abs_at_entry(g, i, mean_abs_score),
             )
             size_mult = 1.0
-            if cfg.exit_mode == "hl3_atr_breaker":
+            atr_mult = float(cfg.atr_stop_mult) if cfg.atr_stop_enabled() else float("nan")
+            if cfg.atr_stop_enabled():
                 size_mult = atr_size_multiplier(
                     atr=atr,
                     beta=beta_fill,
@@ -791,10 +813,11 @@ def _simulate_book_joint(
                     pair_scale=scale,
                     leverage=1.0,
                     risk_frac=cfg.atr_risk_frac,
+                    atr_mult=atr_mult,
                 )
             stop_spread = float("nan")
-            if np.isfinite(so) and np.isfinite(atr) and atr > 0:
-                stop_spread = float(so - side * atr)
+            if cfg.atr_stop_enabled() and np.isfinite(so) and np.isfinite(atr) and atr > 0:
+                stop_spread = float(so - side * atr_mult * atr)
             open_pos[pid] = {
                 "side": side,
                 "entry_idx": i + 1,

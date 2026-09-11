@@ -1,4 +1,4 @@
-"""H-010 pair scale and H-008 ATR risk-unit multiplier."""
+"""H-010 pair scale and ATR risk-unit multiplier."""
 
 from __future__ import annotations
 
@@ -52,17 +52,21 @@ def atr_size_multiplier(
     pair_scale: float,
     leverage: float,
     risk_frac: float = 0.01,
+    atr_mult: float = 1.0,
 ) -> float:
-    """Size default-trade ATR stop to ``risk_frac`` of book, then × scale × L.
+    """Size so a hit of ``atr_mult`` ATR ≈ ``risk_frac`` of book, then × scale × L.
 
     Pair returns are later averaged across ``n_pairs``, so the raw pair loss at
-    1 ATR (``atr / (1+|beta|)``) is scaled so the book contribution is
-    ``risk_frac * pair_scale * leverage``.
+    ``atr_mult`` ATR (``atr_mult * atr / (1+|beta|)``) is scaled so the book
+    contribution is ``risk_frac * pair_scale * leverage``.
     """
     if not np.isfinite(atr) or atr <= 0.0:
         return 1.0
+    m = float(atr_mult)
+    if not np.isfinite(m) or m <= 0.0:
+        return 1.0
     gross = 1.0 + abs(float(beta))
-    raw_loss = float(atr) / max(gross, 1e-12)
+    raw_loss = (m * float(atr)) / max(gross, 1e-12)
     if raw_loss <= 0.0:
         return 1.0
     n = max(int(n_pairs), 1)

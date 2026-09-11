@@ -11,7 +11,6 @@ VALID_BAR = frozenset({"1d", "1h"})
 VALID_BREAK = frozenset({"off", "block_05_flat_10", "flat_05"})
 VALID_TREND = frozenset({"off", "adx_veto", "rsi_confirm", "both"})
 VALID_OVERLAP = frozenset({"allow", "never_allow"})
-VALID_EXIT = frozenset({"mean_only", "hl3_atr_breaker"})
 VALID_SIZE = frozenset({"equal", "score", "score_conf"})
 VALID_VOL = frozenset({"fixed_k", "kt", "s1_vt"})
 VALID_Z_WINDOW = frozenset({"fixed", "adaptive", "adaptive_alt"})
@@ -22,7 +21,14 @@ VALID_ENTRY = frozenset(
 
 @dataclass(frozen=True)
 class S2SimConfig:
-    """One-knob research config. Defaults match the H-001 trad-z OLS book."""
+    """One-knob research config. Defaults match the H-001 trad-z OLS book.
+
+    Exit knobs are orthogonal (H-010):
+    - ``atr_stop_mult`` — ``None`` / off, else Wilder-ATR multiple for the stop
+      (trigger: spread **close** vs stop at signal ``t``; fill open ``t+1``)
+    - ``hl_exit_n`` — ``None`` / off, else flatten after ``n × half_life`` bars
+    - ``pair_max_loss`` — per-pair breaker, applied only when ATR stop is on
+    """
 
     hedge: str = "ols"
     bar: str = "1d"
@@ -42,10 +48,10 @@ class S2SimConfig:
     hl_gate_min: float | None = None
     hl_gate_max: float | None = None
     overlap_mode: str = "allow"
-    exit_mode: str = "mean_only"
-    n_half_lives: float = 3.0
+    atr_stop_mult: float | None = None
+    hl_exit_n: float | None = None
     atr_risk_frac: float = 0.01
-    pair_max_loss: float = -0.20
+    pair_max_loss: float = -0.10
     atr_window: int = 14
     corr_k: float | None = None
     size_mode: str = "equal"
@@ -61,6 +67,12 @@ class S2SimConfig:
     hmm_mr_threshold: float = 0.5
     cost_profile: str | None = None
 
+    def atr_stop_enabled(self) -> bool:
+        return self.atr_stop_mult is not None and float(self.atr_stop_mult) > 0.0
+
+    def hl_exit_enabled(self) -> bool:
+        return self.hl_exit_n is not None and float(self.hl_exit_n) > 0.0
+
     def __post_init__(self) -> None:
         if self.hedge not in VALID_HEDGE:
             raise ValueError(f"hedge must be in {sorted(VALID_HEDGE)}")
@@ -72,8 +84,10 @@ class S2SimConfig:
             raise ValueError(f"trend_mode must be in {sorted(VALID_TREND)}")
         if self.overlap_mode not in VALID_OVERLAP:
             raise ValueError(f"overlap_mode must be in {sorted(VALID_OVERLAP)}")
-        if self.exit_mode not in VALID_EXIT:
-            raise ValueError(f"exit_mode must be in {sorted(VALID_EXIT)}")
+        if self.atr_stop_mult is not None and float(self.atr_stop_mult) <= 0.0:
+            raise ValueError("atr_stop_mult must be None or > 0")
+        if self.hl_exit_n is not None and float(self.hl_exit_n) <= 0.0:
+            raise ValueError("hl_exit_n must be None or > 0")
         if self.size_mode not in VALID_SIZE:
             raise ValueError(f"size_mode must be in {sorted(VALID_SIZE)}")
         if self.vol_mode not in VALID_VOL:
@@ -89,4 +103,16 @@ class S2SimConfig:
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> S2SimConfig:
         names = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in raw.items() if k in names})
+        payload = {k: v for k, v in raw.items() if k in names}
+        # Legacy composite exit_mode → orthogonal knobs.
+        if "exit_mode" in raw and "atr_stop_mult" not in payload and "hl_exit_n" not in payload:
+            mode = raw.get("exit_mode")
+            if mode == "hl3_atr_breaker":
+                payload.setdefault("atr_stop_mult", 1.0)
+                payload.setdefault("hl_exit_n", float(raw.get("n_half_lives", 3.0)))
+            elif mode in (None, "mean_only"):
+                payload.setdefault("atr_stop_mult", None)
+                payload.setdefault("hl_exit_n", None)
+        if "n_half_lives" in raw and "hl_exit_n" not in payload:
+            payload["hl_exit_n"] = float(raw["n_half_lives"])
+        return cls(**payload)
