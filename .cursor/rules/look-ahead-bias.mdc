@@ -16,18 +16,22 @@ A value used for a **decision or feature** at time `t` must depend only on infor
 
 Forward-looking values are allowed **only** as isolated **labels / prediction targets** for training and evaluation — never as features, signals, or inputs to rolling stats at the same row.
 
-## Decision timeline (default — close fill)
+## Decision timeline — default daily / bar sleeves (close `t` → open `t+1`)
 
-Align every row to one decision timestamp `t` (bar close). Matches [backtest-integrity](.cursor/rules/backtest-integrity.mdc):
+Align every row to one decision timestamp `t` (bar close). Matches [backtest-integrity](.cursor/rules/backtest-integrity.mdc). This is the **default** for new daily work (including S2 and S3):
 
 | Role | Timestamp | Meaning |
 |------|-----------|---------|
-| Features & signal | `t` | Known at or before close `t` |
-| Decision | `t` | Enter / exit choice made after the close of `t` |
-| Fill | `t` | Entry executes at close `t` (same bar as the decision) |
-| Label (train/eval only) | `t → t+1` | Outcome you are predicting (e.g. next close / next-bar return) |
+| Features & signal | close of `t` | Known at or before close `t` |
+| Decision | after close `t` | Enter / exit choice |
+| Orders | just before open `t+1` | Queued for the open |
+| Fill | open of `t+1` | Next bar’s OHLCV open (no-auction venues) |
+| PnL / stops | from open `t+1` onward | Path-check high/low after entry |
+| Label (train/eval only) | after fill | Outcome from the fill onward (never a feature on row `t`) |
 
-Row `t` therefore answers: *given everything known at close `t`, should we enter now to capture what happens over `t+1`?*
+Row `t` answers: *given everything known at close `t`, what should we trade at the next open?*
+
+**Same-bar close-fill** (decide and fill at close `t`) is **opt-in only** when the sleeve documents that convention and the close is actually executable. Do not use it as the silent default for daily FX / equity / futures research.
 
 ## Decision timeline — S1 equities GBM only (trade-date panel)
 
@@ -39,7 +43,7 @@ Row `t` therefore answers: *given everything known at close `t`, should we enter
 | Fill | open `date` | Entry |
 | Label | `Open_{date+h} / Open_date - 1` | Exit at open `date+h` (panel columns `fwd_ret_{h}`) |
 
-Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, S1 pooled GBM). Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`.
+Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_research/notebooks/s1_equities/factor_tests/*`, S1 pooled GBM). Alphalens on S1 pivots `open` with **no** price-frame `shift(-1)`. Same economic lag as close→next-open; different panel indexing.
 
 ## Decision timeline — S2 cointegration (signal close `t` → fill open `t+1`)
 
@@ -52,13 +56,26 @@ Applies to the S1 equities sleeve only (`01_data/data_files/s1_equities/*`, `02_
 | Fill | open of `t+1` | Both legs (crypto: next-bar OHLCV open) |
 | PnL / HL stops | from open `t+1` onward | Path-check high/low after entry |
 
-Applies to S2 (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_strategies/s2_coint/*`, future `04_backtest/s2_coint/*`) at every bar size (1D / 4H / 1H). **Not** S1 trade-date indexing; **not** Default same-bar close-fill. Strategies other than S1 and S2 use the default close-fill timeline above.
+Applies to S2 (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_strategies/s2_coint/*`, `04_backtest/s2_coint/*`) at every bar size (1D / 4H / 1H). **Not** S1 trade-date indexing; **not** same-bar close-fill.
+
+## Decision timeline — S3 FX trend (signal close `t` → fill open `t+1`)
+
+| Role | Timestamp | Meaning |
+|------|-----------|---------|
+| Features & signal | close of `t` | TSMOM / Donchian / gates on the pre-registered daily boundary |
+| Optional alt / macro | after close `t`, before open `t+1` | Allowed if knowable then (e.g. rates for carry tilt) |
+| Decision | after close `t` | Enter / exit / size |
+| Orders | just before open `t+1` | Queued for the open |
+| Fill | open of `t+1` | Next tradable open after the defined close |
+| PnL / stops | from open `t+1` onward | After fill |
+
+Applies to S3 (`01_data/data_files/s3_fx_trend/*`, `02_research/s3_fx_trend/*`, `05_strategies/s3_fx_trend/*`, future `04_backtest/s3_fx_trend/*`). Pre-register the FX **day boundary** (recommend 17:00 America/New_York, or freeze broker candle TZ). **Not** S1 trade-date indexing; **not** same-bar close-fill.
 
 ## Rules
 
-- Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly. **Exception — S2:** a close-`t` decision may use close `t` in the signal; the lag is the **fill** at open `t+1`, not an extra `.shift(1)` on features.
+- Lag all rolling stats one bar when the current bar's close/high/low should not be known yet: `.shift(1)` after rolling/ewm, or compute on `t-1` data explicitly. **Exception — S2 / S3 (and the default close→next-open contract):** a close-`t` decision may use close `t` in the signal; the lag is the **fill** at open `t+1`, not an extra `.shift(1)` on features.
 - **Never** use `shift(-n)`, `lead`, `bfill`, or forward-looking joins to build **features, signals, or cross-row derived inputs**.
-- **Labels / targets only:** `shift(-n)` on price or forward returns is allowed in dedicated target columns (e.g. `open.shift(-h) / open - 1` for S1 `fwd_ret_h`, or `close.shift(-1)` under the default close-fill convention). Keep targets in separate columns; never feed them into feature engineering on the same row.
+- **Labels / targets only:** `shift(-n)` on price or forward returns is allowed in dedicated target columns (e.g. `open.shift(-h) / open - 1` for S1 `fwd_ret_h`). Keep targets in separate columns; never feed them into feature engineering on the same row.
 - Merge auxiliary data with `merge_asof(..., direction='backward')` (or equivalent), never forward-fill from the future. On the S1 trade-date panel, merge alt data on `feature_date` (not trade `date`) so same-morning filings cannot leak.
 - Cross-sectional ranks/z-scores at `t` use only the cross-section available at `t` (no full-sample mean/std).
 - ML: fit preprocessors, selectors, and models on train only; `transform` val/test. No `fit` on full history. Drop or exclude label columns before `predict` at inference.
@@ -67,32 +84,28 @@ Applies to S2 (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_st
 ## Examples
 
 ```python
-# BAD (Default when you cannot trade the close you just used) — same-bar close in signal + fill
+# BAD (optimistic same-bar close fill when you cannot trade that close)
 signal = (close > close.rolling(20).mean())
-# fill at close t  # Default only when that is the intentional convention
+# fill at close t  # only if the sleeve explicitly opts into close-fill
 
-# GOOD (Default / pre-close decision) — signal uses yesterday's completed bar
-signal = (close.shift(1) > close.shift(1).rolling(20).mean())
-
-# GOOD (S2) — close t in the signal is fine; fill at next open (do NOT also shift features)
+# GOOD (default / S2 / S3) — close t in the signal; fill at next open
 signal_t = (close > close.rolling(20).mean())  # known at close t
-# fill at open of t+1 (both legs); do not store next open on the signal row as a feature
+# fill at open of t+1; do not store next open on the signal row as a feature
 
 # BAD — forward return used as a feature (peeking)
 df["fwd_ret"] = close.pct_change(5).shift(-5)
 df["feature"] = df["fwd_ret"].rolling(10).mean()
 
-# GOOD (default close-fill) — label forward-looking; features use only past data at t
-df["target"] = close.shift(-1)
-df["label"] = close.shift(-1) / close - 1
-df["feature"] = close.shift(1).pct_change().rolling(10).mean()
+# GOOD — label forward-looking; features use only past / close-t info per contract
+df["label"] = close.shift(-1) / close - 1  # evaluation only
+df["feature"] = close.pct_change().rolling(10).mean()  # S2/S3: ok at close t
 
 # GOOD (S1 trade-date panel) — open-to-open labels; hlcv already lagged to feature_date
 df["fwd_ret_5"] = open.groupby(ticker).shift(-5) / open - 1
 # Alphalens: pivot values="open" (no shift)
 
-# GOOD (Default) — decide at close t, enter at close t; model trained on target, infers from features only
+# GOOD — model trained on target, infers from features only
 X = df[["feature"]]                               # no target/label columns
 y = df["target"]
-# at inference: signal = model.predict(X)  →  order at close t
+# at inference: signal = model.predict(X)  →  order for open t+1 under default/S2/S3
 ```

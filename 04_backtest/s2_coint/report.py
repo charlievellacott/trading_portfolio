@@ -19,7 +19,13 @@ from backtest.star_stack_io import (
 )
 
 # Re-exports for hypothesis notebooks and S2Strategy.
-from backtest.s2_coint.runner import fit_hmm_on_train_dates, run_s2_backtest
+from backtest.s2_coint.runner import (
+    S2BacktestResult,
+    fit_hmm_on_train_dates,
+    periods_per_year_from_index,
+    run_s2_backtest,
+)
+from strategies.s2_coint.baseline import PERIODS_PER_YEAR
 from strategies.s2_coint.config import S2SimConfig
 from strategies.s2_coint.metrics import corr_to_s1, metrics_from_returns, metrics_from_returns_inference
 
@@ -300,6 +306,75 @@ def median_sharpe_hint(fold_df: pd.DataFrame) -> str | None:
         return None
     best = med.idxmax()
     return str(best)
+
+
+_BAR_SIZE_DECISION_COLS: tuple[str, ...] = (
+    "arm",
+    "ann_sharpe_net",
+    "ann_sharpe_gross",
+    "max_drawdown",
+    "calmar",
+    "cvar_5",
+    "corr_to_s1",
+    "cost_bps_year",
+    "n_trades",
+    "n_days",
+)
+
+
+def bar_size_decision_table(
+    results_by_arm: dict[str, S2BacktestResult],
+    *,
+    s1_weekly: pd.Series | None = None,
+    n_trials_local: int | None = 1,
+    n_trials_stack: int | None = None,
+) -> pd.DataFrame:
+    """Full-IS (or any window) scoreboard via tearsheet helpers — net Sharpe lead.
+
+    Reuses ``gross_returns_from_net``, ``oos_headline_metrics``, and ``cvar``
+    (same stack as ``01_star_tearsheet.ipynb``). Does not pick a STAR arm.
+    """
+    from backtest.s2_coint.diagnosis import gross_returns_from_net
+    from backtest.s2_coint.tearsheet import cvar, oos_headline_metrics
+
+    if not results_by_arm:
+        return pd.DataFrame(columns=list(_BAR_SIZE_DECISION_COLS))
+
+    rows: list[dict] = []
+    for arm, res in results_by_arm.items():
+        bar = str(getattr(res.config, "bar", "1d") or "1d")
+        ppy = periods_per_year_from_index(
+            pd.DatetimeIndex(pd.to_datetime(res.returns.index)),
+            bar=bar,
+        )
+        if not np.isfinite(ppy) or ppy <= 0:
+            ppy = float(PERIODS_PER_YEAR)
+        trades = res.pair_trades if res.pair_trades is not None else pd.DataFrame()
+        gross = gross_returns_from_net(res.returns, trades)
+        headline = oos_headline_metrics(
+            res.returns,
+            gross,
+            trades=trades,
+            s1_weekly=s1_weekly,
+            n_trials_local=n_trials_local,
+            n_trials_stack=n_trials_stack,
+            periods_per_year=float(ppy),
+        )
+        rows.append(
+            {
+                "arm": str(arm),
+                "ann_sharpe_net": float(headline["ann_sharpe_net"]),
+                "ann_sharpe_gross": float(headline["ann_sharpe_gross"]),
+                "max_drawdown": float(headline["max_drawdown"]),
+                "calmar": float(headline["calmar"]),
+                "cvar_5": float(cvar(res.returns, alpha=0.05)),
+                "corr_to_s1": float(headline["corr_to_s1"]),
+                "cost_bps_year": float(headline["cost_bps_year"]),
+                "n_trades": int(headline["n_trades"]),
+                "n_days": int(headline["n_days"]),
+            }
+        )
+    return pd.DataFrame(rows, columns=list(_BAR_SIZE_DECISION_COLS))
 
 
 def plot_fold_boxplots(fold_df: pd.DataFrame, *, title: str = "") -> None:

@@ -212,6 +212,8 @@ def ev_significance(
 
     Historical mean, HAC t/p/CI (``ci_excludes_zero``), bootstrap
     ``P*(mu* <= 0)``, and PSR as a *secondary* Sharpe-quality number.
+    ``psr`` uses ``sr_benchmark`` (default 0 → P(true SR > 0));
+    ``psr_vs_1`` always reports P(true SR > 1.0) as an optional diagnostic.
     """
     hac = hac_mean_inference(
         returns,

@@ -14,6 +14,10 @@ _SLEEVE_FOLDERS = {
     "s1_equities": "s1_equities",
     "s2": "s2_coint",
     "s2_coint": "s2_coint",
+    "s3": "s3_fx_trend",
+    "s3_fx_trend": "s3_fx_trend",
+    "s3_core": "s3_fx_trend",
+    "s3_event": "s3_fx_trend",
 }
 
 _SLEEVE_FILES = {
@@ -21,6 +25,10 @@ _SLEEVE_FILES = {
     "s1_equities": "s1_star_stack.json",
     "s2": "s2_star_stack.json",
     "s2_coint": "s2_star_stack.json",
+    "s3": "s3_core_star_stack.json",
+    "s3_fx_trend": "s3_core_star_stack.json",
+    "s3_core": "s3_core_star_stack.json",
+    "s3_event": "s3_event_star_stack.json",
 }
 
 

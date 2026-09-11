@@ -27,6 +27,12 @@ Before writing new fetch, feature, clean, or broker logic, **search the codebase
 | Panel cleaning / winsorize / ffill | `data.processing.cleaner` |
 | S1 equities factor-test panel (train / research IS) | `01_data/data_files/s1_equities/s1_factor_panel_train.parquet` (built by `s1_factor_panel.ipynb`; **trade-date indexed** — `date` = fill date, `feature_date` = info cutoff) |
 | S1 equities full census panel | `01_data/data_files/s1_equities/s1_factor_panel_full.parquet` (same trade-date contract) |
+| Single FX pair OHLCV (OANDA primary, yfinance fallback) | `fetch_fx_ohlcv` in `data.ingestion.fx_fetcher` |
+| Batch FX OHLCV (G10 / multi-pair) | `fetch_fx_ohlcv_batch` in `data.ingestion.fx_fetcher` |
+| FRED series (observations + cache) | `fetch_fred_series` in `data.ingestion.alternative_data.fred_fetcher` |
+| BIS Real Broad REER (monthly + PIT M+2 availability) | `fetch_bis_reer` in `data.ingestion.alternative_data.bis_reer` |
+| G10 policy / short rates (swap + carry) | `fetch_policy_rate` / `fetch_all_g10_policy_rates` in `data.ingestion.rates_fetcher` |
+| Economic calendar (research CSV → cleaned parquet) | `load_economic_calendar` in `data.ingestion.economic_calendar_fetcher` |
 
 Other asset fetchers live under `data.ingestion` (`fx_fetcher`, `crypto_fetcher`, `commodity_fetcher`) — extend those files rather than calling raw vendor APIs from notebooks or strategies.
 

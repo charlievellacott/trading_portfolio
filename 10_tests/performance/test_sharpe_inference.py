@@ -33,12 +33,14 @@ def test_return_moments_short_series():
 
 
 def test_psr_increases_with_higher_sharpe():
-    rng = np.random.default_rng(42)
-    r = pd.Series(rng.normal(0.001, 0.01, 300))
-    m = return_moments(r)
-    low = probabilistic_sharpe_ratio(m["sr"] * 0.5, m["n_obs"], m["skew"], m["kurtosis"])
-    high = probabilistic_sharpe_ratio(m["sr"], m["n_obs"], m["skew"], m["kurtosis"])
+    # Fixed moments: higher estimated SR raises PSR under the same n/shape.
+    n, skew, kurt = 250, 0.0, 3.0
+    low = probabilistic_sharpe_ratio(0.4, n, skew, kurt)
+    high = probabilistic_sharpe_ratio(0.8, n, skew, kurt)
     assert high > low
+    low_b = probabilistic_sharpe_ratio(0.4, n, skew, kurt, sr_benchmark=1.0)
+    high_b = probabilistic_sharpe_ratio(0.8, n, skew, kurt, sr_benchmark=1.0)
+    assert high_b > low_b
 
 
 def test_dsr_decreases_with_more_trials():
@@ -51,11 +53,15 @@ def test_dsr_decreases_with_more_trials():
     assert d1 > d20
 
 
-def test_psr_benchmark_one():
+def test_psr_default_benchmark_zero():
     rng = np.random.default_rng(99)
     r = pd.Series(rng.normal(0.0005, 0.01, 500))
     m = return_moments(r)
-    psr = probabilistic_sharpe_ratio(
+    psr0 = probabilistic_sharpe_ratio(m["sr"], m["n_obs"], m["skew"], m["kurtosis"])
+    psr1 = probabilistic_sharpe_ratio(
         m["sr"], m["n_obs"], m["skew"], m["kurtosis"], sr_benchmark=1.0
     )
-    assert 0.0 <= psr <= 1.0 or np.isnan(psr)
+    assert 0.0 <= psr0 <= 1.0 or np.isnan(psr0)
+    assert 0.0 <= psr1 <= 1.0 or np.isnan(psr1)
+    if np.isfinite(psr0) and np.isfinite(psr1):
+        assert psr0 >= psr1
