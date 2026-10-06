@@ -62,9 +62,13 @@ _YF_PAIR_SUFFIX = {
 
 
 def _to_timestamp(value: date | str | pd.Timestamp | None) -> pd.Timestamp | None:
+    """Parse to a tz-naive UTC instant (matches cached ``date`` / S2 clock)."""
     if value is None:
         return None
-    return pd.Timestamp(value)
+    t = pd.Timestamp(value)
+    if t.tzinfo is not None:
+        return t.tz_convert("UTC").tz_localize(None)
+    return t
 
 
 def _normalize_pair(pair: str) -> str:
@@ -190,55 +194,93 @@ def _oanda_candles(
 
     rows: list[dict] = []
     cursor = pd.Timestamp(start)
+    if cursor.tzinfo is None:
+        cursor = cursor.tz_localize("UTC")
+    else:
+        cursor = cursor.tz_convert("UTC")
     end_ts = pd.Timestamp(end)
     if end_ts.tzinfo is None:
         end_ts = end_ts.tz_localize("UTC")
+    else:
+        end_ts = end_ts.tz_convert("UTC")
+    now_utc = pd.Timestamp.now(tz="UTC")
+    if end_ts > now_utc:
+        end_ts = now_utc
 
+    first_page = True
     while cursor < end_ts:
-        params: dict[str, str | int] = {
+        # OANDA forbids count together with both from and to — paginate with from+count.
+        params: dict[str, str | int | bool] = {
             "granularity": granularity,
             "price": price_param,
             "from": _rfc3339(cursor),
-            "to": _rfc3339(end_ts),
             "count": OANDA_CANDLE_LIMIT,
         }
+        if not first_page:
+            params["includeFirst"] = False
         if interval == "1d" and day_boundary == "ny_1700":
             params["alignmentTimezone"] = NY_CLOSE_TZ
             params["dailyAlignment"] = NY_CLOSE_HOUR
 
         last_err: Exception | None = None
+        last_detail = ""
         data = None
         for attempt in range(MAX_RETRIES):
             try:
                 resp = sess.get(url, params=params, timeout=60)
                 if resp.status_code == 429:
+                    last_detail = f"HTTP 429 {resp.text[:300]}"
                     time.sleep(RETRY_DELAY_SEC * (attempt + 1))
                     continue
-                resp.raise_for_status()
+                if not resp.ok:
+                    last_detail = f"HTTP {resp.status_code} {resp.text[:500]}"
+                    last_err = requests.HTTPError(last_detail, response=resp)
+                    time.sleep(RETRY_DELAY_SEC * (attempt + 1))
+                    continue
                 data = resp.json()
                 break
             except Exception as exc:  # noqa: BLE001
                 last_err = exc
+                if not last_detail:
+                    last_detail = str(exc)
                 time.sleep(RETRY_DELAY_SEC * (attempt + 1))
         if data is None:
-            raise RuntimeError(f"OANDA candles failed for {pair}: {last_err}")
+            detail = last_detail or repr(last_err)
+            raise RuntimeError(
+                f"OANDA candles failed for {pair} ({instrument}) "
+                f"url={base} from={params.get('from')!r} granularity={granularity}: {detail}"
+            )
 
         candles = data.get("candles") or []
         if not candles:
             break
+        reached_end = False
         for c in candles:
+            c_time = pd.Timestamp(c.get("time"))
+            if c_time.tzinfo is None:
+                c_time = c_time.tz_localize("UTC")
+            else:
+                c_time = c_time.tz_convert("UTC")
+            if c_time > end_ts:
+                reached_end = True
+                break
             row = _candle_to_row(
                 c, pair=_normalize_pair(pair), source="oanda", price_side=price
             )
             if row is not None:
                 rows.append(row)
+        if reached_end:
+            break
         last_time = pd.Timestamp(candles[-1]["time"])
         if last_time.tzinfo is None:
             last_time = last_time.tz_localize("UTC")
+        else:
+            last_time = last_time.tz_convert("UTC")
         nxt = last_time + pd.Timedelta(seconds=1)
         if nxt <= cursor:
             break
         cursor = nxt
+        first_page = False
         if len(candles) < OANDA_CANDLE_LIMIT:
             break
 

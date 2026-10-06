@@ -1,7 +1,12 @@
 from data.ingestion.equity_fetcher import fetch_ohlcv, fetch_top_n_equities
 from data.ingestion.fx_fetcher import fetch_fx_ohlcv, fetch_fx_ohlcv_batch
 from data.ingestion.economic_calendar_fetcher import load_economic_calendar
-from data.ingestion.rates_fetcher import fetch_policy_rate, fetch_all_g10_policy_rates
+from data.ingestion.rates_fetcher import (
+    fetch_all_g10_policy_rates,
+    fetch_policy_rate,
+    ensure_policy_rates_frame,
+    policy_rates_as_annual_decimal,
+)
 from data.ingestion.alternative_data.fred_fetcher import fetch_fred_series
 from data.ingestion.alternative_data.bis_reer import fetch_bis_reer
 from data.ingestion.alternative_data.fama_french_fetcher import fetch_ff_factors_daily
@@ -23,6 +28,8 @@ __all__ = [
     "fetch_ohlcv",
     "fetch_all_g10_policy_rates",
     "fetch_policy_rate",
+    "ensure_policy_rates_frame",
+    "policy_rates_as_annual_decimal",
     "fetch_short_volume_daily",
     "fetch_size_value_daily",
     "fetch_top_n_equities",

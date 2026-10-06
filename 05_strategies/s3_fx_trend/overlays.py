@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from data.ingestion.rates_fetcher import ensure_policy_rates_frame
+
 
 def _normalize_pair(pair: str) -> str:
     return str(pair).strip().upper().replace("_", "").replace("/", "").replace("=X", "")
@@ -12,22 +14,23 @@ def _normalize_pair(pair: str) -> str:
 
 def _rate_diff_series(pair: str, rates_df: pd.DataFrame) -> pd.Series:
     """Base minus quote policy rate (annual decimal) aligned to ``rates_df`` index."""
+    rates = ensure_policy_rates_frame(rates_df)
     p = _normalize_pair(pair)
     if len(p) != 6:
         raise ValueError(f"expected 6-letter pair, got {pair!r}")
     base, quote = p[:3], p[3:]
-    cols = {str(c).upper(): c for c in rates_df.columns}
+    cols = {str(c).upper(): c for c in rates.columns}
     if base not in cols or quote not in cols:
         # Allow columns named like EUR_rate / USD
         alt = {
             str(c).upper().replace("_RATE", "").replace("RATE_", ""): c
-            for c in rates_df.columns
+            for c in rates.columns
         }
         cols.update(alt)
     if base not in cols or quote not in cols:
-        return pd.Series(np.nan, index=pd.to_datetime(rates_df.index), dtype=float)
-    b = pd.to_numeric(rates_df[cols[base]], errors="coerce").astype(float)
-    q = pd.to_numeric(rates_df[cols[quote]], errors="coerce").astype(float)
+        return pd.Series(np.nan, index=rates.index, dtype=float)
+    b = pd.to_numeric(rates[cols[base]], errors="coerce").astype(float)
+    q = pd.to_numeric(rates[cols[quote]], errors="coerce").astype(float)
     out = (b - q).copy()
     out.index = pd.to_datetime(out.index)
     return out.sort_index().rename("rate_diff")
@@ -44,7 +47,8 @@ def carry_signal_weekly(
     uses the last known rate differential as of close ``t`` (ffill), then is
     sampled on the refresh weekday and forward-filled — no lookahead.
     """
-    if rates_df is None or rates_df.empty:
+    rates_df = ensure_policy_rates_frame(rates_df)
+    if rates_df.empty:
         return pd.Series(dtype=float, name="carry")
     diff = _rate_diff_series(pair, rates_df).dropna()
     if diff.empty:

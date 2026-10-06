@@ -15,6 +15,8 @@
 - **Universe D shelved.** WSO.B is not shortable via Alpaca or Interactive Brokers (IBKR). Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`; `WSO|WSO.B` delivered the entirety of the returns. No further broker search. H-001 drops US tickers with Alpaca `shortable=False` before EG screening.
 - Currently excluding SBAC|CCI in universe so 5 pairs. -ve Sharpe suggested removing plus created a 10+% drawdown on its own.
 - Currently chosen 1d not 1h but 1h has a much higher full is sharpe ratio - so there is reason to suggest using it. When revisitng this algorithm I will look to use 1d instead. 
+- Removed the following pair due to negative IS Sharpe:
+> SBAC|CCI,SBAC,CCI,0.0011625779878899254,-4.513726137548148,41.80327964351622,5675,2021-12-31,True,towers,2
 
 ## Short-selling bans (mainly EUR)
 

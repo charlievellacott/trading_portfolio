@@ -83,7 +83,8 @@ Default slippage: **0.1 pip per leg**.
 - **Wednesday triple swap:** OANDA-style triple accrual when `dayofweek == 2`
   (covers weekend roll).
 - Policy rates: FRED via `data.ingestion.rates_fetcher` (`fetch_policy_rate` /
-  `fetch_all_g10_policy_rates`).
+  `fetch_all_g10_policy_rates`). FRED percent levels are converted to **annual
+  decimals** (`ensure_policy_rates_frame` / fetch helpers) before swap / carry.
 
 ### Conversion markup
 

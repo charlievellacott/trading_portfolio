@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from data.ingestion.rates_fetcher import ensure_policy_rates_frame
 from strategies.s3_fx_trend.config import S3SimConfig
 from strategies.s3_fx_trend.costs import (
     daily_swap_return,
@@ -202,18 +203,15 @@ def _rate_diff_on_date(
     rates_df: pd.DataFrame | None,
     asof: pd.Timestamp,
 ) -> float:
-    if rates_df is None or rates_df.empty:
+    rates = ensure_policy_rates_frame(rates_df)
+    if rates.empty:
         return 0.0
     p = _normalize_pair(pair)
     base, quote = p[:3], p[3:]
-    cols = {str(c).upper(): c for c in rates_df.columns}
+    cols = {str(c).upper(): c for c in rates.columns}
     if base not in cols or quote not in cols:
         return 0.0
-    idx = pd.to_datetime(rates_df.index)
-    sub = rates_df.copy()
-    sub.index = idx
-    sub = sub.sort_index()
-    sub = sub.loc[sub.index <= pd.Timestamp(asof)]
+    sub = rates.loc[rates.index <= pd.Timestamp(asof)]
     if sub.empty:
         return 0.0
     row = sub.iloc[-1]
@@ -244,6 +242,10 @@ def simulate_pair(
     )
     if panel_pair is None or panel_pair.empty:
         return empty
+
+    rates_df = ensure_policy_rates_frame(rates_df)
+    if rates_df.empty:
+        rates_df = None
 
     d = panel_pair.sort_values("date").reset_index(drop=True)
     pair = _panel_pair_id(d)
@@ -422,6 +424,10 @@ def simulate_book(
     )
     if panel is None or panel.empty:
         return empty
+
+    rates_df = ensure_policy_rates_frame(rates_df)
+    if rates_df.empty:
+        rates_df = None
 
     pair_col = "pair" if "pair" in panel.columns else (
         "pair_id" if "pair_id" in panel.columns else None

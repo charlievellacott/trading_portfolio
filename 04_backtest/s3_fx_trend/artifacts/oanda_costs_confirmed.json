@@ -1,5 +1,24 @@
 {
   "profile": "A_FX_OANDA_S3",
-  "confirmed": false,
-  "note": "placeholder \u2014 confirm OANDA spreads/slippage/swap before sealed OOS"
+  "confirmed": true,
+  "doc_date": "2026-09-24",
+  "pair_spread_pips": {
+    "EURUSD": 1.4,
+    "USDJPY": 1.4,
+    "GBPUSD": 2.0,
+    "USDCHF": 1.8,
+    "USDCAD": 2.2,
+    "AUDUSD": 1.4,
+    "NZDUSD": 1.7
+  },
+  "slippage_pips_per_leg": 0.1,
+  "swap": {
+    "model": "rate_diff_plus_financing_spread",
+    "financing_spread_bps_annual": 50.0,
+    "trading_days_per_year": 365.0,
+    "wednesday_triple_swap": true
+  },
+  "conversion_markup_bps": 0.0,
+  "example_eurusd_30d_swap_return": -0.0019572602739726034,
+  "note": "research lock \u2014 revisit if OANDA published schedule diverges"
 }

@@ -135,3 +135,8 @@ is unavailable; FRED-backed panels still need `FRED_API_KEY`.
 
 See `02_research/s3_fx_trend/notebooks/data_vendor_tests/`. Flag OANDA vs
 yfinance failures here when audits fail.
+
+## Unknown events economic calendar
+
+- There is no need to alter anything after seeing the unknown_events.csv, as this is only a log. If the event is key then it can be added to the mapping, which then allows for this to be used later.
+- The mapping is stored in economic_calendar_fetcher.py

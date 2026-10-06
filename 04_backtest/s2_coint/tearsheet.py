@@ -1043,9 +1043,10 @@ def cost_stress_oos_sharpes(
     from backtest.s2_coint.runner import run_s2_backtest
     from strategies.s2_coint.costs import COSTS
 
-    profile_key = cfg.cost_profile or "US_ALPACA_D_REALISTIC"
+    # Venue default for E/F; D-realistic only when the stack opts into it.
+    profile_key = cfg.cost_profile or "US_ALPACA"
     if profile_key not in COSTS:
-        profile_key = "US_ALPACA_D_REALISTIC"
+        profile_key = "US_ALPACA"
     base = dict(COSTS[profile_key])
     scenarios = [
         (

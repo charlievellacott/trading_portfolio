@@ -1,0 +1,617 @@
+currency,event_name
+CNY,Bank Holiday
+JPY,Bank Holiday
+CHF,Bank Holiday
+EUR,German Bank Holiday
+EUR,French Bank Holiday
+EUR,Italian Bank Holiday
+GBP,Bank Holiday
+CAD,Bank Holiday
+USD,Bank Holiday
+NZD,Bank Holiday
+CNY,Manufacturing PMI
+AUD,AIG Manufacturing Index
+CNY,Caixin Manufacturing PMI
+AUD,Commodity Prices y/y
+EUR,Spanish Manufacturing PMI
+EUR,Italian Manufacturing PMI
+EUR,Final Manufacturing PMI
+USD,Total Vehicle Sales
+EUR,Spanish Unemployment Change
+CHF,Manufacturing PMI
+EUR,German Unemployment Change
+GBP,Construction PMI
+EUR,German 10-y Bond Auction
+USD,Construction Spending m/m
+USD,ISM Manufacturing Prices
+AUD,AIG Services Index
+EUR,Spanish Services PMI
+EUR,Italian Services PMI
+EUR,Final Services PMI
+GBP,Mortgage Approvals
+GBP,Net Lending to Individuals m/m
+EUR,French 10-y Bond Auction
+EUR,Italian Prelim CPI m/m
+GBP,GfK Consumer Confidence
+GBP,MPC Member Blanchflower Speaks
+USD,Challenger Job Cuts y/y
+CAD,RMPI m/m
+CAD,IPPI m/m
+USD,Pending Home Sales m/m
+USD,Factory Orders m/m
+USD,Crude Oil Inventories
+JPY,Monetary Base y/y
+CHF,Foreign Currency Reserves
+GBP,Halifax HPI m/m
+EUR,Retail PMI
+EUR,Consumer Confidence
+EUR,PPI m/m
+CAD,Ivey PMI
+USD,Natural Gas Storage
+USD,Fed Chairman Bernanke Speaks
+AUD,AIG Construction Index
+AUD,Building Approvals m/m
+AUD,ANZ Job Advertisements m/m
+CHF,Unemployment Rate
+EUR,German Retail Sales m/m
+EUR,German Factory Orders m/m
+CAD,BOC Business Outlook Survey
+USD,FOMC Member Kohn Speaks
+USD,Consumer Credit m/m
+GBP,BRC Retail Sales Monitor y/y
+EUR,German Trade Balance
+EUR,German Industrial Production m/m
+USD,NFIB Small Business Index
+CAD,Housing Starts
+USD,IBD/TIPP Economic Optimism
+AUD,Westpac Consumer Sentiment
+GBP,Nationwide Consumer Confidence
+JPY,10-y Bond Auction
+EUR,German WPI m/m
+EUR,French Industrial Production m/m
+EUR,French Gov Budget Balance
+EUR,French Trade Balance
+GBP,BRC Shop Price Index y/y
+CAD,Building Permits m/m
+CAD,NHPI m/m
+USD,Final Wholesale Inventories m/m
+USD,JOLTS Job Openings
+AUD,MI Inflation Expectations
+CNY,USD-Denominated Trade Balance
+JPY,Leading Indicators
+JPY,Prelim Machine Tool Orders y/y
+GBP,Manufacturing Production m/m
+GBP,Industrial Production m/m
+EUR,Final GDP q/q
+GBP,MPC Rate Statement
+USD,FOMC Member Geithner Speaks
+GBP,CB Leading Index m/m
+NZD,Building Consents m/m
+JPY,Bank Lending y/y
+JPY,M2 Money Stock y/y
+GBP,NIESR GDP Estimate
+JPY,Economy Watchers Sentiment
+EUR,French Final CPI m/m
+USD,Import Prices m/m
+USD,Business Inventories m/m
+USD,Federal Budget Balance
+AUD,MI Inflation Gauge m/m
+JPY,Core Machinery Orders m/m
+AUD,Home Loans m/m
+CNY,New Loans
+CNY,M2 Money Supply y/y
+EUR,Italian Industrial Production m/m
+CNY,Foreign Direct Investment ytd/y
+EUR,Sentix Investor Confidence
+GBP,PPI Input m/m
+GBP,ONS HPI y/y
+GBP,PPI Output m/m
+EUR,Industrial Production m/m
+CAD,New Motor Vehicle Sales m/m
+NZD,NZIER Business Confidence
+JPY,PPI y/y
+GBP,RICS House Price Balance
+JPY,Revised Industrial Production m/m
+GBP,Core CPI y/y
+GBP,RPI y/y
+EUR,German ZEW Economic Sentiment
+EUR,ZEW Economic Sentiment
+GBP,MPC Member Sentance Speaks
+USD,Empire State Manufacturing Index
+NZD,FPI m/m
+AUD,MI Leading Index m/m
+JPY,Current Account
+JPY,Consumer Confidence
+EUR,German Final CPI m/m
+EUR,Final Core CPI y/y
+EUR,Trade Balance
+USD,TIC Long-Term Purchases
+USD,Capacity Utilization Rate
+USD,FOMC Member Mishkin Speaks
+USD,NAHB Housing Market Index
+USD,Beige Book
+JPY,Tertiary Industry Activity m/m
+AUD,RBA Bulletin
+JPY,30-y Bond Auction
+JPY,Overnight Call Rate
+JPY,BOJ Monthly Report
+CHF,Retail Sales y/y
+EUR,Italian Trade Balance
+EUR,Spanish 10-y Bond Auction
+CHF,Credit Suisse Economic Expectations
+EUR,ECB Monthly Bulletin
+GBP,MPC Member Besley Speaks
+CAD,Foreign Securities Purchases
+CAD,Manufacturing Sales m/m
+USD,Building Permits
+USD,Housing Starts
+USD,Fed Chairman Bernanke Testifies
+CAD,BOC Monetary Policy Report
+CAD,BOC Press Conference
+USD,Philly Fed Manufacturing Index
+NZD,Core Retail Sales m/m
+NZD,Retail Sales m/m
+AUD,Import Prices q/q
+GBP,M4 Money Supply m/m
+GBP,Public Sector Net Borrowing
+CAD,Wholesale Sales m/m
+USD,Prelim UoM Consumer Sentiment
+USD,Prelim UoM Inflation Expectations
+GBP,Rightmove HPI m/m
+AUD,PPI q/q
+AUD,New Motor Vehicle Sales m/m
+EUR,German PPI m/m
+CHF,PPI m/m
+EUR,German Buba Monthly Report
+EUR,French Consumer Spending m/m
+EUR,Industrial New Orders m/m
+GBP,CBI Industrial Order Expectations
+CAD,Core Retail Sales m/m
+CAD,Leading Index m/m
+USD,CB Leading Index m/m
+USD,Richmond Manufacturing Index
+GBP,BOE Gov King Speaks
+AUD,CB Leading Index m/m
+JPY,Monetary Policy Meeting Minutes
+JPY,All Industries Activity m/m
+ALL,WEF Annual Meetings
+NZD,Credit Card Spending y/y
+GBP,Index of Services 3m/3m
+EUR,German 30-y Bond Auction
+EUR,Belgian NBB Business Climate
+NZD,BusinessNZ Manufacturing Index
+AUD,Bank Holiday
+CNY,GDP q/y
+CNY,Industrial Production y/y
+CNY,CPI y/y
+CNY,Fixed Asset Investment ytd/y
+CNY,NBS Press Conference
+CNY,PPI y/y
+CNY,Retail Sales y/y
+EUR,German GfK Consumer Climate
+EUR,Current Account
+EUR,Italian Retail Sales m/m
+USD,Existing Home Sales
+NZD,RBNZ Gov Bollard Speaks
+JPY,SPPI y/y
+EUR,German Import Prices m/m
+EUR,Spanish Unemployment Rate
+CHF,UBS Consumption Indicator
+EUR,ECB President Trichet Speaks
+EUR,M3 Money Supply y/y
+EUR,Private Loans y/y
+GBP,High Street Lending
+USD,New Home Sales
+EUR,Eurogroup Meetings
+AUD,NAB Quarterly Business Confidence
+GBP,CBI Realized Sales
+JPY,Household Spending y/y
+JPY,Unemployment Rate
+JPY,Prelim Industrial Production m/m
+EUR,ECOFIN Meetings
+AUD,NAB Business Confidence
+GBP,Nationwide HPI m/m
+EUR,Italian 10-y Bond Auction
+USD,S&P/CS Composite-20 HPI y/y
+JPY,Final Manufacturing PMI
+AUD,HIA New Home Sales m/m
+AUD,Private Sector Credit m/m
+JPY,Average Cash Earnings y/y
+JPY,Housing Starts y/y
+CHF,KOF Economic Barometer
+USD,Advance GDP Price Index q/q
+USD,Employment Cost Index q/q
+USD,Chicago PMI
+CHF,Trade Balance
+USD,Personal Spending m/m
+USD,Personal Income m/m
+NZD,Visitor Arrivals m/m
+CHF,SNB Chairman Roth Speaks
+USD,Revised UoM Consumer Sentiment
+USD,Revised UoM Inflation Expectations
+CNY,Non-Manufacturing PMI
+NZD,Labor Cost Index q/q
+USD,Loan Officer Survey
+CAD,Gov Council Member Longworth Speaks
+NZD,ANZ Commodity Prices m/m
+USD,Prelim Nonfarm Productivity q/q
+USD,Prelim Unit Labor Costs q/q
+USD,10-y Bond Auction
+NZD,Employment Change q/q
+CHF,SECO Consumer Climate
+USD,30-y Bond Auction
+ALL,G7 Meetings
+AUD,RBA Monetary Policy Statement
+NZD,PPI Input q/q
+NZD,PPI Output q/q
+EUR,German Prelim GDP q/q
+EUR,French Prelim GDP q/q
+EUR,Spanish Flash GDP q/q
+EUR,Italian Prelim GDP q/q
+EUR,Flash GDP q/q
+GBP,BOE Monetary Policy Report
+USD,Fed Monetary Policy Report
+NZD,Core Retail Sales q/q
+NZD,Retail Sales q/q
+JPY,Prelim GDP q/q
+JPY,Prelim GDP Price Index y/y
+AUD,HPI q/q
+CAD,BOC Review
+EUR,French Prelim Private Payrolls q/q
+CAD,Gov Council Member Jenkins Speaks
+AUD,RBA Gov Stevens Speaks
+AUD,Wage Price Index q/q
+GBP,MPC Member Bean Speaks
+EUR,German Final GDP q/q
+CHF,Employment Level
+GBP,Prelim Business Investment q/q
+GBP,10-y Bond Auction
+CAD,Gov Council Member Kennedy Speaks
+CAD,Corporate Profits q/q
+GBP,Second Estimate GDP q/q
+NZD,ANZ Business Confidence
+NZD,Inflation Expectations q/q
+AUD,Construction Work Done q/q
+USD,Prelim GDP q/q
+USD,Prelim GDP Price Index q/q
+AUD,Private Capital Expenditure q/q
+CAD,Current Account
+USD,Treasury Sec Paulson Speaks
+AUD,Current Account
+JPY,Capital Spending q/y
+AUD,Company Operating Profits q/q
+USD,FOMC Member Kroszner Speaks
+USD,FOMC Member Warsh Speaks
+CHF,GDP q/q
+EUR,Revised GDP q/q
+USD,Revised Nonfarm Productivity q/q
+USD,Revised Unit Labor Costs q/q
+AUD,RBA Assist Gov Edey Speaks
+NZD,RBNZ Press Conference
+NZD,RBNZ Monetary Policy Statement
+NZD,Overseas Trade Index q/q
+CAD,Daylight Saving Time Shift
+USD,Daylight Saving Time Shift
+JPY,Final GDP q/q
+JPY,Final GDP Price Index y/y
+CAD,Labor Productivity q/q
+USD,Mortgage Delinquencies
+NZD,Manufacturing Sales q/q
+EUR,Final Employment Change q/q
+CAD,Capacity Utilization Rate
+USD,Current Account
+ALL,OPEC Meetings
+EUR,German Buba President Weber Speaks
+EUR,French Final Private Payrolls q/q
+GBP,Consumer Inflation Expectations
+NZD,Daylight Saving Time Shift
+GBP,BOE Quarterly Bulletin
+CHF,Industrial Production q/q
+CAD,Annual Budget Release
+AUD,Housing Starts q/q
+GBP,MPC Member Barker Speaks
+EUR,Italian Quarterly Unemployment Rate
+GBP,Annual Budget Release
+JPY,BSI Manufacturing Index
+AUD,RBA Financial Stability Review
+AUD,Daylight Saving Time Shift
+CHF,Daylight Saving Time Shift
+EUR,Daylight Saving Time Shift
+GBP,Daylight Saving Time Shift
+GBP,MPC Member Gieve Speaks
+GBP,Revised Business Investment q/q
+GBP,Monetary Policy Report Hearings
+CHF,SNB Quarterly Bulletin
+NZD,Westpac Consumer Sentiment
+GBP,Current Account
+GBP,Final GDP q/q
+NZD,Current Account
+CHF,SECO Economic Forecasts
+USD,Final GDP Price Index q/q
+JPY,Tankan Manufacturing Index
+JPY,Tankan Non-Manufacturing Index
+GBP,Housing Equity Withdrawal q/q
+ALL,IMF Meetings
+GBP,BOE Inflation Letter
+EUR,French Presidential Election
+CHF,Gov Board Member Hildebrand Speaks
+GBP,BOE Financial Stability Report
+GBP,MPC Member Tucker Speaks
+JPY,BOJ Outlook Report
+AUD,RBA Deputy Gov Lowe Speaks
+EUR,EU Economic Forecasts
+AUD,Annual Budget Release
+NZD,RBNZ Financial Stability Report
+CHF,Gov Board Member Jordan Speaks
+NZD,Annual Budget Release
+ALL,G8 Meetings
+USD,Treasury Currency Report
+CHF,SNB Press Conference
+CHF,SNB Financial Stability Report
+EUR,ECB Financial Stability Review
+CAD,BOC Financial System Review
+NZD,RBNZ Statement of Intent
+AUD,RBA Deputy Gov Battellino Speaks
+JPY,Upper House Elections
+USD,Fed Announcement
+CAD,Gov Council Member Duguay Speaks
+ALL,Jackson Hole Symposium
+USD,President Bush Speaks
+AUD,RBA Annual Report
+EUR,Greek Parliamentary Election
+GBP,BOE Credit Conditions Survey
+GBP,Annual Pre-Budget Report
+AUD,Mid-Year Economic and Fiscal Outlook
+USD,FOMC Member Evans Speaks
+ALL,G20 Meetings
+AUD,RBA Deputy Gov Debelle Speaks
+AUD,Monetary Policy Meeting Minutes
+USD,FOMC Member Plosser Speaks
+USD,FOMC Member Pianalto Speaks
+USD,FOMC Member Fisher Speaks
+CAD,BOC Gov Carney Speaks
+USD,FOMC Member Stern Speaks
+EUR,Spanish Parliamentary Election
+EUR,French Flash Manufacturing PMI
+EUR,French Flash Services PMI
+EUR,German Flash Services PMI
+USD,HPI m/m
+EUR,French Final Manufacturing PMI
+EUR,German Final Manufacturing PMI
+EUR,French Final Services PMI
+EUR,German Final Services PMI
+EUR,Italian Parliamentary Election
+CAD,Gov Council Member Murray Speaks
+JPY,BOJ Gov Shirakawa Speaks
+NZD,GDT Price Index
+EUR,Irish Lisbon Treaty Vote
+ALL,Jeddah Oil Summit
+GBP,MPC Member Dale Speaks
+GBP,Stimulus Package Announcement
+USD,FOMC Member Duke Speaks
+USD,Economic Stabilization Bill Vote
+EUR,EU Economic Summit
+USD,Assist Treasury Sec Kashkari Speaks
+CAD,Federal Election
+USD,Presidential Election
+USD,Congressional Elections
+NZD,Parliamentary Elections
+USD,President Obama Speaks
+AUD,Quarterly Retail Sales q/q
+USD,FOMC Member Yellen Speaks
+GBP,30-y Bond Auction
+USD,FOMC Member Lacker Speaks
+USD,FOMC Member Lockhart Speaks
+USD,FOMC Member Tarullo Speaks
+USD,Treasury Sec Geithner Speaks
+USD,FOMC Member Dudley Speaks
+GBP,Asset Purchase Facility
+GBP,MPC Asset Purchase Facility Votes
+GBP,Chancellor Darling Speaks
+GBP,MPC Member Fisher Speaks
+USD,Bank Stress Test Results
+EUR,European Parliamentary Elections
+GBP,MPC Member Miles Speaks
+GBP,MPC Member Posen Speaks
+NZD,REINZ HPI m/m
+CAD,Gov Council Member Lane Speaks
+JPY,Lower House Elections
+EUR,German Federal Elections
+GBP,Prelim Mortgage Approvals
+EUR,Italian Monthly Unemployment Rate
+USD,FOMC Member Hoenig Speaks
+USD,FOMC Member Bullard Speaks
+USD,FOMC Member Rosengren Speaks
+USD,Fed Chairman Nomination Vote
+NZD,BusinessNZ Services Index
+CHF,Gov Board Member Danthine Speaks
+CHF,SNB Chairman Hildebrand Speaks
+GBP,Parliamentary Elections
+CNY,CB Leading Index m/m
+GBP,Chancellor Osborne Speaks
+EUR,Dutch Parliamentary Election
+USD,Fed Gov Nomination Hearings
+EUR,EBA Bank Stress Test Results
+AUD,Parliamentary Elections
+GBP,MPC Member Weale Speaks
+CAD,Gov Council Member Macklem Speaks
+GBP,Government Spending Review
+USD,FOMC Member Raskin Speaks
+CAD,Gov Council Member Boivin Speaks
+GBP,Autumn Forecast Statement
+CAD,Gov Council Member Cote Speaks
+USD,FOMC Member Kocherlakota Speaks
+CNY,Caixin Flash Manufacturing PMI
+EUR,Spanish Flash CPI y/y
+USD,FOMC Economic Projections
+EUR,German Buba President Weidmann Speaks
+CAD,Manufacturing PMI
+CNY,Caixin Services PMI
+EUR,Greek Gov Debt Crisis Vote
+GBP,FPC Meeting Minutes
+GBP,FPC Statement
+EUR,German Constitutional Court Ruling
+GBP,MPC Member Broadbent Speaks
+EUR,ECB President Draghi Speaks
+EUR,Long Term Refinancing Operation
+USD,FOMC Member Williams Speaks
+CHF,SNB Chairman Jordan Speaks
+USD,Flash Manufacturing PMI
+EUR,Irish Stability Treaty Vote
+USD,Final Manufacturing PMI
+NZD,RBNZ Assist Gov McDermott Speaks
+AUD,RBA Assist Gov Kent Speaks
+GBP,MPC Member McCafferty Speaks
+EUR,Spanish Bank Stress Test Results
+USD,FOMC Member Stein Speaks
+CHF,Gov Board Member Zurbrugg Speaks
+USD,FOMC Member George Speaks
+NZD,RBNZ Gov Wheeler Speaks
+GBP,BOE Gov Carney Speaks
+USD,Treasury Sec Lew Speaks
+USD,FOMC Member Powell Speaks
+JPY,BOJ Gov Kuroda Speaks
+CAD,BOC Gov Poloz Speaks
+GBP,Construction Output m/m
+CAD,Gov Council Member Schembri Speaks
+USD,Fed Chair Yellen Testifies
+USD,Flash Services PMI
+USD,Final Services PMI
+GBP,MPC Member Cunliffe Speaks
+USD,Fed Chair Yellen Speaks
+JPY,Flash Manufacturing PMI
+USD,FOMC Member Mester Speaks
+GBP,MPC Member Haldane Speaks
+USD,FOMC Member Fischer Speaks
+GBP,Scottish Independence Vote
+CAD,Gov Council Member Wilkins Speaks
+GBP,MPC Member Forbes Speaks
+USD,Labor Market Conditions Index m/m
+EUR,ECB Stress Test Results
+GBP,MPC Member Shafik Speaks
+CHF,SNB Gold Asset Vote
+USD,FOMC Member Brainard Speaks
+GBP,Bank Stress Test Results
+EUR,Greek Presidential Elections
+EUR,European Court of Justice Ruling
+EUR,ECB Economic Bulletin
+CNY,Trade Balance
+EUR,ECB Monetary Policy Meeting Accounts
+CAD,Gov Council Member Patterson Speaks
+EUR,Euro Summit
+EUR,Greek Bailout Vote
+USD,Goods Trade Balance
+GBP,Monetary Policy Summary
+GBP,MPC Member Vlieghe Speaks
+CHF,Gov Board Member Maechler Speaks
+JPY,BOJ Core CPI y/y
+USD,Wards Total Vehicle Sales
+JPY,BOJ Summary of Opinions
+EUR,French Flash GDP q/q
+EUR,French Prelim CPI m/m
+EUR,Monetary Policy Statement
+ALL,Doha Oil Summit
+EUR,Prelim Flash GDP q/q
+CHF,Unconditional Basic Income Vote
+GBP,HPI y/y
+GBP,EU Membership Vote
+USD,Prelim Wholesale Inventories m/m
+AUD,RBA Gov Lowe Speaks
+GBP,MPC Member Saunders Speaks
+GBP,EU Membership Court Ruling
+EUR,Italian Constitution Amendment Vote
+CAD,Common CPI y/y
+CAD,Median CPI y/y
+CAD,Trimmed CPI y/y
+USD,President Trump Speaks
+USD,FOMC Member Harker Speaks
+GBP,Prime Minister May Speaks
+USD,FOMC Member Kashkari Speaks
+ALL,OPEC-JMMC Meetings
+USD,FOMC Member Kaplan Speaks
+USD,Treasury Sec Mnuchin Speaks
+GBP,MPC Member Hogg Speaks
+CAD,Gov Council Member Leduc Speaks
+AUD,RBA Deputy Gov Bullock Speaks
+AUD,RBA Assist Gov Ellis Speaks
+GBP,MPC Member Ramsden Speaks
+GBP,MPC Member Tenreyro Speaks
+USD,FOMC Member Quarles Speaks
+CAD,ADP Non-Farm Employment Change
+USD,Fed Chair Powell Testifies
+NZD,RBNZ Gov Spencer Speaks
+USD,FOMC Member Bostic Speaks
+USD,Fed Chair Powell Speaks
+CNY,Unemployment Rate
+USD,FOMC Member Barkin Speaks
+NZD,RBNZ Gov Orr Speaks
+GBP,MPC Member Haskel Speaks
+GBP,GDP m/m
+USD,FOMC Member Daly Speaks
+AUD,Flash Manufacturing PMI
+AUD,Flash Services PMI
+USD,FOMC Member Clarida Speaks
+EUR,Flash Employment Change q/q
+USD,FOMC Financial Stability Report
+GBP,Parliament Brexit Vote
+GBP,Govt Confidence Vote
+USD,FOMC Member Bowman Speaks
+GBP,Prime Minister Johnson Speaks
+EUR,ECB President Lagarde Speaks
+CAD,Gov Council Member Beaudry Speaks
+GBP,Flash Manufacturing PMI
+GBP,Flash Services PMI
+GBP,BOE Gov Bailey Speaks
+NZD,Prelim ANZ Business Confidence
+AUD,Goods Trade Balance
+CAD,Gov Council Member Gravelle Speaks
+CAD,BOC Gov Macklem Speaks
+USD,President Biden Speaks
+USD,FOMC Member Waller Speaks
+USD,Treasury Sec Yellen Speaks
+GBP,MPC Member Mann Speaks
+GBP,MPC Member Pill Speaks
+CAD,Gov Council Member Kozicki Speaks
+EUR,German Buba President Nagel Speaks
+CAD,Gov Council Member Rogers Speaks
+USD,FOMC Member Barr Speaks
+USD,FOMC Member Collins Speaks
+GBP,MPC Member Dhingra Speaks
+USD,FOMC Member Jefferson Speaks
+USD,FOMC Member Cook Speaks
+GBP,Prime Minister Truss Speaks
+AUD,CPI y/y
+CHF,Gov Board Member Schlegel Speaks
+USD,FOMC Member Logan Speaks
+CAD,BOC Summary of Deliberations
+JPY,BOJ Gov-Designate Ueda Speaks
+USD,FOMC Member Goolsbee Speaks
+JPY,BOJ Gov Ueda Speaks
+CNY,1-y Loan Prime Rate
+CNY,5-y Loan Prime Rate
+ALL,BRICS Summit
+AUD,RBA Gov-Designate Bullock Speaks
+CAD,Gov Council Member Vincent Speaks
+AUD,RBA Gov Bullock Speaks
+CNY,New Home Prices m/m
+USD,RCM/TIPP Economic Optimism
+GBP,MPC Member Breeden Speaks
+GBP,MPC Member Greene Speaks
+AUD,RBA Press Conference
+USD,FOMC Member Kugler Speaks
+CAD,Gov Council Member Mendes Speaks
+AUD,RBA Assist Gov Hunter Speaks
+CHF,Gov Board Member Martin Speaks
+CHF,UBS Economic Expectations
+AUD,RBA Deputy Gov Hauser Speaks
+EUR,French Parliamentary Elections
+USD,FOMC Member Musalem Speaks
+USD,Cleveland Fed Inflation Expectations
+CHF,SNB Chairman Schlegel Speaks
+USD,FOMC Member Hammack Speaks
+USD,FOMC Member Schmid Speaks
+CHF,Gov Board Member Tschudin Speaks
+GBP,MPC Member Lombardelli Speaks
+GBP,MPC Member Taylor Speaks
+USD,API Weekly Statistical Bulletin
+NZD,RBNZ Gov Hawkesby Speaks

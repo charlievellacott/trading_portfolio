@@ -1,4 +1,123 @@
 {
-  "entries": [],
-  "cumulative_arms": 0
+  "entries": [
+    {
+      "hyp_id": "H-001",
+      "arms": [
+        "tsmom_12m",
+        "tsmom_3m_diag",
+        "tsmom_1m_diag"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-002",
+      "arms": [
+        "1M",
+        "3M",
+        "12M",
+        "equal_blend"
+      ],
+      "n_arms": 4
+    },
+    {
+      "hyp_id": "H-003",
+      "arms": [
+        "off",
+        "pair_vt"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-004",
+      "arms": [
+        "pair_only",
+        "pair_plus_book_vt"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-005",
+      "arms": [
+        "off",
+        "pair_delever",
+        "book_delever",
+        "both"
+      ],
+      "n_arms": 4
+    },
+    {
+      "hyp_id": "H-006",
+      "arms": [
+        "tsmom",
+        "donchian",
+        "both"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-007",
+      "arms": [
+        "ny_close",
+        "overlap_confirmed",
+        "ex_asia_eurgbp"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-008",
+      "arms": [
+        "sign_only",
+        "abs_scale"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-009",
+      "arms": [
+        "off",
+        "corr_gate",
+        "currency_cap",
+        "both"
+      ],
+      "n_arms": 4
+    },
+    {
+      "hyp_id": "H-010",
+      "arms": [
+        "off",
+        "gate",
+        "tilt"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-011",
+      "arms": [
+        "off",
+        "gate",
+        "tilt"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-012",
+      "arms": [
+        "baseline_1.25_0.75",
+        "stronger_1.5_0.5",
+        "mild_1.1_0.9"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-013",
+      "arms": [
+        "off",
+        "band_10",
+        "band_20",
+        "weak_flat"
+      ],
+      "n_arms": 4
+    }
+  ],
+  "cumulative_arms": 40
 }

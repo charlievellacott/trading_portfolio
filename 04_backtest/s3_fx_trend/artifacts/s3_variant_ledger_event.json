@@ -1,4 +1,31 @@
 {
-  "entries": [],
-  "cumulative_arms": 0
+  "entries": [
+    {
+      "hyp_id": "E-001",
+      "arms": [
+        "k_0.5",
+        "k_1.0",
+        "k_1.5"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "E-002",
+      "arms": [
+        "high",
+        "high_mid",
+        "all"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "E-003",
+      "arms": [
+        "daily_post_event",
+        "1h"
+      ],
+      "n_arms": 2
+    }
+  ],
+  "cumulative_arms": 8
 }
