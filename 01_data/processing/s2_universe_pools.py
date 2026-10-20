@@ -69,7 +69,7 @@ S2_POOLS: dict[str, object] = {
     # Per-pool cap of 2 never binds here (one pair per pool); global cap 6 does.
     # Excluded: BRK.A/BRK.B (share notional), Paramount and Lions Gate (2024
     # restructurings). DISCA/DISCK and RDS.A/RDS.B delisted - see survivorship
-    # note in 02_research/s2_coint/universe.md.
+    # note in 02_research/s2_coint/v1/universe.md.
     # ------------------------------------------------------------------
     "D": {
         "alphabet": ["GOOGL", "GOOG"],  # Class A (voting) / Class C (non-voting)

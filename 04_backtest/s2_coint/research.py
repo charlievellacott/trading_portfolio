@@ -54,7 +54,7 @@ def repo_root(start: str | None = None) -> str:
 
 
 # Strict editable installs resolve __file__ under build/; STAR JSON lives in the repo.
-ARTIFACTS_DIR = os.path.join(repo_root(_PKG_DIR), "04_backtest", "s2_coint", "artifacts")
+ARTIFACTS_DIR = os.path.join(repo_root(_PKG_DIR), "04_backtest", "s2_coint", "artifacts", "v1")
 DEFAULT_STAR_STACK = os.path.join(ARTIFACTS_DIR, "s2_star_stack.json")
 
 

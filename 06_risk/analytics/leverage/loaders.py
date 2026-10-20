@@ -15,7 +15,7 @@ S1_BASE_EXPORT_NOTE = (
     "then 08 so s1_period_returns_base.parquet exists."
 )
 S2_BASE_EXPORT_NOTE = (
-    "Export from 04_backtest/s2_coint/notebooks/01_star_tearsheet.ipynb "
+    "Export from 04_backtest/s2_coint/notebooks/v1/02_oos_tearsheet.ipynb "
     "(pre-VT daily book). Frozen s2_star_stack.json is required; the tearsheet "
     "writes s2_period_returns_base.parquet."
 )

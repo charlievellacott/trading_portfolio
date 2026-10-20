@@ -1,6 +1,6 @@
 """Large-universe cointegration discovery screen (method.md staged gates).
 
-Research-only helper under ``02_research/s2_coint/notebooks/universe_discovery``.
+Research-only helper under ``02_research/s2_coint/v1/notebooks/universe_discovery``.
 Reuses project EG / book / cost APIs; does not modify the STAR stack.
 
 Pipeline (pre-registered constants — not searched):

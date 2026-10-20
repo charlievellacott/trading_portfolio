@@ -2,7 +2,7 @@
 description: Mandatory PSR/DSR columns and canonical imports for hypothesis/backtest work
 globs:
   - "02_research/**/hypothesis_tests/**"
-  - "02_research/s2_coint/notebooks/**"
+  - "02_research/s2_coint/v1/notebooks/**"
   - "02_research/notebooks/s1_equities/**"
   - "04_backtest/**"
   - "03_models/**/model_tests/**"

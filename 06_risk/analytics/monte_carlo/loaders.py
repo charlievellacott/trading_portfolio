@@ -13,7 +13,7 @@ S1_EXPORT_NOTE = (
     "Export from 04_backtest/s1_equities/notebooks/09_oos_tearsheet.ipynb"
 )
 S2_EXPORT_NOTE = (
-    "Export from 04_backtest/s2_coint/notebooks/01_star_tearsheet.ipynb"
+    "Export from 04_backtest/s2_coint/notebooks/v1/02_oos_tearsheet.ipynb"
 )
 
 

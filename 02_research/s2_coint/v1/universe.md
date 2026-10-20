@@ -72,8 +72,8 @@ Research IS end: A `2020-12-31`, B `2022-12-31`, C `2021-12-31`, **D / E / F `20
 - Timing contract verified clean (signal close `t` → fill open `t+1`); not an implementation bug.
 - Lesson: EG pass at discovery ≠ tradable MR; venue friction must be small vs expected move.
 
-Full postmortem: `02_research/s2_coint/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb`.
-Archived Asia artifacts: `04_backtest/s2_coint/artifacts/asia_c/`.
+Full postmortem: `02_research/s2_coint/v1/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb`.
+Archived Asia artifacts: `04_backtest/s2_coint/artifacts/v1/asia_c/`.
 
 ---
 
@@ -108,7 +108,7 @@ Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`.
 - The pair `WSO|WSO.B` delivered the entirety of the algorithm's returns. The other two locked pairs did not.
 - Lesson: EG/IS performance is not tradable if either leg cannot be shorted at the execution venue. H-001 now gates US names on Alpaca `shortable` before screening.
 
-Diagnosis notebook: `02_research/s2_coint/notebooks/other_tests/02_universe_d_pair_diagnosis.ipynb`.
+Diagnosis notebook: `02_research/s2_coint/v1/notebooks/other_tests/02_universe_d_pair_diagnosis.ipynb`.
 
 # E: US REIT sub-sectors
 
