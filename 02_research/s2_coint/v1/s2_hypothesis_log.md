@@ -12,7 +12,7 @@ Purged expanding walk-forward on **research IS** (3 folds, 5-day embargo) → pe
 
 **Helpers:** `fold_val_metrics`, `full_is_metrics`, `arm_selection_table` in `04_backtest/s2_coint/report.py` (pass `hyp_id=` for PSR/DSR); variant ledger in `04_backtest/s2_coint/research.py`; `load_star_panels` after H-005/H-006 freeze.
 
-**Stale note:** H-009–H-012 were fit on universe D. The v1 stack keeps E's H-002–H-008 choices and resets H-009–H-015 to pre-search defaults: `OVERLAP_STAR=allow`, `SIZE_STAR=equal`, `PAIR_MAX_LOSS_STAR=null`, ATR/HL/corr off, fixed trad-z. Vol target stays `s1_vt` and must be re-picked on research IS only (`06_risk/notebooks/s2_coint/v1/01_leverage.ipynb`). Run `01_is_diagnosis.ipynb` before `02_oos_tearsheet.ipynb`.
+**Stale note:** H-009–H-012 were fit on universe D. The v1 stack keeps E's H-002–H-008 choices and resets H-009–H-015 to pre-search defaults: `OVERLAP_STAR=allow`, `SIZE_STAR=equal`, `PAIR_MAX_LOSS_STAR=null`, ATR/HL/corr off, fixed trad-z. `PAIRS_STAR` is the five E names in `s2_pairs_E_1d.csv` (SBAC|CCI already dropped). Vol target stays `s1_vt` at 0.06 until it is re-picked on research IS only (`06_risk/notebooks/s2_coint/v1/01_leverage.ipynb`). Run `01_is_diagnosis.ipynb` before `02_oos_tearsheet.ipynb`.
 
 ---
 

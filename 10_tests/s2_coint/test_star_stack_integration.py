@@ -71,7 +71,9 @@ def test_committed_s2_stack_has_required_keys():
     stack = load_star_stack(DEFAULT_STAR_STACK)
     for key in _REQUIRED:
         assert key in stack, key
-    assert len(stack["PAIRS_STAR"]) == 3
+    assert len(stack["PAIRS_STAR"]) == 5
+    assert stack["SIZE_STAR"] == "equal"
+    assert stack["OVERLAP_STAR"] == "allow"
     assert stack["VT_TARGET_ANN_VOL_STAR"] == pytest.approx(0.06)
 
 
@@ -80,8 +82,8 @@ def test_config_from_stack_reads_vt_target():
     cfg = config_from_stack(stack)
     assert cfg.vt_target_ann_vol == pytest.approx(0.06)
     assert cfg.vol_mode == "s1_vt"
-    assert cfg.size_mode == "score"
-    assert cfg.overlap_mode == "never_allow"
+    assert cfg.size_mode == "equal"
+    assert cfg.overlap_mode == "allow"
 
 
 def test_report_reexports_same_load_star_stack():

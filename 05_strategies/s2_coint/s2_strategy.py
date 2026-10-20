@@ -23,7 +23,7 @@ LIVE_HISTORY_START = "2018-01-01"
 
 
 class S2Strategy(Strategy):
-    """Hardcoded Universe D freeze book from ``s2_star_stack.json``."""
+    """Frozen STAR book loaded from ``s2_star_stack.json``."""
 
     def __init__(
         self,

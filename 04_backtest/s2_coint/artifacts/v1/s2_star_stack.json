@@ -1,6 +1,13 @@
 {
   "UNIVERSE_STAR": "E",
   "BAR_STAR": "1d",
+  "PAIRS_STAR": [
+    "CCI|AMT",
+    "SBRA|VTR",
+    "NNN|O",
+    "NNN|WPC",
+    "PLD|TRNO"
+  ],
   "BREAK_STAR": "block_05_flat_10",
   "BOOK_STAR": "freeze",
   "OLS_WINDOW_STAR": 504,
