@@ -14,7 +14,43 @@ from data.repo_paths import repo_root
 
 logger = logging.getLogger(__name__)
 
-RESEARCH_IS_END_S3 = pd.Timestamp("2019-12-31")
+# One cut for FX core, ETF core, and the event sleeve.
+# IS 2007-01-01 .. 2016-12-31; sealed holdout 2017-01-01 .. 2019-12-31.
+# 2020+ is a previously seen macro regime, not a decision sample.
+RESEARCH_IS_END_S3 = pd.Timestamp("2016-12-31")
+S3_HOLDOUT_END = pd.Timestamp("2019-12-31")
+
+# Core universe B. FX legs stay on OANDA only if financing is measured small;
+# UUP is the liquid USD ETF stand-in inside this book.
+ETF_MULTI_TICKERS: tuple[str, ...] = (
+    "SPY", "QQQ", "IWM", "EFA", "EEM", "EWJ", "FXI",
+    "SHY", "IEF", "TLT", "TIP", "LQD", "HYG",
+    "GLD", "SLV", "DBC", "USO", "DBA",
+    "UUP",
+)
+
+S3_CORE_UNIVERSES: dict[str, dict[str, object]] = {
+    "A": {
+        "name": "FX_G10",
+        "kind": "fx",
+        "status": "selectable_redundant",
+        "instruments": G10_V1_PAIRS,
+    },
+    "B": {
+        "name": "ETF_MULTI",
+        "kind": "etf",
+        "status": "default",
+        "instruments": ETF_MULTI_TICKERS,
+    },
+}
+
+
+def core_universe(label: str) -> dict[str, object]:
+    """Core-sleeve universe. The event sleeve does not call this."""
+    key = str(label).strip().upper()
+    if key not in S3_CORE_UNIVERSES:
+        raise KeyError(f"unknown S3 core universe {label!r}; expected A or B")
+    return S3_CORE_UNIVERSES[key]
 
 _HERE = os.path.abspath(__file__)
 _PKG_ROOT = os.path.dirname(os.path.dirname(_HERE))

@@ -1,12 +1,35 @@
-# S3 FX trend — algorithm notes
+# S3 trend — algorithm notes
 
-- See `strategy_overview.md` and `universe.md` for more information into this strategy
+- See `strategy_overview.md` and `02_research/s3_trend/universe.md`.
 
-## Universe (locked)
+## Universe change (FX book → multi-asset ETFs)
 
-- Trades **7 G-10 pairs vs USD** only: EURUSD, USDJPY, GBPUSD, USDCHF, USDCAD,
-AUDUSD, NZDUSD. 
-- **USDSEK and USDNOK are dropped** as they are not in the confirmed OANDA spread table.
+The package was `s3_fx_trend` and the first core freeze was seven USD G10 pairs.
+That FX book is now core universe **A** (`FX_G10`). It stays selectable. New
+research freezes core universe **B** (`ETF_MULTI`): equity, bond, commodity, and
+USD ETFs. `UNIVERSE_STAR` selects the **core** book only.
+
+The **event sleeve is always Forex** (G10 + the economic calendar). It does not
+follow `UNIVERSE_STAR`. It will be shelved later; until then it still has an IS
+diagnosis and a sealed OOS tearsheet.
+
+Dropped from the active core screen, kept under
+`02_research/s3_trend/notebooks/core_sleeve/redundant/`:
+
+- Donchian session filters (old H-007) — ETF daily bars have no FX 17:00 session.
+- Carry overlay (old H-010) — FX rate differentials do not map onto the ETF book.
+- Value / REER overlay (old H-011) — BIS REER is an FX value measure.
+
+The FX-era core hypothesis log is
+`02_research/s3_trend/redundant/s3_core_hypothesis_log_v1_fx.md`.
+Active numbering is H-001 … H-011 with no gaps (see the live core log).
+
+## Core universes
+
+| ID | Book | Role |
+|---|---|---|
+| A | G10 FX vs USD | Selectable; not the default |
+| B | Multi-asset ETFs | Default `UNIVERSE_STAR` |
 
 ## Timing contracts
 
@@ -29,11 +52,12 @@ Helper: `data.processing.s3_fx_event_panel.map_event_to_next_bar_fill`.
 
 ## Research IS / OOS
 
-- `RESEARCH_IS_END_S3 = 2019-12-31` in `data.processing.s3_fx_price_panel`.
-- ~**70/30** split on calendar span (~2007-01-01 → ~2025-07-11).
-- Screen / fold-val / full-IS use `date <= RESEARCH_IS_END_S3`.
-- Sealed OOS is `date > RESEARCH_IS_END_S3`. Same cut for **core and event**.
-- Do not re-pick the cut after seeing OOS.
+- `RESEARCH_IS_END_S3 = 2016-12-31` in `data.processing.s3_fx_price_panel`.
+- One cut for FX core, ETF core, and the event sleeve.
+- Research IS is `date <= 2016-12-31` (panel from ~2007-01-01).
+- Sealed holdout is `2017-01-01` through `2019-12-31`, opened once.
+- Dates after `2019-12-31` are a previously seen regime diagnostic, not OOS.
+- Do not re-pick the cut after seeing the holdout.
 
 ## Metrics (every hyp notebook)
 

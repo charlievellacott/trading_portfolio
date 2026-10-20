@@ -1,113 +1,46 @@
-# S3 FX Trend — Universe (v1)
+# S3 trend — universes
 
-A-level locked book for the core and event sleeves. Pair list lives in
-`data.ingestion.fx_fetcher.G10_V1_PAIRS` and is mirrored in
-`strategies.s3_trend.costs.COSTS["A_FX_OANDA_S3"]["pair_spread_pips"]`.
+`UNIVERSE_STAR` selects the **core** book only. The event sleeve always uses
+Forex (universe A prices, OANDA costs, NY 17:00, economic calendar) and ignores
+this key.
 
-## Locked pairs (7 vs USD)
+One research cut for every sleeve:
 
-| Pair   | Base | Quote | Rationale |
-|--------|------|-------|-----------|
-| EURUSD | EUR  | USD   | Deepest G10 book; OANDA mid/spread available |
-| USDJPY | USD  | JPY   | Core rates / risk-on proxy; JPY pip = 0.01 |
-| GBPUSD | GBP  | USD   | Liquid sterling |
-| USDCHF | USD  | CHF   | Safe-haven / rate-diff carry |
-| USDCAD | USD  | CAD   | Commodity / NA rates |
-| AUDUSD | AUD  | USD   | Commodity / Asia risk |
-| NZDUSD | NZD  | USD   | Closely related AUD risk; still in confirmed spread table |
+| Window | Dates |
+|---|---|
+| Research IS | 2007-01-01 through **2016-12-31** (`RESEARCH_IS_END_S3`) |
+| Sealed holdout | 2017-01-01 through 2019-12-31 (open once) |
+| Previously seen regime | 2020-01-01 onward (diagnostic only, never a STAR decision) |
 
-All pairs are **quoted against USD** so currency exposure is transparent (USD is
-always base or quote) and swap / carry math is `base_rate − quote_rate` without
-cross-pair conversion.
+The joint start is 2007 because that is when the liquid ETF set and the G10
+book are both usable. Earlier single-ETF history is not the book.
 
-Research IS end: **`RESEARCH_IS_END_S3 = 2019-12-31`** (~70/30 on calendar span
-from ~2007-01-01 → ~2025-07-11). Sealed OOS is `date > RESEARCH_IS_END_S3`. Same
-cut for core and event. Do not re-pick after seeing OOS.
+## A — FX_G10 (selectable, not the default)
 
-Day boundary: **NY 17:00 America/New_York** (CTA-style FX day). Signal at close
-of bar `t`; fill at open of `t+1`.
+Seven USD pairs: EURUSD, USDJPY, GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD.
+Costs: OANDA spread, slippage, and swap (`A_FX_OANDA_S3`). Day boundary:
+17:00 America/New_York.
 
----
+USDSEK / USDNOK stay out (not in the confirmed spread table).
 
-## Dropped: USDSEK / USDNOK
+This is the v1 core book. Do not refit it. The old hypothesis log is
+`redundant/s3_core_hypothesis_log_v1_fx.md`.
 
-**Not in v1.** Reasons:
+## B — ETF_MULTI (default)
 
-1. Not present in the locked OANDA spread table (`A_FX_OANDA_S3`).
-2. Typical SEK/NOK retail spreads are wider and more cost-fragile than the seven
-   majors above — net Sharpe is dominated by friction before any trend edge.
-3. `pair_supported(...)` returns `False` for names outside the table; the
-   simulator skips them with a warning rather than inventing a spread.
+| Sleeve | Tickers |
+|---|---|
+| Equities | SPY, QQQ, IWM, EFA, EEM, EWJ, FXI |
+| Bonds and credit | SHY, IEF, TLT, TIP, LQD, HYG |
+| Commodities | GLD, SLV, DBC, USO, DBA |
+| USD | UUP |
 
-Revisit only after **confirmed** OANDA spreads / swap for those pairs are
-written into `costs.py` and audited in
-`02_research/s3_trend/notebooks/data_vendor_tests/03_oanda_costs_confirmed.ipynb`.
+Costs: ETF spread + commission, plus a short-borrow assumption on short legs.
+A long-only diagnostic arm is allowed. Signal at the cash close of `t`, fill at
+the next session open. There is no FX 17:00 session on this book.
 
----
+Registry: `data.processing.s3_fx_price_panel.S3_CORE_UNIVERSES`.
 
-## Cost model (OANDA S3)
+## Event sleeve
 
-Source of truth: `strategies.s3_trend.costs` (`A_FX_OANDA_S3`).
-
-### Pip size
-
-- Most pairs: **0.0001**
-- JPY pairs (`*JPY*`): **0.01**
-
-### Locked half-spread table (full spread in pips)
-
-| Pair   | Spread (pips) |
-|--------|---------------|
-| EURUSD | 1.4 |
-| USDJPY | 1.4 |
-| GBPUSD | 2.0 |
-| USDCHF | 1.8 |
-| USDCAD | 2.2 |
-| AUDUSD | 1.4 |
-| NZDUSD | 1.7 |
-
-Per-leg execution cost ≈ **½ spread + slippage** in bps of notional.
-Default slippage: **0.1 pip per leg**.
-
-### Swap / overnight financing
-
-\[
-\text{daily swap return} \approx
-\bigl(\underbrace{r_{\text{base}} - r_{\text{quote}}}_{\text{rate differential}}
-- \underbrace{50\,\text{bps annual}}_{\text{financing spread}}\bigr)
-\times |w| / 365
-\]
-
-- Earns the rate differential in the **direction of the signed weight**.
-- Financing spread (**50 bps annual**) is always a cost on gross `|w|`.
-- **Wednesday triple swap:** OANDA-style triple accrual when `dayofweek == 2`
-  (covers weekend roll).
-- Policy rates: FRED via `data.ingestion.rates_fetcher` (`fetch_policy_rate` /
-  `fetch_all_g10_policy_rates`). FRED percent levels are converted to **annual
-  decimals** (`ensure_policy_rates_frame` / fetch helpers) before swap / carry.
-
-### Conversion markup
-
-**N/A for v1.** All pairs settle vs USD account currency conceptually;
-`conversion_markup_bps = 0.0`. Crosses or non-USD account markup would need an
-explicit model later.
-
-### Assumptions to revise later
-
-- Spreads are **research locks**, not live quotes — confirm in
-  `oanda_costs_confirmed.json` before sealed OOS is decision-grade.
-- Slippage is flat (not vol-scaled).
-- Swap uses policy-rate proxies, not OANDA’s published financing schedule.
-- No weekend gap / holiday liquidity stress beyond Wednesday triple.
-- SEK/NOK still out until confirmed.
-
----
-
-## Related artifacts
-
-| Artifact | Path |
-|----------|------|
-| Price panel (1D) | `01_data/data_files/s3_trend/s3_price_panel_1d.parquet` |
-| Cost table | `05_strategies/s3_trend/costs.py` |
-| Cost audit | `04_backtest/s3_trend/artifacts/oanda_costs_confirmed.json` |
-| Algorithm notes | `05_strategies/s3_trend/s3_algorithm_notes.md` |
+Always A. Notebooks stay in `notebooks/event_sleeve/`. Shelve later.

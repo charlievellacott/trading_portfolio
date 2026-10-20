@@ -1,4 +1,8 @@
-# S3 FX Trend — Event Sleeve Hypothesis Log
+# S3 trend — Event Sleeve Hypothesis Log
+
+The event sleeve **always trades Forex** (G10 pairs and the economic calendar).
+Core `UNIVERSE_STAR` does not change this book. The sleeve is a candidate to
+shelve after its IS diagnosis; do that later, not in the core ETF screen.
 
 Deferred relative to the **core** sleeve. Do not run E-* STAR decisions until the core trunk (and preferred overlay, if any) is frozen in [`s3_core_hypothesis_log.md`](s3_core_hypothesis_log.md), unless explicitly doing isolated data/vendor work that cannot leak into core selection.
 

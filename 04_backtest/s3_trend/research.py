@@ -43,7 +43,7 @@ DEFAULT_VARIANT_LEDGER_EVENT = os.path.join(
     ARTIFACTS_DIR, "s3_variant_ledger_event.json"
 )
 
-HYPOTHESIS_ORDER_CORE: tuple[str, ...] = tuple(f"H-{i:03d}" for i in range(1, 14))
+HYPOTHESIS_ORDER_CORE: tuple[str, ...] = tuple(f"H-{i:03d}" for i in range(1, 12))
 HYPOTHESIS_ORDER_EVENT: tuple[str, ...] = tuple(f"E-{i:03d}" for i in range(1, 7))
 
 _BLEND_FROM_HORIZON = {
