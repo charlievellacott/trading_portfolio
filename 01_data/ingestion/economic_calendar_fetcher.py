@@ -2,7 +2,7 @@
 Economic calendar CSV loader for S3 FX research.
 
 Reads the research calendar at
-``01_data/data_files/s3_fx_trend/economic_calendar.csv`` (NO HEADER).
+``01_data/data_files/s3_trend/economic_calendar.csv`` (NO HEADER).
 
 Columns (Forex Factory–style export)::
 
@@ -38,7 +38,7 @@ DEFAULT_CSV = os.path.join(
     repo_root(),
     "01_data",
     "data_files",
-    "s3_fx_trend",
+    "s3_trend",
     "economic_calendar.csv",
 )
 DEFAULT_PARQUET = os.path.join(

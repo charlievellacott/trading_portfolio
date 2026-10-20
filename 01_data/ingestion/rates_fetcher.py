@@ -2,7 +2,7 @@
 G10 policy / short-rate series via FRED for S3 FX carry / rate differentials.
 
 FRED levels are percent (e.g. ``5.33`` = 5.33%). Public helpers return **annual
-decimals** (``0.0533``) for swap / carry math in ``strategies.s3_fx_trend``.
+decimals** (``0.0533``) for swap / carry math in ``strategies.s3_trend``.
 
 ``POLICY_RATE_SERIES`` maps ISO currency → FRED series id:
 

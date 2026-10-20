@@ -18,7 +18,7 @@ RESEARCH_IS_END_S3 = pd.Timestamp("2019-12-31")
 
 _HERE = os.path.abspath(__file__)
 _PKG_ROOT = os.path.dirname(os.path.dirname(_HERE))
-DEFAULT_DATA_DIR = os.path.join(_PKG_ROOT, "data_files", "s3_fx_trend")
+DEFAULT_DATA_DIR = os.path.join(_PKG_ROOT, "data_files", "s3_trend")
 
 _OHLC_COLS = ("date", "pair", "open", "high", "low", "close")
 
@@ -191,6 +191,6 @@ def add_realised_vol(panel: pd.DataFrame, window: int) -> pd.DataFrame:
 
 
 def s3_data_dir(root: str | None = None) -> str:
-    """``01_data/data_files/s3_fx_trend`` under the repo root."""
+    """``01_data/data_files/s3_trend`` under the repo root."""
     base = root if root is not None else repo_root()
-    return os.path.join(base, "01_data", "data_files", "s3_fx_trend")
+    return os.path.join(base, "01_data", "data_files", "s3_trend")

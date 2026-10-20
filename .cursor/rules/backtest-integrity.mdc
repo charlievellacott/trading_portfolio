@@ -27,7 +27,7 @@ Every simulation must answer: **what could this strategy have known and traded a
      - Fill at **open of `t+1`** on both legs (venues with no auction open: next bar’s OHLCV open). First PnL from open `t+1` onward.
      - Same causal lag at every bar size (1D / 4H / 1H — H-002). Do **not** use same-bar close-fill and do **not** inherit the S1 trade-date convention.
      - Backtest stops: path-check high/low after entry (S1-style). Live/paper: resting stop/limit after fill.
-   - **S3 FX trend** (`01_data/data_files/s3_fx_trend/*`, `02_research/s3_fx_trend/*`, `05_strategies/s3_fx_trend/*`, future `04_backtest/s3_fx_trend/*`):
+   - **S3 FX trend** (`01_data/data_files/s3_trend/*`, `02_research/s3_trend/*`, `05_strategies/s3_trend/*`, future `04_backtest/s3_trend/*`):
      - Same timing as S2: signal / decision at **close of `t`**; fill at **open of `t+1`**.
      - **Day boundary must be pre-registered** in the algorithm / hyp log (recommend CTA-style **17:00 America/New_York**, or document and freeze the broker candle TZ such as OANDA). Every daily TSMOM lookback, Donchian high/low, and `t+1` open is defined off that clock; changing it later invalidates STARs.
      - Do **not** use same-bar close-fill; do **not** inherit the S1 trade-date convention.

@@ -69,7 +69,7 @@ Applies to S2 (`01_data/data_files/s2_coint/*`, `02_research/s2_coint/*`, `05_st
 | Fill | open of `t+1` | Next tradable open after the defined close |
 | PnL / stops | from open `t+1` onward | After fill |
 
-Applies to S3 (`01_data/data_files/s3_fx_trend/*`, `02_research/s3_fx_trend/*`, `05_strategies/s3_fx_trend/*`, future `04_backtest/s3_fx_trend/*`). Pre-register the FX **day boundary** (recommend 17:00 America/New_York, or freeze broker candle TZ). **Not** S1 trade-date indexing; **not** same-bar close-fill.
+Applies to S3 (`01_data/data_files/s3_trend/*`, `02_research/s3_trend/*`, `05_strategies/s3_trend/*`, future `04_backtest/s3_trend/*`). Pre-register the FX **day boundary** (recommend 17:00 America/New_York, or freeze broker candle TZ). **Not** S1 trade-date indexing; **not** same-bar close-fill.
 
 ## Rules
 

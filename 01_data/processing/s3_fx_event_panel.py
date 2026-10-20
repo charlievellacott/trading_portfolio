@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 _HERE = os.path.abspath(__file__)
 _PKG_ROOT = os.path.dirname(os.path.dirname(_HERE))
-DEFAULT_DATA_DIR = os.path.join(_PKG_ROOT, "data_files", "s3_fx_trend")
+DEFAULT_DATA_DIR = os.path.join(_PKG_ROOT, "data_files", "s3_trend")
 DEFAULT_EVENT_PANEL_PATH = os.path.join(DEFAULT_DATA_DIR, "s3_event_panel.parquet")
 
 _EVENT_COLS = (
@@ -174,5 +174,5 @@ def build_s3_event_panel(
 def s3_event_panel_path(root: str | None = None) -> str:
     base = root if root is not None else repo_root()
     return os.path.join(
-        base, "01_data", "data_files", "s3_fx_trend", "s3_event_panel.parquet"
+        base, "01_data", "data_files", "s3_trend", "s3_event_panel.parquet"
     )
