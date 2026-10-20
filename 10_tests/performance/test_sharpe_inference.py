@@ -53,6 +53,25 @@ def test_dsr_decreases_with_more_trials():
     assert d1 > d20
 
 
+def test_s2_oos_psr_dsr_uses_per_period_sharpe():
+    """Hand check: ann Sharpe 0.647, n=1173, skew 1.124, excess kurt 16.61, 55 trials.
+
+    Feeding the annualized Sharpe into PSR/DSR saturates both near 1. The per-period
+    Sharpe (ann / sqrt(252)) is the Bailey & Lopez de Prado input.
+    """
+    ann = 0.647
+    n = 1173
+    skew = 1.124
+    kurt = 16.61 + 3.0
+    sr_period = ann / np.sqrt(252.0)
+    psr = probabilistic_sharpe_ratio(sr_period, n, skew, kurt)
+    dsr = deflated_sharpe_ratio(sr_period, n, skew, kurt, 55)
+    psr_bad = probabilistic_sharpe_ratio(ann, n, skew, kurt)
+    assert psr == pytest.approx(0.923, abs=0.01)
+    assert dsr == pytest.approx(0.175, abs=0.02)
+    assert psr_bad > 0.99
+
+
 def test_psr_default_benchmark_zero():
     rng = np.random.default_rng(99)
     r = pd.Series(rng.normal(0.0005, 0.01, 500))

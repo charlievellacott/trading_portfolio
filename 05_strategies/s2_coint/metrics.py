@@ -96,7 +96,8 @@ def metrics_from_returns_inference(
     mom = return_moments(ret, periods_per_year=periods_per_year)
     out["skew"] = mom["skew"]
     out["excess_kurtosis"] = float(mom["kurtosis"] - 3.0) if np.isfinite(mom["kurtosis"]) else float("nan")
-    sr = mom["sr"]
+    # PSR/DSR are defined on the per-period Sharpe, not the annualized one.
+    sr = mom["sr_period"]
     n = mom["n_obs"]
     sk = mom["skew"]
     ku = mom["kurtosis"]

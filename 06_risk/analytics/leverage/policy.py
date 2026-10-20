@@ -39,10 +39,11 @@ def apply_policy(
     max_oos_dd: float = 0.25,
     pick: str = PICK_CALMAR,
 ) -> dict[str, float | str | bool | None]:
-    """Select ``target_ann_vol`` among rows that pass veto and sit at/below half-Kelly.
+    """Select ``target_ann_vol`` on the research-IS surface only.
 
-    ``max_oos_dd`` is a positive fraction (0.25 = 25% hole). ``oos_max_drawdown``
-    is stored negative. A breaching row is never selected.
+    ``max_oos_dd`` is kept as the keyword name used by notebooks. It is a positive
+    fraction (0.25 = 25% hole) applied to ``is_max_drawdown``, which is stored
+    negative. OOS columns are reported on the chosen row and are never the objective.
     """
     if pick not in VALID_PICK:
         raise ValueError(f"pick must be one of {sorted(VALID_PICK)}")
@@ -59,9 +60,9 @@ def apply_policy(
     cap = abs(float(max_oos_dd))
     hk = float(half_kelly_vol)
     df["below_half_kelly"] = df["target_ann_vol"].astype(float) <= hk + 1e-12
-    df["dd_ok"] = df["oos_max_drawdown"].astype(float) >= -cap
+    df["dd_ok"] = df["is_max_drawdown"].astype(float) >= -cap
     survivors = df.loc[df["below_half_kelly"] & df["dd_ok"]].copy()
-    col = "oos_calmar" if pick == PICK_CALMAR else "oos_cagr"
+    col = "is_calmar" if pick == PICK_CALMAR else "is_cagr"
     if survivors.empty or survivors[col].notna().sum() == 0:
         return {
             "target_ann_vol": None,
@@ -73,16 +74,26 @@ def apply_policy(
         }
     ranked = survivors.sort_values(col, ascending=False, na_position="last")
     best = ranked.iloc[0]
+
+    def _f(name: str) -> float:
+        if name not in best.index or pd.isna(best[name]):
+            return float("nan")
+        return float(best[name])
+
     return {
         "target_ann_vol": float(best["target_ann_vol"]),
         "pick": pick,
         "n_survivors": int(len(survivors)),
         "half_kelly_vol": hk,
         "max_oos_dd": cap,
-        "oos_calmar": float(best["oos_calmar"]) if pd.notna(best["oos_calmar"]) else float("nan"),
-        "oos_cagr": float(best["oos_cagr"]) if pd.notna(best["oos_cagr"]) else float("nan"),
-        "oos_max_drawdown": float(best["oos_max_drawdown"]),
-        "oos_sharpe": float(best["oos_sharpe"]) if pd.notna(best["oos_sharpe"]) else float("nan"),
+        "is_calmar": _f("is_calmar"),
+        "is_cagr": _f("is_cagr"),
+        "is_max_drawdown": _f("is_max_drawdown"),
+        "is_sharpe": _f("is_sharpe"),
+        "oos_calmar": _f("oos_calmar"),
+        "oos_cagr": _f("oos_cagr"),
+        "oos_max_drawdown": _f("oos_max_drawdown"),
+        "oos_sharpe": _f("oos_sharpe"),
         "reason": "ok",
     }
 

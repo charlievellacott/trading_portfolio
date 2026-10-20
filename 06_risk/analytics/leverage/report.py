@@ -9,7 +9,7 @@ import pandas as pd
 from backtest.star_stack_io import VT_TARGET_ANN_VOL_STAR, update_star_stack_key
 from risk.analytics.leverage.apply import cfg_with_target, overlay_vol_target
 from risk.analytics.leverage.policy import apply_policy, half_kelly_target_vol
-from risk.analytics.leverage.surfaces import leverage_surface
+from risk.analytics.leverage.surfaces import leverage_surface, split_is_oos
 from risk.analytics.s1_equities.vol_targeting import VolTargetConfig, vol_target_star
 
 
@@ -31,7 +31,8 @@ def compute_leverage_surface(
         is_end=is_end,
         periods_per_year=float(periods_per_year),
     )
-    hk = half_kelly_target_vol(base, periods_per_year=float(periods_per_year))
+    is_base, _oos_base = split_is_oos(base, is_end)
+    hk = half_kelly_target_vol(is_base, periods_per_year=float(periods_per_year))
     suggestion = apply_policy(
         surface,
         half_kelly_vol=hk,

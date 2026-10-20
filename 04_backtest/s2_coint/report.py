@@ -350,7 +350,13 @@ def bar_size_decision_table(
         if not np.isfinite(ppy) or ppy <= 0:
             ppy = float(PERIODS_PER_YEAR)
         trades = res.pair_trades if res.pair_trades is not None else pd.DataFrame()
-        gross = gross_returns_from_net(res.returns, trades)
+        engine_gross = getattr(res.book, "returns_gross", None)
+        if engine_gross is not None and not engine_gross.empty:
+            gross = pd.to_numeric(engine_gross, errors="coerce").astype(float)
+            gross.index = pd.to_datetime(gross.index)
+            gross = gross.reindex(pd.to_datetime(res.returns.index))
+        else:
+            gross = gross_returns_from_net(res.returns, trades)
         headline = oos_headline_metrics(
             res.returns,
             gross,

@@ -60,7 +60,11 @@ def leverage_surface(
     periods_per_year: float,
     cvar_alpha: float = 0.05,
 ) -> pd.DataFrame:
-    """One row per ``target_ann_vol`` with IS and OOS metrics (OOS is the desk pick)."""
+    """One row per ``target_ann_vol`` with IS and OOS metrics.
+
+    The desk pick uses the IS columns only (see ``apply_policy``). OOS columns
+    are diagnostics and must not choose ``target_ann_vol``.
+    """
     rows: list[dict[str, float]] = []
     for t in targets:
         cfg_t = cfg_with_target(cfg, float(t))

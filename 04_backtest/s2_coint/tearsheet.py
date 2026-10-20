@@ -452,7 +452,13 @@ def pair_scorecard(
         if not trades.empty:
             trades["entry_date"] = pd.to_datetime(trades["entry_date"])
             trades = trades.loc[trades["entry_date"] > end]
-        gross = gross_returns_from_net(oos, trades, open_entry_cost_bps=res.open_entry_cost_bps)
+        engine_gross = getattr(res, "returns_gross", None)
+        if engine_gross is not None and not getattr(engine_gross, "empty", True):
+            gross = pd.to_numeric(engine_gross, errors="coerce").astype(float)
+            gross.index = pd.to_datetime(gross.index)
+            gross = gross.loc[gross.index > end]
+        else:
+            gross = gross_returns_from_net(oos, trades, open_entry_cost_bps=res.open_entry_cost_bps)
         net_m = metrics_from_returns(oos, periods_per_year=periods_per_year)
         gross_m = metrics_from_returns(gross, periods_per_year=periods_per_year)
         g = p.loc[(p["pair_id"].astype(str) == str(pid)) & (p["date"] > end)]

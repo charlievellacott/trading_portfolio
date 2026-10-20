@@ -50,6 +50,29 @@ def _mean_abs_at_entry(
     return fb if np.isfinite(fb) and fb > 0 else 1.0
 
 
+def _illiquid_fill(d: pd.DataFrame, fill_idx: int) -> bool:
+    """True when a fill bar has a non-positive volume on a leg that records volume.
+
+    Panels without volume columns are left alone (tests and FX-style frames).
+    A zero-volume equity print is a stale Yahoo close, not a tradable open.
+    """
+    if fill_idx < 0 or fill_idx >= len(d):
+        return True
+    saw = False
+    for col in ("volume_y", "volume_x"):
+        if col not in d.columns:
+            continue
+        saw = True
+        val = d[col].iloc[fill_idx]
+        try:
+            vol = float(val)
+        except (TypeError, ValueError):
+            return True
+        if not np.isfinite(vol) or vol <= 0.0:
+            return True
+    return False if saw else False
+
+
 def _entry_mask(
     mask: Sequence[bool] | np.ndarray | None,
     n: int,
@@ -72,6 +95,7 @@ class BookSimResult:
     pair_results: dict[str, PairSimResult] = field(default_factory=dict)
     leverage: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
     returns_base: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
+    returns_gross: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
 
 
 def _score_series(d: pd.DataFrame, cfg: S2SimConfig) -> np.ndarray:
@@ -281,6 +305,7 @@ def simulate_pair(
 
     pos = 0
     pnl_by_date: dict[pd.Timestamp, float] = defaultdict(float)
+    gross_by_date: dict[pd.Timestamp, float] = defaultdict(float)
     trades: list[dict] = []
     n_entries = 0
     open_entry: dict | None = None
@@ -291,6 +316,8 @@ def simulate_pair(
         z_t = score[i]
         beta_fill = beta[i + 1]
         fill_date = pd.Timestamp(dates[i + 1])
+        if _illiquid_fill(d, i + 1):
+            continue
         kin = _k_in(cfg, sig[i])
 
         do_exit = False
@@ -445,9 +472,12 @@ def simulate_pair(
             )
 
         pnl_by_date[fill_date] += bar_ret - event_cost
+        gross_by_date[fill_date] += bar_ret
 
     out = pd.Series(pnl_by_date, dtype=float).sort_index()
     out.name = pair_id
+    gross_out = pd.Series(gross_by_date, dtype=float).sort_index()
+    gross_out.name = pair_id
     trade_df = pd.DataFrame(trades, columns=list(_TRADE_COLS))
     open_cost = float(open_entry["entry_cost_bps"]) if open_entry is not None else 0.0
     return PairSimResult(
@@ -457,6 +487,7 @@ def simulate_pair(
         n_entries=n_entries,
         n_open_at_end=int(open_entry is not None),
         open_entry_cost_bps=open_cost,
+        returns_gross=gross_out,
     )
 
 
@@ -480,20 +511,35 @@ def _empty_book() -> BookSimResult:
     return BookSimResult(returns=empty, returns_base=empty)
 
 
+def _scale_with_leverage(raw: pd.Series, leverage: pd.Series) -> pd.Series:
+    aligned = leverage.reindex(raw.index).astype(float)
+    out = raw.astype(float) * aligned
+    out.name = raw.name
+    return out
+
+
 def _finalize_book(
     raw: pd.Series,
     panel: pd.DataFrame,
     *,
     pair_results: dict[str, PairSimResult],
     vt_cfg: VolTargetConfig | None,
+    raw_gross: pd.Series | None = None,
 ) -> BookSimResult:
-    """Densify pre-VT ``raw`` as ``returns_base``; optionally overlay S1-style VT."""
+    """Densify pre-VT ``raw`` as ``returns_base``; optionally overlay S1-style VT.
+
+    ``raw_gross`` is the same book before fill costs. The VT path fitted on net
+    returns is applied to gross as well, so the gap is cost only.
+    """
     base_out, _ = _densify_book_returns(raw, panel)
+    gross_src = raw if raw_gross is None or raw_gross.empty else raw_gross
+    gross_base, _ = _densify_book_returns(gross_src, panel)
     if vt_cfg is None or not vt_cfg.enabled:
         return BookSimResult(
             returns=base_out,
             returns_base=base_out,
             pair_results=pair_results,
+            returns_gross=gross_base,
         )
     scaled: list[float] = []
     lev_vals: list[float] = []
@@ -511,17 +557,17 @@ def _finalize_book(
         lev_hist.append(float(r))
         lev_index.append(pd.Timestamp(t))
         prev_lev = leverage
+    lev_raw = pd.Series(lev_vals, index=raw.index, dtype=float)
     out = pd.Series(scaled, index=raw.index, name="ret")
-    out, lev_ser = _densify_book_returns(
-        out,
-        panel,
-        leverage=pd.Series(lev_vals, index=raw.index, dtype=float),
-    )
+    out, lev_ser = _densify_book_returns(out, panel, leverage=lev_raw)
+    gross_scaled = _scale_with_leverage(gross_src.reindex(raw.index).fillna(0.0), lev_raw)
+    gross_out, _ = _densify_book_returns(gross_scaled, panel)
     return BookSimResult(
         returns=out,
         returns_base=base_out,
         pair_results=pair_results,
         leverage=lev_ser,
+        returns_gross=gross_out,
     )
 
 
@@ -548,6 +594,7 @@ def simulate_book(
 
     if cfg.overlap_mode == "allow" and cfg.corr_k is None:
         parts: list[pd.Series] = []
+        gross_parts: list[pd.Series] = []
         pair_results: dict[str, PairSimResult] = {}
         for pid, g in pairs:
             res = simulate_pair(
@@ -560,15 +607,21 @@ def simulate_book(
             pair_results[pid] = res
             if not res.returns.empty:
                 parts.append(res.returns.rename(pid))
+            if res.returns_gross is not None and not res.returns_gross.empty:
+                gross_parts.append(res.returns_gross.rename(pid))
         if not parts:
             return _empty_book()
         wide = pd.concat(parts, axis=1).fillna(0.0)
         raw = wide.mean(axis=1).rename("ret")
+        raw_gross = None
+        if gross_parts:
+            raw_gross = pd.concat(gross_parts, axis=1).fillna(0.0).mean(axis=1).rename("ret_gross")
         return _finalize_book(
             raw,
             panel,
             pair_results=pair_results,
             vt_cfg=vt_cfg if cfg.vol_mode == "s1_vt" else None,
+            raw_gross=raw_gross,
         )
 
     return _simulate_book_joint(
@@ -596,6 +649,7 @@ def _simulate_book_joint(
     # Precompute independent "would trade" via per-pair sim is wrong for overlap.
     # Joint: iterate unique signal dates; apply exits then gated entries.
     pnl: dict[str, dict[pd.Timestamp, float]] = {pid: defaultdict(float) for pid in by_pair}
+    gross_pnl: dict[str, dict[pd.Timestamp, float]] = {pid: defaultdict(float) for pid in by_pair}
     trades: dict[str, list] = {pid: [] for pid in by_pair}
     n_entries = {pid: 0 for pid in by_pair}
     rho_cache: dict[tuple[str, str], pd.Series] = {}
@@ -634,6 +688,8 @@ def _simulate_book_joint(
                 continue
             i = int(rows[0])
             if i >= len(g) - 2:
+                continue
+            if _illiquid_fill(g, i + 1):
                 continue
             score = _score_series(g, cfg)[i]
             adf = float(g["adf_pvalue"].iloc[i]) if "adf_pvalue" in g.columns else float("nan")
@@ -866,12 +922,16 @@ def _simulate_book_joint(
             )
             st["cum_pnl"] = float(st.get("cum_pnl", 0.0)) + bar_ret
             pnl[pid][fill_date] += bar_ret
+            gross_pnl[pid][fill_date] += bar_ret
 
     pair_results: dict[str, PairSimResult] = {}
     parts: list[pd.Series] = []
+    gross_parts: list[pd.Series] = []
     for pid, pmap in pnl.items():
         ser = pd.Series(pmap, dtype=float).sort_index()
         ser.name = pid
+        gser = pd.Series(gross_pnl[pid], dtype=float).sort_index()
+        gser.name = pid
         st = open_pos.get(pid)
         pair_results[pid] = PairSimResult(
             pair_id=pid,
@@ -880,9 +940,12 @@ def _simulate_book_joint(
             n_entries=n_entries[pid],
             n_open_at_end=int(st is not None),
             open_entry_cost_bps=float(st["entry_cost_bps"]) if st is not None else 0.0,
+            returns_gross=gser,
         )
         if not ser.empty:
             parts.append(ser)
+        if not gser.empty:
+            gross_parts.append(gser)
     if not parts:
         empty = pd.Series(dtype=float, name="ret")
         return BookSimResult(
@@ -892,6 +955,9 @@ def _simulate_book_joint(
         )
     wide = pd.concat(parts, axis=1).fillna(0.0)
     raw = wide.mean(axis=1).rename("ret")
+    raw_gross = None
+    if gross_parts:
+        raw_gross = pd.concat(gross_parts, axis=1).fillna(0.0).mean(axis=1).rename("ret_gross")
     vt_cfg = VolTargetConfig(
         enabled=cfg.vol_mode == "s1_vt",
         target_ann_vol=cfg.vt_target_ann_vol,
@@ -903,4 +969,5 @@ def _simulate_book_joint(
         panel,
         pair_results=pair_results,
         vt_cfg=vt_cfg if cfg.vol_mode == "s1_vt" else None,
+        raw_gross=raw_gross,
     )

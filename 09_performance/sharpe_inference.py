@@ -41,9 +41,13 @@ def return_moments(
     *,
     periods_per_year: float = 252.0,
 ) -> dict[str, float]:
-    """Annualized Sharpe, n_obs, skew, Pearson kurtosis from a return series."""
+    """Annualized Sharpe (``sr``), per-period Sharpe (``sr_period``), n, skew, Pearson kurtosis.
+
+    PSR and DSR must be fed ``sr_period``. ``sr`` is ``sr_period * sqrt(periods_per_year)``.
+    """
     empty = {
         "sr": float("nan"),
+        "sr_period": float("nan"),
         "n_obs": 0,
         "skew": float("nan"),
         "kurtosis": float("nan"),
@@ -58,11 +62,18 @@ def return_moments(
     sd = float(r.std(ddof=1))
     if sd <= 0:
         return {**empty, "n_obs": n}
-    sr = float(math.sqrt(periods_per_year) * mu / sd)
+    sr_period = float(mu / sd)
+    sr = float(math.sqrt(periods_per_year) * sr_period)
     sk = float(r.skew())
     # pandas skew/kurt are Fisher-style for kurt; convert to Pearson gamma_4.
     ku = float(r.kurtosis() + 3.0)
-    return {"sr": sr, "n_obs": n, "skew": sk, "kurtosis": ku}
+    return {
+        "sr": sr,
+        "sr_period": sr_period,
+        "n_obs": n,
+        "skew": sk,
+        "kurtosis": ku,
+    }
 
 
 def sharpe_std_error(
@@ -71,7 +82,10 @@ def sharpe_std_error(
     skew: float,
     kurtosis: float,
 ) -> float:
-    """Asymptotic std dev of Sharpe estimate (Bailey & Lopez de Prado)."""
+    """Asymptotic std dev of the *per-period* Sharpe (Bailey & Lopez de Prado).
+
+    ``sr`` must be ``mean / std`` of the return series, not the annualized Sharpe.
+    """
     if n < _MIN_OBS or not np.isfinite(sr):
         return float("nan")
     sk = 0.0 if not np.isfinite(skew) else float(skew)

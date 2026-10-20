@@ -421,7 +421,8 @@ def _spike_scale(
         return scale
     spike = r.abs() > (thr * vol_pit)
     scale = scale.where(~spike.fillna(False), 0.5)
-    return scale
+    # The spike is known only after bar t prints. Apply the cut from the next bar.
+    return scale.shift(1).fillna(1.0)
 
 
 def simulate_book(
@@ -535,12 +536,23 @@ def simulate_book(
         book_net = net_wide.mean(axis=1).rename("ret")
         book_gross = gross_wide.mean(axis=1).rename("ret_gross")
 
-    # Currency cap: shrink weights then rescale pair returns approximately.
+    # Currency cap: shrink weights and scale that pair's return by the same ratio.
     if cfg.corr_conflict_mode in {"currency_cap", "both"} and not weights.empty:
+        orig = weights.copy()
         capped_rows = []
-        for dt, row in weights.iterrows():
+        for dt, row in orig.iterrows():
             capped_rows.append(enforce_currency_cap(row, cfg.currency_cap_gross_pct))
-        weights = pd.DataFrame(capped_rows)
+        weights = pd.DataFrame(capped_rows, index=orig.index)
+        weights = weights.reindex(columns=list(orig.columns))
+        for col in list(net_wide.columns):
+            if col not in weights.columns or col not in orig.columns:
+                continue
+            base_w = orig[col].abs().replace(0.0, np.nan)
+            ratio = (weights[col].abs() / base_w).fillna(1.0).clip(0.0, 1.0)
+            net_wide[col] = net_wide[col] * ratio
+            gross_wide[col] = gross_wide[col] * ratio
+        book_net = net_wide.mean(axis=1).rename("ret")
+        book_gross = gross_wide.mean(axis=1).rename("ret_gross")
 
     # Spike delever on book and/or pairs.
     lev_series = pd.Series(1.0, index=book_net.index, dtype=float)

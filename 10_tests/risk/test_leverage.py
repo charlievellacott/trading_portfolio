@@ -49,9 +49,13 @@ def test_dd_veto_not_selected():
     surface = pd.DataFrame(
         {
             "target_ann_vol": [0.06, 0.10, 0.18],
-            "oos_calmar": [0.40, 0.90, 1.50],
-            "oos_cagr": [0.05, 0.08, 0.12],
-            "oos_max_drawdown": [-0.10, -0.20, -0.40],
+            "is_calmar": [0.40, 0.90, 1.50],
+            "is_cagr": [0.05, 0.08, 0.12],
+            "is_max_drawdown": [-0.10, -0.20, -0.40],
+            "is_sharpe": [1.0, 1.0, 1.0],
+            "oos_calmar": [2.00, 0.10, 0.05],
+            "oos_cagr": [0.20, 0.01, 0.01],
+            "oos_max_drawdown": [-0.05, -0.05, -0.05],
             "oos_sharpe": [1.0, 1.0, 1.0],
         }
     )
@@ -64,6 +68,10 @@ def test_half_kelly_ceiling_respected():
     surface = pd.DataFrame(
         {
             "target_ann_vol": [0.06, 0.10, 0.18],
+            "is_calmar": [0.20, 0.90, 1.50],
+            "is_cagr": [0.04, 0.08, 0.12],
+            "is_max_drawdown": [-0.08, -0.12, -0.15],
+            "is_sharpe": [1.0, 1.0, 1.0],
             "oos_calmar": [0.20, 0.90, 1.50],
             "oos_cagr": [0.04, 0.08, 0.12],
             "oos_max_drawdown": [-0.08, -0.12, -0.15],

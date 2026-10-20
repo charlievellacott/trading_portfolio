@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -39,6 +39,7 @@ class PairSimResult:
     n_entries: int
     n_open_at_end: int
     open_entry_cost_bps: float
+    returns_gross: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
 
 
 def clip_ohlc_to_is(
