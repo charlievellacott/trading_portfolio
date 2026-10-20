@@ -11,7 +11,7 @@
   "VT_TARGET_ANN_VOL_STAR": null,
   "CONVICTION_SCALING_STAR": "sign_only",
   "WEAK_SIGNAL_FLAT_Z_STAR": null,
-  "REBALANCE_BAND_STAR": "off",
+  "REBALANCE_BAND_STAR": 0.0,
   "CARRY_MODE_STAR": "tilt",
   "CARRY_REFRESH_STAR": null,
   "VALUE_MODE_STAR": "off",

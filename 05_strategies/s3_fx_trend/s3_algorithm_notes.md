@@ -1,14 +1,12 @@
 # S3 FX trend — algorithm notes
 
-Companion to [`strategy_overview.md`](strategy_overview.md) and
-[`02_research/s3_fx_trend/universe.md`](../../02_research/s3_fx_trend/universe.md).
+- See `strategy_overview.md` and `universe.md` for more information into this strategy
 
 ## Universe (locked)
 
-v1 trades **7 pairs vs USD** only: EURUSD, USDJPY, GBPUSD, USDCHF, USDCAD,
-AUDUSD, NZDUSD. **USDSEK and USDNOK are dropped** — not in the confirmed OANDA
-spread table; typical SEK/NOK spreads are wide and cost-fragile. Revisit only
-after confirmed OANDA costs. Full rationale in `universe.md`.
+- Trades **7 G-10 pairs vs USD** only: EURUSD, USDJPY, GBPUSD, USDCHF, USDCAD,
+AUDUSD, NZDUSD. 
+- **USDSEK and USDNOK are dropped** as they are not in the confirmed OANDA spread table.
 
 ## Timing contracts
 
@@ -68,11 +66,6 @@ S3 wiring: `strategies.s3_fx_trend.metrics`, `backtest.s3_fx_trend.report`.
 | Core | `04_backtest/s3_fx_trend/artifacts/s3_core_star_stack.json` | `s3_variant_ledger_core.json` |
 | Event | `04_backtest/s3_fx_trend/artifacts/s3_event_star_stack.json` | `s3_variant_ledger_event.json` |
 
-Load/save via `backtest.star_stack_io`. Register arms with
-`backtest.s3_fx_trend.research.register_hypothesis_arms(..., sleeve=...)`.
-STAR assignment is **manual** in notebooks — never auto-assign from
-`median_sharpe_hint`.
-
 ## Costs
 
 See `universe.md` and `strategies.s3_fx_trend.costs`:
@@ -80,43 +73,21 @@ See `universe.md` and `strategies.s3_fx_trend.costs`:
 - Spread + 0.1 pip slippage per leg.
 - Swap = rate differential ± **50 bps** financing; **Wednesday triple**.
 - Conversion markup **N/A** (0 bps) for v1 USD-quoted book.
-- Confirm before sealed OOS:
-  `04_backtest/s3_fx_trend/artifacts/oanda_costs_confirmed.json`.
 
 ## BIS REER (H-011 value) — monthly + PIT M+2
 
-- Source: FRED mirrors of BIS Real Broad REER (`RB*BIS`) via
-  `data.ingestion.alternative_data.bis_reer.fetch_bis_reer`.
+- Source: FRED mirrors of BIS Real Broad REER (`RB*BIS`) via `data.ingestion.alternative_data.bis_reer.fetch_bis_reer`.
 - **Monthly only** — no intra-month interpolation of levels.
-- PIT availability: month-\(M\) print known on **first calendar day of month
-  \(M+2\)** (conservative). Example: June 2020 usable from 2020-08-01.
-- Merge onto daily bars with `merge_asof(..., direction="backward")` on
-  `availability_date`, never on raw month label. No `.bfill` of future months.
-- Signal: \(-z(\log\mathrm{REER}_{\mathrm{base}} - \log\mathrm{REER}_{\mathrm{quote}})\);
-  rich base ⇒ lean short base.
-- FRED “latest” can revise history; v1 uses lagged latest. **ALFRED vintage is
-  out of scope for v1** (future upgrade).
+- PIT availability: month-\(M\) print known on **first calendar day of month\(M+2\)** (conservative). Example: June 2020 usable from 2020-08-01.
+- Merge onto daily bars with `merge_asof(..., direction="backward")` on `availability_date`, never on raw month label. No `.bfill` of future months.
+- Signal: \(-z(\log\mathrm{REER}_{\mathrm{base}} - \log\mathrm{REER}_{\mathrm{quote}})\); rich base ⇒ lean short base.
+- FRED “latest” can revise history; v1 uses lagged latest. **ALFRED vintage is out of scope for v1** (future upgrade).
 
-## Live Event Calendar Viability
+## Event Calendar and its Viability
 
-- **Research source:** `01_data/data_files/s3_fx_trend/economic_calendar.csv`
-  (~2007 → ~Aug 2025). Calendar `actual` / `forecast` / `previous` are **not
-  vintage-PIT**; execution timing (fill after print τ) is still PIT relative to
-  the recorded print clock. Event STARs from this file are **research /
-  diagnostic only**.
-- **Live needs:** feed ≥ chosen event bar; local PIT vault; shared `event_id`
-  map; OANDA prices at `EVENT_BAR_STAR`.
-- **Available / planned:** static CSV; **`thisweek.json`** (~1h — interim live
-  adapter via `load_thisweek_calendar` stub); Finnhub free poll→vault; paid
-  TE/Finnhub later.
-- **Do not paper-trade events off the CSV alone.**
-
-## Unknown event mappings
-
-`clean_calendar_csv` / `load_economic_calendar` prints unmatched
-`(currency, event_name)` to the console and appends
-`01_data/data_files/s3_fx_trend/unknown_events.csv` for review. Do not silently
-drop unknowns.
+- Currently, there is only a frozen source of economic calendar data - which is in the form of a csv.
+- If the events sleeve was to pass through the research stage then it would be reasonable to look into a point-in-time and live dataset - however it didn't.
+- `clean_calendar_csv` / `load_economic_calendar` prints unmatched `(currency, event_name)` to the console and appends `01_data/data_files/s3_fx_trend/unknown_events.csv` for review. Do not silently drop unknowns.
 
 ## Credentials placeholders
 
@@ -128,15 +99,13 @@ Set in `config/credentials.env` (never commit real secrets):
 | `OANDA_ACCOUNT_ENV` | `practice` or `live` |
 | `FRED_API_KEY` | Policy rates + BIS REER |
 
-Hyp notebooks may fall back to `source="yfinance"` for daily prices when OANDA
-is unavailable; FRED-backed panels still need `FRED_API_KEY`.
+## Performance
 
-## Vendor validation
+- The algorithm showed very good initial positive Sharpe, in the early years (2008-2012).
+- Since then the algorithms Sharpe has agressively fallen, there is significant evidence to show a decay in the Sharpe. 
+- Hense by the OOS period the Sharpe had fallen to near 0, and later below 0.
+- There was no suggested improvement on the performance with the events sleeve - infact it performed decently worse than the core sleeve.
 
-See `02_research/s3_fx_trend/notebooks/data_vendor_tests/`. Flag OANDA vs
-yfinance failures here when audits fail.
+## Continued development?
 
-## Unknown events economic calendar
-
-- There is no need to alter anything after seeing the unknown_events.csv, as this is only a log. If the event is key then it can be added to the mapping, which then allows for this to be used later.
-- The mapping is stored in economic_calendar_fetcher.py
+- For these reasons above I do not see suitability in keeping this sleeve open, and more importantly deploying it into my portfolio. The sleeve is now closed.

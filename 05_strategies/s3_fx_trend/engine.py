@@ -36,6 +36,19 @@ logger = logging.getLogger(__name__)
 
 PERIODS_PER_YEAR = 252.0
 
+
+def _cost_mult(cfg: S3SimConfig) -> float:
+    return float(getattr(cfg, "cost_multiplier", 1.0) or 1.0)
+
+
+def _leg_cost_bps_scaled(pair: str, price: float, cfg: S3SimConfig) -> float:
+    return float(leg_cost_bps(pair, price)) * _cost_mult(cfg)
+
+
+def _financing_spread_scaled(cfg: S3SimConfig) -> float:
+    return float(cfg.financing_spread_bps_annual) * _cost_mult(cfg)
+
+
 _TRADE_COLS: tuple[str, ...] = (
     "pair",
     "side",
@@ -306,7 +319,7 @@ def simulate_pair(
 
         applied = apply_rebalance_band(w_held, tgt, cfg.rebalance_band)
         dw = applied - w_held
-        cost = abs(dw) * leg_cost_bps(pair, px_fill) / 10_000.0
+        cost = abs(dw) * _leg_cost_bps_scaled(pair, px_fill, cfg) / 10_000.0
 
         # Trade ledger on stance changes through zero or flips.
         if w_held == 0.0 and applied != 0.0:
@@ -314,7 +327,7 @@ def simulate_pair(
                 "side": int(np.sign(applied)),
                 "entry_date": fill_date,
                 "entry_idx": i + 1,
-                "entry_cost_bps": abs(dw) * leg_cost_bps(pair, px_fill),
+                "entry_cost_bps": abs(dw) * _leg_cost_bps_scaled(pair, px_fill, cfg),
             }
         elif w_held != 0.0 and applied == 0.0 and open_trade is not None:
             trades.append(
@@ -325,7 +338,7 @@ def simulate_pair(
                     "exit_date": fill_date,
                     "hold_bars": int((i + 1) - int(open_trade["entry_idx"])),
                     "entry_cost_bps": float(open_trade["entry_cost_bps"]),
-                    "exit_cost_bps": abs(dw) * leg_cost_bps(pair, px_fill),
+                    "exit_cost_bps": abs(dw) * _leg_cost_bps_scaled(pair, px_fill, cfg),
                     "exit_reason": "flat",
                 }
             )
@@ -340,7 +353,8 @@ def simulate_pair(
                         "exit_date": fill_date,
                         "hold_bars": int((i + 1) - int(open_trade["entry_idx"])),
                         "entry_cost_bps": float(open_trade["entry_cost_bps"]),
-                        "exit_cost_bps": abs(w_held) * leg_cost_bps(pair, px_fill),
+                        "exit_cost_bps": abs(w_held)
+                        * _leg_cost_bps_scaled(pair, px_fill, cfg),
                         "exit_reason": "flip",
                     }
                 )
@@ -348,7 +362,8 @@ def simulate_pair(
                 "side": int(np.sign(applied)),
                 "entry_date": fill_date,
                 "entry_idx": i + 1,
-                "entry_cost_bps": abs(applied) * leg_cost_bps(pair, px_fill),
+                "entry_cost_bps": abs(applied)
+                * _leg_cost_bps_scaled(pair, px_fill, cfg),
             }
 
         w_held = applied
@@ -367,7 +382,7 @@ def simulate_pair(
                 pair,
                 w_held,
                 rd,
-                financing_spread_bps_annual=cfg.financing_spread_bps_annual,
+                financing_spread_bps_annual=_financing_spread_scaled(cfg),
                 wednesday_triple=True,
                 asof=fill_date,
             )
@@ -695,9 +710,9 @@ def simulate_event_trades(
             if fill_date <= tau:
                 continue
             asset_ret = o1 / o0 - 1.0
-            cost = abs(size) * leg_cost_bps(pair, o0) / 10_000.0
+            cost = abs(size) * _leg_cost_bps_scaled(pair, o0, cfg) / 10_000.0
             # Exit cost on flatten.
-            cost += abs(size) * leg_cost_bps(pair, o1) / 10_000.0
+            cost += abs(size) * _leg_cost_bps_scaled(pair, o1, cfg) / 10_000.0
             gross = size * asset_ret
             net = gross - cost
             net_by_date[fill_date] += net
@@ -709,8 +724,8 @@ def simulate_event_trades(
                     "entry_date": fill_date,
                     "exit_date": exit_date,
                     "hold_bars": hold,
-                    "entry_cost_bps": abs(size) * leg_cost_bps(pair, o0),
-                    "exit_cost_bps": abs(size) * leg_cost_bps(pair, o1),
+                    "entry_cost_bps": abs(size) * _leg_cost_bps_scaled(pair, o0, cfg),
+                    "exit_cost_bps": abs(size) * _leg_cost_bps_scaled(pair, o1, cfg),
                     "exit_reason": f"event_hold_{bar_s}",
                 }
             )

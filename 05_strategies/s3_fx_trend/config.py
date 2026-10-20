@@ -77,6 +77,8 @@ class S3SimConfig:
     cost_profile: str = "A_FX_OANDA_S3"
     include_swap: bool = True
     financing_spread_bps_annual: float = 50.0
+    # Research stress only: scales spread/slippage leg costs and financing spread.
+    cost_multiplier: float = 1.0
 
     event_z_gate: float = 1.0
     event_impact_min: int = 2
@@ -133,6 +135,8 @@ class S3SimConfig:
             raise ValueError("vt_target_ann_vol must be positive")
         if float(self.currency_cap_gross_pct) <= 0:
             raise ValueError("currency_cap_gross_pct must be positive")
+        if float(self.cost_multiplier) <= 0:
+            raise ValueError("cost_multiplier must be positive")
         if int(self.event_hold_bars) < 1:
             raise ValueError("event_hold_bars must be >= 1")
 

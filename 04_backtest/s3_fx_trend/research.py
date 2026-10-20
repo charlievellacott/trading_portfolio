@@ -139,6 +139,22 @@ def _as_tuple(raw) -> tuple:
     return (raw,)
 
 
+def _parse_vt_flag(raw) -> bool | None:
+    """Map STAR VT labels / bools to True/False; unset → None."""
+    if raw in (None, "None", ""):
+        return None
+    if isinstance(raw, bool):
+        return raw
+    s = str(raw).strip().lower()
+    if s in {"1", "true", "yes", "on", "pair_vt", "pair_only"}:
+        return True
+    if s in {"0", "false", "no", "off", "none", "raw"}:
+        return False
+    if s in {"pair_plus_book_vt", "book_vt", "both_vt"}:
+        return True
+    return None
+
+
 def _map_tsmom_blend(stack: dict) -> str | None:
     raw = stack.get("TSMOM_BLEND_STAR")
     if raw in (None, "None", ""):
@@ -221,10 +237,18 @@ def config_from_stack(
     if hl_src not in (None, "None", ""):
         kwargs["donchian_hl_source"] = _DONCHIAN_HL_MAP.get(str(hl_src), str(hl_src))
 
-    if stack.get("PAIR_VT_STAR") not in (None, "None", ""):
-        kwargs["pair_vt"] = bool(stack.get("PAIR_VT_STAR"))
-    if stack.get("BOOK_VT_STAR") not in (None, "None", ""):
-        kwargs["book_vt"] = bool(stack.get("BOOK_VT_STAR"))
+    pair_vt = _parse_vt_flag(stack.get("PAIR_VT_STAR"))
+    book_vt = _parse_vt_flag(stack.get("BOOK_VT_STAR"))
+    if pair_vt is not None:
+        kwargs["pair_vt"] = pair_vt
+    if book_vt is not None:
+        # Labels like pair_plus_book_vt imply both legs of VT.
+        raw_book = str(stack.get("BOOK_VT_STAR")).strip().lower()
+        if raw_book in {"pair_plus_book_vt", "both_vt", "book_vt"}:
+            kwargs["pair_vt"] = True
+            kwargs["book_vt"] = True
+        else:
+            kwargs["book_vt"] = book_vt
 
     # Composite RISK_STAR may encode pair/book VT as a string label.
     risk = stack.get("RISK_STAR")
@@ -249,8 +273,12 @@ def config_from_stack(
 
     if stack.get("WEAK_SIGNAL_FLAT_Z_STAR") not in (None, "None", ""):
         kwargs["weak_signal_flat_z"] = float(stack["WEAK_SIGNAL_FLAT_Z_STAR"])
-    if stack.get("REBALANCE_BAND_STAR") not in (None, "None", ""):
-        kwargs["rebalance_band"] = float(stack["REBALANCE_BAND_STAR"])
+    reb = stack.get("REBALANCE_BAND_STAR")
+    if reb not in (None, "None", ""):
+        if str(reb).strip().lower() in {"off", "none"}:
+            kwargs["rebalance_band"] = 0.0
+        else:
+            kwargs["rebalance_band"] = float(reb)
 
     kwargs.update(_overlay_modes(stack))
 
