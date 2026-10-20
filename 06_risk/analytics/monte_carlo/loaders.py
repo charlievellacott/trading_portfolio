@@ -10,7 +10,7 @@ from data.ingestion.equity_fetcher import fetch_ohlcv
 from strategies.s2_coint.metrics import compound_to_s1_weeks, load_s1_period_returns
 
 S1_EXPORT_NOTE = (
-    "Export from 04_backtest/s1_equities/notebooks/08_oos_tearsheet.ipynb"
+    "Export from 04_backtest/s1_equities/notebooks/09_oos_tearsheet.ipynb"
 )
 S2_EXPORT_NOTE = (
     "Export from 04_backtest/s2_coint/notebooks/01_star_tearsheet.ipynb"

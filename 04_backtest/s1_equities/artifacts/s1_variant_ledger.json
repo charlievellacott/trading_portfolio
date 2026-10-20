@@ -1,0 +1,110 @@
+{
+  "note": "Seeded from saved factor tearsheet PDFs (one arm per reported tearsheet). Re-register from notebooks when a screen is re-run.",
+  "entries": [
+    {
+      "hyp_id": "H-001",
+      "arms": [
+        "H-001_obv_mom_soft_126_21_20"
+      ],
+      "n_arms": 1,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-002",
+      "arms": [
+        "H-002_gk_vol_log_ratio_3_20"
+      ],
+      "n_arms": 1,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-003",
+      "arms": [
+        "H-003_realised_vol_63"
+      ],
+      "n_arms": 1,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-004",
+      "arms": [
+        "H-004_downside_beta_42",
+        "H-004_net_beta_spread_252",
+        "H-004_net_beta_spread_63",
+        "H-004_rel_downside_beta_252",
+        "H-004_rel_upside_beta_63",
+        "H-004_smart_beta_hml_252",
+        "H-004_smart_beta_mom_126",
+        "H-004_smart_beta_smb_84",
+        "H-004_smart_residual_mom_189_21",
+        "H-004_smart_residual_mom_189_42",
+        "H-004_upside_beta_42"
+      ],
+      "n_arms": 11,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-005",
+      "arms": [
+        "H-005_earnings_yield",
+        "H-005_log_mcap",
+        "H-005_size_mom_126",
+        "H-005_val_mom_dist_252_21",
+        "H-005_val_mom_interact_252_21",
+        "H-005_val_mom_resid_126_252_10",
+        "H-005_val_roc_pb_252",
+        "H-005_val_roc_pe_252"
+      ],
+      "n_arms": 8,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-006",
+      "arms": [
+        "H-006_near_52w_log_drawdown_252_raw",
+        "H-006_near_52w_ratio_252_raw"
+      ],
+      "n_arms": 2,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-007",
+      "arms": [
+        "H-007_max_lottery_log_5_10_cs"
+      ],
+      "n_arms": 1,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-008",
+      "arms": [
+        "H-008_gross_profitability"
+      ],
+      "n_arms": 1,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-009",
+      "arms": [
+        "H-009_gdelt_abnormal_attention_5_60",
+        "H-009_gdelt_attention_5",
+        "H-009_gdelt_tone_21",
+        "H-009_gdelt_tone_x_attention_21"
+      ],
+      "n_arms": 4,
+      "source": "factor tearsheet pdfs on disk"
+    },
+    {
+      "hyp_id": "H-010",
+      "arms": [
+        "H-010_filing_clock_expected_until",
+        "H-010_filing_clock_since",
+        "H-010_short_flow_abnormal_1_120",
+        "H-010_short_flow_ratio"
+      ],
+      "n_arms": 4,
+      "source": "factor tearsheet pdfs on disk"
+    }
+  ],
+  "cumulative_arms": 34
+}

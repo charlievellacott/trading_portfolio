@@ -10,7 +10,7 @@ from risk.analytics.monte_carlo.loaders import find_repo_root
 from strategies.s2_coint.metrics import load_s1_period_returns
 
 S1_BASE_EXPORT_NOTE = (
-    "Export from 04_backtest/s1_equities/notebooks/08_oos_tearsheet.ipynb "
+    "Export from 04_backtest/s1_equities/notebooks/09_oos_tearsheet.ipynb "
     "(unlevered period_returns_base). Run notebooks 01-07 to freeze stars, "
     "then 08 so s1_period_returns_base.parquet exists."
 )
