@@ -36,8 +36,8 @@ def test_s2_base_path_is_not_sealed_net():
     root = find_repo_root(os.path.dirname(os.path.abspath(__file__)))
     base = s2_period_returns_base_path(root)
     sealed = s2_period_returns_path(root)
-    assert base.endswith(os.path.join("s2_coint", "s2_period_returns_base.parquet"))
-    assert sealed.endswith(os.path.join("s2_coint", "s2_period_returns.parquet"))
+    assert base.endswith(os.path.join("s2_coint", "v1", "s2_period_returns_base.parquet"))
+    assert sealed.endswith(os.path.join("s2_coint", "v1", "s2_period_returns.parquet"))
     assert base != sealed
 
 

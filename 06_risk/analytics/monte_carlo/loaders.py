@@ -43,7 +43,12 @@ def s1_period_returns_path(repo_root: str) -> str:
 
 def s2_period_returns_path(repo_root: str) -> str:
     return os.path.join(
-        repo_root, "01_data", "data_files", "s2_coint", "s2_period_returns.parquet"
+        repo_root,
+        "01_data",
+        "data_files",
+        "s2_coint",
+        "v1",
+        "s2_period_returns.parquet",
     )
 
 

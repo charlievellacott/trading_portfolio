@@ -24,8 +24,8 @@ def _default_s1_paths() -> list[str]:
 def _default_s2_paths() -> list[str]:
     root = repo_root()
     return [
-        os.path.join(root, "04_backtest", "s2_coint", "artifacts", "s2_period_returns.parquet"),
-        os.path.join(root, "01_data", "data_files", "s2_coint", "s2_period_returns.parquet"),
+        os.path.join(root, "04_backtest", "s2_coint", "artifacts", "v1", "s2_period_returns.parquet"),
+        os.path.join(root, "01_data", "data_files", "s2_coint", "v1", "s2_period_returns.parquet"),
         os.path.join(root, "09_performance", "cache", "s2_period_returns.parquet"),
     ]
 

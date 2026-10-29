@@ -56,6 +56,7 @@ __all__ = [
     "build_active_schedule",
     "freeze_book",
     "quarter_end_rebalance_dates",
+    "semiannual_rebalance_dates",
     "schedule_to_masks",
     "simulate_frozen_book",
     "simulate_rotating_book",
@@ -84,6 +85,33 @@ def quarter_end_rebalance_dates(
     frame = pd.DataFrame({"date": idx})
     frame["quarter"] = frame["date"].dt.to_period("Q")
     return [pd.Timestamp(d) for d in frame.groupby("quarter")["date"].max().tolist()]
+
+
+def semiannual_rebalance_dates(
+    dates: Sequence,
+    *,
+    start: pd.Timestamp | str | None = None,
+    end: pd.Timestamp | str | None = None,
+) -> list[pd.Timestamp]:
+    """Last available session of each Jun / Dec half-year (12m/6m cadence).
+
+    Same session-aware rule as ``quarter_end_rebalance_dates``: rebalances land
+    on traded panel dates only.
+    """
+    idx = pd.DatetimeIndex(pd.to_datetime(pd.Series(list(dates)))).sort_values().unique()
+    idx = pd.DatetimeIndex(idx)
+    if start is not None:
+        idx = idx[idx >= pd.Timestamp(start)]
+    if end is not None:
+        idx = idx[idx <= pd.Timestamp(end)]
+    if len(idx) == 0:
+        return []
+    frame = pd.DataFrame({"date": idx})
+    # H1 = Jan–Jun, H2 = Jul–Dec; last session in each half-year.
+    years = frame["date"].dt.year.astype(str)
+    half = np.where(frame["date"].dt.month <= 6, "H1", "H2")
+    frame["half"] = years + "-" + half
+    return [pd.Timestamp(d) for d in frame.groupby("half")["date"].max().tolist()]
 
 
 def _next_session(dates: pd.DatetimeIndex, after: pd.Timestamp) -> pd.Timestamp | None:

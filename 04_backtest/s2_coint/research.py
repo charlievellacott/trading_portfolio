@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 
 from backtest.star_stack_io import (
@@ -54,7 +55,13 @@ def repo_root(start: str | None = None) -> str:
 
 
 # Strict editable installs resolve __file__ under build/; STAR JSON lives in the repo.
-ARTIFACTS_DIR = os.path.join(repo_root(_PKG_DIR), "04_backtest", "s2_coint", "artifacts", "v1")
+def s2_artifacts_dir(*, version: str = "v1", root: str | None = None) -> str:
+    """Artifacts root for an S2 generation (``v1`` or ``v2``)."""
+    ver = str(version).strip().lower() or "v1"
+    return os.path.join(repo_root(root), "04_backtest", "s2_coint", "artifacts", ver)
+
+
+ARTIFACTS_DIR = s2_artifacts_dir(version="v1")
 DEFAULT_STAR_STACK = os.path.join(ARTIFACTS_DIR, "s2_star_stack.json")
 
 
@@ -167,30 +174,99 @@ def filter_pairs(panel: pd.DataFrame, pair_ids: Sequence[str]) -> pd.DataFrame:
     return panel.loc[panel["pair_id"].isin(keep)].copy()
 
 
-def s2_data_dir(root: str | None = None) -> str:
-    return os.path.join(repo_root(root), "01_data", "data_files", "s2_coint")
+def s2_data_dir(root: str | None = None, *, version: str = "v1") -> str:
+    """Data-files root for an S2 generation (``v1`` letter universes or ``v2``)."""
+    ver = str(version).strip().lower() or "v1"
+    return os.path.join(repo_root(root), "01_data", "data_files", "s2_coint", ver)
 
 
-def panel_paths(bar: str, *, universe: str = "C", root: str | None = None) -> tuple[str, str]:
-    data = s2_data_dir(root)
+def _v2_stem(kind: str, bar: str) -> str:
+    """v2 filenames omit the universe letter: ``s2_{kind}_{bar}``."""
+    return f"s2_{kind}_{bar}"
+
+
+def panel_paths(
+    bar: str,
+    *,
+    universe: str = "C",
+    root: str | None = None,
+    version: str = "v1",
+) -> tuple[str, str]:
+    data = s2_data_dir(root, version=version)
+    if str(version).strip().lower() == "v2":
+        stem = _v2_stem("panel", bar)
+        train = os.path.join(data, f"{stem}_train.parquet")
+        full = os.path.join(data, f"{stem}_full.parquet")
+        return train, full
     train = os.path.join(data, f"s2_panel_{universe}_{bar}_train.parquet")
     full = os.path.join(data, f"s2_panel_{universe}_{bar}_full.parquet")
     return train, full
 
 
-def candidates_path(bar: str, *, universe: str, root: str | None = None) -> str:
+def candidates_path(
+    bar: str,
+    *,
+    universe: str | None = None,
+    root: str | None = None,
+    version: str = "v1",
+) -> str:
     """Per-candidate screen metrics at IS end (every candidate, not just the selected)."""
-    return os.path.join(s2_data_dir(root), f"s2_candidates_{universe}_{bar}.csv")
+    data = s2_data_dir(root, version=version)
+    if str(version).strip().lower() == "v2":
+        return os.path.join(data, f"{_v2_stem('candidates', bar)}.csv")
+    if universe is None:
+        raise ValueError("universe is required for version='v1'")
+    return os.path.join(data, f"s2_candidates_{universe}_{bar}.csv")
 
 
-def pairs_path(bar: str, *, universe: str, root: str | None = None) -> str:
-    """Ranked frozen book for a universe (written by H-001)."""
-    return os.path.join(s2_data_dir(root), f"s2_pairs_{universe}_{bar}.csv")
+def pairs_path(
+    bar: str,
+    *,
+    universe: str | None = None,
+    root: str | None = None,
+    version: str = "v1",
+) -> str:
+    """Ranked frozen book (v1 letter universe or v2 generation)."""
+    data = s2_data_dir(root, version=version)
+    if str(version).strip().lower() == "v2":
+        return os.path.join(data, f"{_v2_stem('pairs', bar)}.csv")
+    if universe is None:
+        raise ValueError("universe is required for version='v1'")
+    return os.path.join(data, f"s2_pairs_{universe}_{bar}.csv")
 
 
-def rebalance_path(bar: str, *, universe: str, root: str | None = None) -> str:
-    """Quarterly rotating selections (written when BOOK_SCOPE includes rotate)."""
-    return os.path.join(s2_data_dir(root), f"s2_rebalance_{universe}_{bar}.csv")
+def rebalance_path(
+    bar: str,
+    *,
+    universe: str | None = None,
+    root: str | None = None,
+    version: str = "v1",
+) -> str:
+    """Rotating selections (written when BOOK_SCOPE includes rotate)."""
+    data = s2_data_dir(root, version=version)
+    if str(version).strip().lower() == "v2":
+        return os.path.join(data, f"{_v2_stem('rebalance', bar)}.csv")
+    if universe is None:
+        raise ValueError("universe is required for version='v1'")
+    return os.path.join(data, f"s2_rebalance_{universe}_{bar}.csv")
+
+
+def load_s2_cuts(
+    *,
+    root: str | None = None,
+    version: str = "v2",
+) -> dict:
+    """Load ``s2_cuts.json`` written by the v2 pair-panel builder."""
+    import json
+
+    path = os.path.join(s2_data_dir(root, version=version), "s2_cuts.json")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"missing {path}. Run 01_data/data_files/s2_coint/v2/s2_pair_panel.ipynb "
+            "with BOOK_SCOPE='freeze_only'."
+        )
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def research_is_end_for(universe: str) -> str:
@@ -202,16 +278,18 @@ def research_is_end_for(universe: str) -> str:
 
 
 def frozen_pairs_for_universe(
-    universe: str,
+    universe: str | None = None,
     bar: str = "1d",
     *,
     root: str | None = None,
+    version: str = "v1",
 ) -> list[str]:
-    """Ranked frozen book from ``s2_pairs_{universe}_{bar}.csv`` (best p-value first)."""
-    path = pairs_path(bar, universe=universe, root=root)
+    """Ranked frozen book from the pairs CSV (best p-value first)."""
+    path = pairs_path(bar, universe=universe, root=root, version=version)
     if not os.path.isfile(path):
         raise FileNotFoundError(
-            f"missing {path}. Run H-001_universes.ipynb to write the ranked book."
+            f"missing {path}. Run H-001 to write the ranked book "
+            f"(v1: H-001_universes.ipynb; v2: H-001_pools.ipynb)."
         )
     df = pd.read_csv(path)
     if "rank" in df.columns:
@@ -222,18 +300,24 @@ def frozen_pairs_for_universe(
 
 
 def load_universe_panels(
-    label: str,
+    label: str | None,
     bar: str,
     pair_ids: Sequence[str],
     *,
     root: str | None = None,
+    version: str = "v1",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load train (research IS) and full census panels for any universe; filter to pairs."""
-    train_path, full_path = panel_paths(bar, universe=label, root=root)
+    """Load train (research IS) and full census panels; filter to pairs.
+
+    ``label`` is the v1 universe letter (ignored for ``version='v2'``).
+    """
+    train_path, full_path = panel_paths(
+        bar, universe=label or "C", root=root, version=version
+    )
     if not os.path.isfile(train_path):
         raise FileNotFoundError(
             f"missing {train_path}. For 1D run s2_pair_panel.ipynb; "
-            "for 1H run H-002 (no 4H panel is built)."
+            "for 1H run the bar-size hyp (no 4H panel is built)."
         )
     train = filter_pairs(pd.read_parquet(train_path), pair_ids)
     full = (
@@ -350,11 +434,12 @@ def split_is_oos(
 def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
     """1D uses frozen RESEARCH_IS_END; 1H uses 70% of the available panel dates.
 
-    On 1D the date comes from ``RESEARCH_IS_END_STAR`` when present, else the registered end
-    for ``UNIVERSE_STAR`` (D/E/F = 2021-12-31), else universe C's for the Asia postmortem.
+    On 1D the date comes from ``RESEARCH_IS_END_STAR`` when present (v2 writes this from
+    ``s2_cuts.json``), else the registered end for ``UNIVERSE_STAR`` (D/E/F = 2021-12-31),
+    else universe C's for the Asia postmortem. Soft-default ``BAR_STAR`` to ``1d`` when
+    the bar hyp has not run yet (v2 H-001/H-002).
     """
-    bar = stack.get("BAR_STAR")
-    require_star("BAR_STAR", bar)
+    bar = stack.get("BAR_STAR") or "1d"
     if bar == "1d":
         explicit = stack.get("RESEARCH_IS_END_STAR")
         if explicit:
@@ -363,6 +448,7 @@ def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
         if universe:
             return pd.Timestamp(research_is_end_for(str(universe)))
         return pd.Timestamp(RESEARCH_IS_END_C)
+    require_star("BAR_STAR", bar)
     dates = _session_dates(panel["date"])
     if len(dates) < 10:
         raise ValueError("1H panel too short for a 70/30 IS:OOS split")
@@ -561,11 +647,69 @@ def overlay_ols_hedge(
     return pd.concat(parts, ignore_index=True)
 
 
-def tearsheet_path(hyp_id: str, arm: str) -> str:
-    return os.path.join(ARTIFACTS_DIR, f"{hyp_id}_{arm}.pdf")
+def tearsheet_path(
+    hyp_id: str,
+    arm: str,
+    *,
+    version: str = "v1",
+    root: str | None = None,
+) -> str:
+    """PDF path under the generation's artifacts directory."""
+    return os.path.join(
+        s2_artifacts_dir(version=version, root=root),
+        f"{hyp_id}_{arm}.pdf",
+    )
 
 
-# Option 4 validation tiers (see s2_hypothesis_log.md).
+def bh_fdr_mask(
+    pvalues: pd.Series | Sequence[float],
+    *,
+    alpha: float = 0.05,
+) -> pd.Series:
+    """Benjamini–Hochberg FDR mask at level ``alpha`` (True = reject null).
+
+    NaN p-values are never selected. Returns a boolean Series aligned to the
+    input index (or a RangeIndex for plain sequences).
+    """
+    s = pd.to_numeric(pd.Series(pvalues), errors="coerce")
+    out = pd.Series(False, index=s.index, dtype=bool)
+    valid = s.notna()
+    if not valid.any():
+        return out
+    pv = s.loc[valid].astype(float)
+    n = int(len(pv))
+    order = pv.sort_values(kind="mergesort")
+    ranks = np.arange(1, n + 1, dtype=float)
+    thresh = (ranks / n) * float(alpha)
+    below = order.to_numpy(dtype=float) <= thresh
+    if not below.any():
+        return out
+    # Largest k with p_(k) <= (k/n) alpha; keep all ranks <= k.
+    k = int(np.max(np.where(below)[0]) + 1)
+    keep_idx = order.index[:k]
+    out.loc[keep_idx] = True
+    return out
+
+
+def apply_bh_fdr(
+    candidates: pd.DataFrame,
+    *,
+    pvalue_col: str = "pvalue",
+    alpha: float = 0.05,
+    out_col: str = "fdr_pass",
+) -> pd.DataFrame:
+    """Attach ``fdr_pass`` (BH at ``alpha``) to a candidate screen frame."""
+    if candidates is None or candidates.empty:
+        out = candidates.copy() if candidates is not None else pd.DataFrame()
+        if out_col not in out.columns:
+            out[out_col] = pd.Series(dtype=bool)
+        return out
+    out = candidates.copy()
+    out[out_col] = bh_fdr_mask(out[pvalue_col], alpha=alpha).to_numpy(dtype=bool)
+    return out
+
+
+# Option 4 validation tiers (see s2_hypothesis_log.md). v1 mapping.
 HYPOTHESIS_TIERS: dict[str, str] = {
     "H-001": "C",
     "H-004": "C",
@@ -583,13 +727,29 @@ HYPOTHESIS_TIERS: dict[str, str] = {
     "H-015": "B",
 }
 
+# v2 compact ladder (pooling → vol). Documented in v2/s2_hypothesis_log.md.
+V2_HYPOTHESIS_TIERS: dict[str, str] = {
+    "H-001": "C",
+    "H-002": "C",
+    "H-005": "C",
+    "H-006": "C",
+    "H-007": "C",
+    "H-003": "A",
+    "H-004": "A",
+    "H-008": "B",
+    "H-009": "A",
+    "H-010": "A",
+    "H-011": "B",
+}
 
-def hypothesis_tier(hyp_id: str) -> str:
+
+def hypothesis_tier(hyp_id: str, *, version: str = "v1") -> str:
     """Return validation tier A/B/C for a hypothesis id (raises if unknown)."""
     key = str(hyp_id).strip().upper()
-    if key not in HYPOTHESIS_TIERS:
-        raise KeyError(f"no validation tier registered for {hyp_id!r}")
-    return HYPOTHESIS_TIERS[key]
+    table = V2_HYPOTHESIS_TIERS if str(version).strip().lower() == "v2" else HYPOTHESIS_TIERS
+    if key not in table:
+        raise KeyError(f"no validation tier registered for {hyp_id!r} (version={version})")
+    return table[key]
 
 
 def default_cost_profile_for_universe(universe: str | None) -> str | None:
@@ -604,9 +764,16 @@ def star_panel_paths(
     universe: str = "D",
     bar: str = "1d",
     root: str | None = None,
+    version: str = "v1",
 ) -> tuple[str, str, str]:
     """Train, full, and manifest paths for cached star-stack panels."""
-    data = s2_data_dir(root)
+    data = s2_data_dir(root, version=version)
+    if str(version).strip().lower() == "v2":
+        stem = _v2_stem("panel", bar)
+        train = os.path.join(data, f"{stem}_train_star.parquet")
+        full = os.path.join(data, f"{stem}_full_star.parquet")
+        manifest = os.path.join(data, f"{stem}_star_manifest.json")
+        return train, full, manifest
     train = os.path.join(data, f"s2_panel_{universe}_{bar}_train_star.parquet")
     full = os.path.join(data, f"s2_panel_{universe}_{bar}_full_star.parquet")
     manifest = os.path.join(data, f"s2_panel_{universe}_{bar}_star_manifest.json")
