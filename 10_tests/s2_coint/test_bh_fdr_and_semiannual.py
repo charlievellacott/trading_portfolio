@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 
 from backtest.s2_coint.research import apply_bh_fdr, bh_fdr_mask, panel_paths, s2_data_dir
@@ -26,6 +28,15 @@ def test_apply_bh_fdr_column():
     assert "fdr_pass" in out.columns
     assert bool(out.loc[0, "fdr_pass"]) is True
     assert bool(out.loc[1, "fdr_pass"]) is False
+
+
+def test_v1_panel_paths_use_universe_letter():
+    root = "/tmp/repo"
+    train, full = panel_paths("1d", universe="E", version="v1", root=root)
+    sep = os.sep
+    assert train.endswith(f"s2_coint{sep}v1{sep}s2_panel_E_1d_train.parquet")
+    assert full.endswith(f"s2_coint{sep}v1{sep}s2_panel_E_1d_full.parquet")
+    assert s2_data_dir(root, version="v1").endswith(os.path.join("s2_coint", "v1"))
 
 
 def test_v2_panel_paths_omit_universe():

@@ -311,12 +311,14 @@ def load_universe_panels(
 
     ``label`` is the v1 universe letter (ignored for ``version='v2'``).
     """
+    ver = str(version).strip().lower() or "v1"
     train_path, full_path = panel_paths(
-        bar, universe=label or "C", root=root, version=version
+        bar, universe=label or "C", root=root, version=ver
     )
     if not os.path.isfile(train_path):
         raise FileNotFoundError(
-            f"missing {train_path}. For 1D run s2_pair_panel.ipynb; "
+            f"missing {train_path}. For 1D run "
+            f"01_data/data_files/s2_coint/{ver}/s2_pair_panel.ipynb; "
             "for 1H run the bar-size hyp (no 4H panel is built)."
         )
     train = filter_pairs(pd.read_parquet(train_path), pair_ids)
@@ -340,7 +342,8 @@ def load_universe_c_panels(
     train_path, full_path = panel_paths(bar, root=root)
     if not os.path.isfile(train_path):
         raise FileNotFoundError(
-            f"missing {train_path}. For 1D run s2_pair_panel.ipynb; "
+            f"missing {train_path}. For 1D run "
+            "01_data/data_files/s2_coint/v1/s2_pair_panel.ipynb; "
             "for 1H run H-002 (no 4H panel exists for universe C)."
         )
     train = filter_pairs(pd.read_parquet(train_path), pair_ids)
