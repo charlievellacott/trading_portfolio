@@ -35,7 +35,12 @@ def test_load_missing_raises(tmp_path):
 def test_require_star_raises_on_none():
     with pytest.raises(ValueError, match="FOO_STAR"):
         require_star("FOO_STAR", None)
-    require_star("FOO_STAR", "ok")
+    assert require_star("FOO_STAR", "ok") == "ok"
+
+
+def test_require_star_rejects_stack_as_first_arg():
+    with pytest.raises(TypeError, match="key name first"):
+        require_star({"UNIVERSE_STAR": "E"}, "UNIVERSE_STAR")
 
 
 def test_update_star_stack_key_merges(tmp_path):
@@ -71,6 +76,6 @@ def test_default_star_stack_path_sleeves():
     s1 = default_star_stack_path("s1", repo_root_dir=root)
     s2 = default_star_stack_path("s2", repo_root_dir=root)
     assert s1.endswith(os.path.join("s1_equities", "artifacts", "s1_star_stack.json"))
-    assert s2.endswith(os.path.join("s2_coint", "artifacts", "s2_star_stack.json"))
+    assert s2.endswith(os.path.join("s2_coint", "artifacts", "v1", "s2_star_stack.json"))
     with pytest.raises(ValueError, match="unknown sleeve"):
         default_star_stack_path("fx")

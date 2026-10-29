@@ -937,6 +937,61 @@ def check_fill_timing(
     return pd.DataFrame(rows, columns=cols)
 
 
+def zero_volume_skip_table(panel: pd.DataFrame) -> pd.DataFrame:
+    """Per-pair share of bars whose next fill would be skipped as illiquid.
+
+    Mirrors ``engine._illiquid_fill``: a recorded ``volume_y`` / ``volume_x`` that
+    is missing, non-finite, or ``<= 0`` is a stale print, not a tradable open.
+    Panels without volume columns return an empty frame (nothing to skip).
+    """
+    cols = [
+        "pair_id",
+        "n_bars",
+        "n_fill_candidates",
+        "n_illiquid_fills",
+        "pct_illiquid_fills",
+    ]
+    if panel is None or panel.empty:
+        return pd.DataFrame(columns=cols)
+    vol_cols = [c for c in ("volume_y", "volume_x") if c in panel.columns]
+    if not vol_cols:
+        return pd.DataFrame(columns=cols)
+
+    rows: list[dict] = []
+    for pid, g in panel.groupby("pair_id", sort=False):
+        g = g.sort_values("date")
+        n = int(len(g))
+        n_fill = max(n - 1, 0)
+        if n_fill == 0:
+            rows.append(
+                {
+                    "pair_id": str(pid),
+                    "n_bars": n,
+                    "n_fill_candidates": 0,
+                    "n_illiquid_fills": 0,
+                    "pct_illiquid_fills": float("nan"),
+                }
+            )
+            continue
+        illiquid = pd.Series(False, index=g.index)
+        for col in vol_cols:
+            vol = pd.to_numeric(g[col], errors="coerce")
+            illiquid = illiquid | ~np.isfinite(vol) | (vol <= 0.0)
+        # Fill of signal i is bar i+1 — drop the last bar (no next open).
+        fill_illiquid = illiquid.iloc[1:]
+        n_skip = int(fill_illiquid.sum())
+        rows.append(
+            {
+                "pair_id": str(pid),
+                "n_bars": n,
+                "n_fill_candidates": n_fill,
+                "n_illiquid_fills": n_skip,
+                "pct_illiquid_fills": float(100.0 * n_skip / n_fill) if n_fill else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)
+
+
 def filter_pairs(panel: pd.DataFrame, pair_ids: Sequence[str]) -> pd.DataFrame:
     """Deprecated alias; canonical implementation lives in ``backtest.s2_coint.research``."""
     from backtest.s2_coint.research import filter_pairs as _filter_pairs

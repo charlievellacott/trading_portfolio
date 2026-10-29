@@ -17,6 +17,13 @@ from backtest.s2_coint.diagnosis import (
     enrich_trades,
     extreme_trades,
     slice_panel_window,
+    zero_volume_skip_table,
+)
+from backtest.s2_coint.tearsheet import (
+    early_late_is_decay,
+    pair_concentration,
+    pair_pnl_attribution,
+    pair_scorecard,
 )
 
 
@@ -152,3 +159,123 @@ def test_extreme_trades_ranks_by_pnl_pct():
     best, worst = extreme_trades(trades, n=1)
     assert float(best.iloc[0]["pnl_pct"]) == pytest.approx(5.0)
     assert float(worst.iloc[0]["pnl_pct"]) == pytest.approx(-3.0)
+
+
+class _PairRes:
+    def __init__(self, returns, trades, returns_gross=None):
+        self.returns = returns
+        self.trades = trades
+        self.returns_gross = (
+            returns_gross if returns_gross is not None else pd.Series(dtype=float)
+        )
+        self.open_entry_cost_bps = 0.0
+
+
+def _pair_book():
+    idx = pd.date_range("2020-01-02", periods=8, freq="B")
+    is_end = pd.Timestamp("2020-01-07")
+    ret_a = pd.Series([0.01, 0.01, 0.01, 0.01, -0.02, -0.02, 0.0, 0.0], index=idx)
+    ret_b = pd.Series([0.0, 0.0, 0.0, 0.0, 0.03, 0.03, 0.03, 0.03], index=idx)
+    trades_a = pd.DataFrame(
+        [
+            {
+                "pair_id": "A|B",
+                "side": 1,
+                "entry_date": idx[1],
+                "exit_date": idx[3],
+                "hold_bars": 2,
+                "entry_cost_bps": 5.0,
+                "exit_cost_bps": 5.0,
+            }
+        ]
+    )
+    trades_b = pd.DataFrame(
+        [
+            {
+                "pair_id": "C|D",
+                "side": -1,
+                "entry_date": idx[5],
+                "exit_date": idx[7],
+                "hold_bars": 2,
+                "entry_cost_bps": 5.0,
+                "exit_cost_bps": 5.0,
+            }
+        ]
+    )
+    panel = pd.DataFrame(
+        {
+            "date": list(idx) + list(idx),
+            "pair_id": ["A|B"] * 8 + ["C|D"] * 8,
+            "adf_pvalue": [0.01] * 8 + [0.20] * 8,
+        }
+    )
+    book = {
+        "A|B": _PairRes(ret_a, trades_a, ret_a + 0.001),
+        "C|D": _PairRes(ret_b, trades_b, ret_b + 0.001),
+    }
+    return book, panel, is_end
+
+
+def test_pair_scorecard_is_window_vs_oos_is_end():
+    book, panel, is_end = _pair_book()
+    is_card = pair_scorecard(book, panel, date_max=is_end)
+    oos_card = pair_scorecard(book, panel, is_end=is_end)
+    is_row = is_card.set_index("pair_id")
+    oos_row = oos_card.set_index("pair_id")
+    assert int(is_row.loc["A|B", "n_trades"]) == 1
+    assert int(is_row.loc["C|D", "n_trades"]) == 0
+    assert int(oos_row.loc["A|B", "n_trades"]) == 0
+    assert int(oos_row.loc["C|D", "n_trades"]) == 1
+
+
+def test_pair_pnl_attribution_date_max_is_inclusive():
+    book, _, is_end = _pair_book()
+    is_attr = pair_pnl_attribution(book, date_max=is_end)
+    oos_attr = pair_pnl_attribution(book, is_end=is_end)
+    assert is_attr["A|B"] > 0
+    assert abs(float(is_attr["C|D"])) < 1e-12
+    assert oos_attr["C|D"] > 0
+
+
+def test_pair_concentration_flags_dominant_pair():
+    attr = pd.Series({"A|B": 0.10, "C|D": 0.01, "E|F": -0.01})
+    conc = pair_concentration(attr)
+    assert conc["max_pair_id"] == "A|B"
+    assert float(conc["max_pair_share"]) == pytest.approx(0.10 / 0.12)
+    assert float(conc["hhi_abs"]) > 0.5
+
+
+def test_early_late_is_decay_splits_at_midpoint():
+    idx = pd.date_range("2018-01-02", periods=40, freq="B")
+    rng = np.random.default_rng(0)
+    r = pd.Series(0.003 + 0.001 * rng.normal(size=40), index=idx)
+    r.iloc[20:] = -0.003 + 0.001 * rng.normal(size=20)
+    decay = early_late_is_decay(r)
+    assert decay["early_sharpe"] > 0
+    assert decay["late_sharpe"] < 0
+    assert decay["n_early"] + decay["n_late"] == 40.0
+
+
+def test_zero_volume_skip_table_counts_stale_prints():
+    idx = pd.date_range("2018-01-02", periods=5, freq="B")
+    panel = pd.DataFrame(
+        {
+            "date": idx,
+            "pair_id": "A|B",
+            "volume_y": [100.0, 0.0, 100.0, np.nan, 100.0],
+            "volume_x": [100.0, 100.0, 100.0, 100.0, 100.0],
+        }
+    )
+    table = zero_volume_skip_table(panel)
+    assert len(table) == 1
+    # Fill candidates = bars 1..4 (skip last bar). Illiquid: vol_y=0 at bar 1,
+    # NaN at bar 3 → 2 of 4 fill bars.
+    assert int(table.iloc[0]["n_fill_candidates"]) == 4
+    assert int(table.iloc[0]["n_illiquid_fills"]) == 2
+    assert float(table.iloc[0]["pct_illiquid_fills"]) == pytest.approx(50.0)
+
+
+def test_zero_volume_skip_table_empty_without_volume_cols():
+    panel = _mini_panel(n=4)
+    table = zero_volume_skip_table(panel)
+    assert table.empty

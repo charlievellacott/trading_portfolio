@@ -38,11 +38,19 @@ def test_shelved_universes_includes_d():
 def test_get_asset_shortability_flags_and_missing():
     assets = {
         "WSO.B": SimpleNamespace(
-            symbol="WSO.B", shortable=False, easy_to_borrow=False
+            symbol="WSO.B",
+            tradable=True,
+            shortable=False,
+            easy_to_borrow=False,
         ),
-        "WSO": SimpleNamespace(symbol="WSO", shortable=True, easy_to_borrow=True),
+        "WSO": SimpleNamespace(
+            symbol="WSO", tradable=True, shortable=True, easy_to_borrow=True
+        ),
         "HEI.A": SimpleNamespace(
-            symbol="HEI.A", shortable=True, easy_to_borrow=False
+            symbol="HEI.A",
+            tradable=True,
+            shortable=True,
+            easy_to_borrow=False,
         ),
     }
     broker = _broker_with_client(_FakeClient(assets, missing=["MISSING"]))
@@ -57,6 +65,7 @@ def test_get_asset_shortability_flags_and_missing():
     assert wso_b["alpaca_symbol"] == "WSO.B"
 
     wso = by_ticker["WSO"]
+    assert wso["tradable"] is True
     assert wso["shortable"] is True
     assert wso["easy_to_borrow"] is True
     assert wso["found"] is True
@@ -68,6 +77,7 @@ def test_get_asset_shortability_flags_and_missing():
 
     missing = by_ticker["MISSING"]
     assert missing["found"] is False
+    assert missing["tradable"] is False
     assert missing["shortable"] is False
     assert missing["easy_to_borrow"] is False
     assert missing["alpaca_symbol"] == ""

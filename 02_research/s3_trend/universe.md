@@ -1,8 +1,9 @@
 # S3 trend — universes
 
-`UNIVERSE_STAR` selects the **core** book only. The event sleeve always uses
-Forex (universe A prices, OANDA costs, NY 17:00, economic calendar) and ignores
-this key.
+`UNIVERSE_STAR` selects the **core** book only. H-001 freezes it from a
+research-IS TSMOM 12M bake-off of A vs B. Later notebooks read it and do not
+re-pick. The event sleeve always uses Forex (universe A prices, OANDA costs,
+NY 17:00, economic calendar) and ignores this key.
 
 One research cut for every sleeve:
 
@@ -15,7 +16,7 @@ One research cut for every sleeve:
 The joint start is 2007 because that is when the liquid ETF set and the G10
 book are both usable. Earlier single-ETF history is not the book.
 
-## A — FX_G10 (selectable, not the default)
+## A — FX_G10 (H-001 candidate)
 
 Seven USD pairs: EURUSD, USDJPY, GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD.
 Costs: OANDA spread, slippage, and swap (`A_FX_OANDA_S3`). Day boundary:
@@ -23,10 +24,11 @@ Costs: OANDA spread, slippage, and swap (`A_FX_OANDA_S3`). Day boundary:
 
 USDSEK / USDNOK stay out (not in the confirmed spread table).
 
-This is the v1 core book. Do not refit it. The old hypothesis log is
+This is the v1 core book. H-001 scores it under the same 12M TSMOM probe as B;
+do not refit the pair list. The old hypothesis log is
 `redundant/s3_core_hypothesis_log_v1_fx.md`.
 
-## B — ETF_MULTI (default)
+## B — ETF_MULTI (H-001 candidate)
 
 | Sleeve | Tickers |
 |---|---|
@@ -35,11 +37,14 @@ This is the v1 core book. Do not refit it. The old hypothesis log is
 | Commodities | GLD, SLV, DBC, USO, DBA |
 | USD | UUP |
 
-Costs: ETF spread + commission, plus a short-borrow assumption on short legs.
+Costs: `B_ETF_ALPACA` — 0 commission, 0.1 bps SEC/TAF/CAT (round-trip averaged),
+3.2 bps open-fill slippage (~3.3 bps/leg). Easy-to-Borrow short borrow is 0
+(Alpaca ETB schedule). HTB locate/borrow is not modelled; the confirmation
+notebook records live `shortable` / `easy_to_borrow` flags.
 A long-only diagnostic arm is allowed. Signal at the cash close of `t`, fill at
 the next session open. There is no FX 17:00 session on this book.
 
-Registry: `data.processing.s3_fx_price_panel.S3_CORE_UNIVERSES`.
+Registry: `data.processing.s3_price_panel.S3_CORE_UNIVERSES`.
 
 ## Event sleeve
 

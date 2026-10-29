@@ -1,0 +1,1 @@
+kill if sealed holdout net Sharpe is below 0.3 or more than 40% of the profit comes from one pair.

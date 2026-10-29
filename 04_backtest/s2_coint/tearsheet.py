@@ -432,37 +432,97 @@ def reversion_health_table(
     return pd.DataFrame(rows)
 
 
+def _apply_date_window(
+    series: pd.Series,
+    *,
+    is_end: pd.Timestamp | str | None = None,
+    date_min: pd.Timestamp | str | None = None,
+    date_max: pd.Timestamp | str | None = None,
+) -> pd.Series:
+    """Slice a dated series: inclusive ``date_min``/``date_max``, else OOS ``> is_end``."""
+    s = pd.to_numeric(series, errors="coerce").astype(float)
+    s.index = pd.to_datetime(s.index)
+    if date_min is not None:
+        s = s.loc[s.index >= pd.Timestamp(date_min)]
+    if date_max is not None:
+        s = s.loc[s.index <= pd.Timestamp(date_max)]
+    if is_end is not None and date_min is None and date_max is None:
+        s = s.loc[s.index > pd.Timestamp(is_end)]
+    return s
+
+
+def _apply_trade_window(
+    trades: pd.DataFrame,
+    *,
+    is_end: pd.Timestamp | str | None = None,
+    date_min: pd.Timestamp | str | None = None,
+    date_max: pd.Timestamp | str | None = None,
+) -> pd.DataFrame:
+    if trades is None or trades.empty:
+        return pd.DataFrame() if trades is None else trades.iloc[0:0].copy()
+    t = trades.copy()
+    t["entry_date"] = pd.to_datetime(t["entry_date"])
+    if date_min is not None:
+        t = t.loc[t["entry_date"] >= pd.Timestamp(date_min)]
+    if date_max is not None:
+        t = t.loc[t["entry_date"] <= pd.Timestamp(date_max)]
+    if is_end is not None and date_min is None and date_max is None:
+        t = t.loc[t["entry_date"] > pd.Timestamp(is_end)]
+    return t
+
+
+def _apply_panel_window(
+    panel: pd.DataFrame,
+    *,
+    is_end: pd.Timestamp | str | None = None,
+    date_min: pd.Timestamp | str | None = None,
+    date_max: pd.Timestamp | str | None = None,
+) -> pd.DataFrame:
+    if panel is None or panel.empty:
+        return panel.copy() if panel is not None else pd.DataFrame()
+    p = panel.copy()
+    p["date"] = pd.to_datetime(p["date"])
+    if date_min is not None:
+        p = p.loc[p["date"] >= pd.Timestamp(date_min)]
+    if date_max is not None:
+        p = p.loc[p["date"] <= pd.Timestamp(date_max)]
+    if is_end is not None and date_min is None and date_max is None:
+        p = p.loc[p["date"] > pd.Timestamp(is_end)]
+    return p
+
+
 def pair_scorecard(
     book_pair_results: dict,
     panel: pd.DataFrame,
     *,
-    is_end: pd.Timestamp | str,
+    is_end: pd.Timestamp | str | None = None,
+    date_min: pd.Timestamp | str | None = None,
+    date_max: pd.Timestamp | str | None = None,
     periods_per_year: float = PERIODS_PER_YEAR,
 ) -> pd.DataFrame:
-    """OOS per-pair net/gross Sharpe, trades, cost drag, ADF health."""
-    end = pd.Timestamp(is_end)
-    p = panel.copy()
-    p["date"] = pd.to_datetime(p["date"])
+    """Per-pair net/gross Sharpe, trades, cost drag, ADF health.
+
+    Window: inclusive ``date_min``/``date_max`` when either is set; otherwise
+    OOS ``date > is_end`` (same contract as the sealed tearsheet).
+    """
+    win = dict(is_end=is_end, date_min=date_min, date_max=date_max)
+    p = _apply_panel_window(panel, **win)
     rows = []
     for pid, res in book_pair_results.items():
-        ret = pd.to_numeric(res.returns, errors="coerce").astype(float)
-        ret.index = pd.to_datetime(ret.index)
-        oos = ret.loc[ret.index > end]
+        ret = _apply_date_window(res.returns, **win)
         trades = res.trades.copy() if res.trades is not None else pd.DataFrame()
-        if not trades.empty:
-            trades["entry_date"] = pd.to_datetime(trades["entry_date"])
-            trades = trades.loc[trades["entry_date"] > end]
+        trades = _apply_trade_window(trades, **win)
         engine_gross = getattr(res, "returns_gross", None)
         if engine_gross is not None and not getattr(engine_gross, "empty", True):
-            gross = pd.to_numeric(engine_gross, errors="coerce").astype(float)
-            gross.index = pd.to_datetime(gross.index)
-            gross = gross.loc[gross.index > end]
+            gross = _apply_date_window(engine_gross, **win)
         else:
-            gross = gross_returns_from_net(oos, trades, open_entry_cost_bps=res.open_entry_cost_bps)
-        net_m = metrics_from_returns(oos, periods_per_year=periods_per_year)
+            gross = gross_returns_from_net(
+                ret, trades, open_entry_cost_bps=getattr(res, "open_entry_cost_bps", 0.0)
+            )
+        net_m = metrics_from_returns(ret, periods_per_year=periods_per_year)
         gross_m = metrics_from_returns(gross, periods_per_year=periods_per_year)
-        g = p.loc[(p["pair_id"].astype(str) == str(pid)) & (p["date"] > end)]
-        adf = pd.to_numeric(g.get("adf_pvalue"), errors="coerce")
+        g = p.loc[p["pair_id"].astype(str) == str(pid)] if not p.empty and "pair_id" in p.columns else p
+        adf = pd.to_numeric(g.get("adf_pvalue"), errors="coerce") if not g.empty else pd.Series(dtype=float)
         adf_fin = adf[np.isfinite(adf)]
         rows.append(
             {
@@ -472,7 +532,7 @@ def pair_scorecard(
                 "max_drawdown": net_m["max_drawdown"],
                 "n_trades": int(len(trades)),
                 "cost_bps_year": cost_bps_per_year(
-                    oos, trades, open_entry_cost_bps=0.0, periods_per_year=periods_per_year
+                    ret, trades, open_entry_cost_bps=0.0, periods_per_year=periods_per_year
                 ),
                 "pct_adf_lt_05": float((adf_fin < 0.05).mean() * 100)
                 if len(adf_fin)
@@ -486,17 +546,110 @@ def pair_scorecard(
 def pair_pnl_attribution(
     book_pair_results: dict,
     *,
-    is_end: pd.Timestamp | str,
+    is_end: pd.Timestamp | str | None = None,
+    date_min: pd.Timestamp | str | None = None,
+    date_max: pd.Timestamp | str | None = None,
 ) -> pd.Series:
-    """OOS total compounded return contribution by pair."""
-    end = pd.Timestamp(is_end)
-    out = {}
+    """Compounded return contribution by pair over an optional date window."""
+    win = dict(is_end=is_end, date_min=date_min, date_max=date_max)
+    out: dict[str, float] = {}
     for pid, res in book_pair_results.items():
-        ret = pd.to_numeric(res.returns, errors="coerce").astype(float)
-        ret.index = pd.to_datetime(ret.index)
-        oos = ret.loc[ret.index > end].fillna(0.0)
-        out[str(pid)] = float((1.0 + oos).prod() - 1.0) if len(oos) else float("nan")
-    return pd.Series(out, name="oos_total_return").sort_values()
+        ret = _apply_date_window(res.returns, **win).fillna(0.0)
+        out[str(pid)] = float((1.0 + ret).prod() - 1.0) if len(ret) else float("nan")
+    return pd.Series(out, name="total_return").sort_values()
+
+
+def pair_concentration(attribution: pd.Series) -> pd.Series:
+    """Share of book PnL in the largest pair (and HHI of |contribution|)."""
+    a = pd.to_numeric(attribution, errors="coerce").dropna().astype(float)
+    if a.empty:
+        return pd.Series(
+            {
+                "n_pairs": 0.0,
+                "max_pair_share": float("nan"),
+                "max_pair_id": "",
+                "hhi_abs": float("nan"),
+            }
+        )
+    abs_w = a.abs()
+    total = float(abs_w.sum())
+    if total <= 0:
+        shares = pd.Series(0.0, index=a.index)
+    else:
+        shares = abs_w / total
+    max_id = str(shares.idxmax())
+    return pd.Series(
+        {
+            "n_pairs": float(len(a)),
+            "max_pair_share": float(shares.loc[max_id]),
+            "max_pair_id": max_id,
+            "hhi_abs": float((shares ** 2).sum()),
+        }
+    )
+
+
+def early_late_is_decay(
+    returns: pd.Series,
+    *,
+    periods_per_year: float = PERIODS_PER_YEAR,
+) -> pd.Series:
+    """Split IS returns at midpoint; report early/late Sharpe and decay ratio."""
+    r = pd.to_numeric(returns, errors="coerce").dropna().astype(float)
+    r.index = pd.to_datetime(r.index)
+    r = r.sort_index()
+    if len(r) < 20:
+        return pd.Series(
+            {
+                "early_sharpe": float("nan"),
+                "late_sharpe": float("nan"),
+                "decay_ratio": float("nan"),
+                "n_early": 0.0,
+                "n_late": 0.0,
+                "midpoint": "",
+            }
+        )
+    mid = r.index[len(r) // 2]
+    early = r.loc[r.index <= mid]
+    late = r.loc[r.index > mid]
+    e = metrics_from_returns(early, periods_per_year=periods_per_year)["ann_sharpe"]
+    l = metrics_from_returns(late, periods_per_year=periods_per_year)["ann_sharpe"]
+    decay = float(l / e) if np.isfinite(e) and abs(e) > 1e-12 else float("nan")
+    return pd.Series(
+        {
+            "early_sharpe": float(e),
+            "late_sharpe": float(l),
+            "decay_ratio": decay,
+            "n_early": float(len(early)),
+            "n_late": float(len(late)),
+            "midpoint": str(pd.Timestamp(mid).date()),
+        }
+    )
+
+
+def baseline_configs_from_star(cfg):
+    """Raw trad-z (gates off) derived from frozen STAR — no stack mutate."""
+    from dataclasses import replace
+
+    from strategies.s2_coint.config import S2SimConfig
+
+    if not isinstance(cfg, S2SimConfig):
+        raise TypeError("cfg must be an S2SimConfig")
+    raw = replace(
+        cfg,
+        break_mode="off",
+        trend_mode="off",
+        hl_gate_min=None,
+        hl_gate_max=None,
+        overlap_mode="allow",
+        atr_stop_mult=None,
+        hl_exit_n=None,
+        corr_k=None,
+        size_mode="equal",
+        vol_mode="fixed_k",
+        z_window_mode="fixed",
+        entry_mode="trad_z",
+    )
+    return {"raw_trad_z": raw}
 
 
 def cvar(

@@ -12,6 +12,8 @@ import pandas as pd
 from data.ingestion.rates_fetcher import ensure_policy_rates_frame
 from strategies.s3_trend.config import S3SimConfig
 from strategies.s3_trend.costs import (
+    ETF_COST_PROFILE,
+    daily_borrow_return,
     daily_swap_return,
     leg_cost_bps,
     pair_supported,
@@ -41,8 +43,12 @@ def _cost_mult(cfg: S3SimConfig) -> float:
     return float(getattr(cfg, "cost_multiplier", 1.0) or 1.0)
 
 
+def _active_profile(pair: str, cfg: S3SimConfig) -> str:
+    return resolve_cost_profile(pair, override=cfg.cost_profile)
+
+
 def _leg_cost_bps_scaled(pair: str, price: float, cfg: S3SimConfig) -> float:
-    return float(leg_cost_bps(pair, price)) * _cost_mult(cfg)
+    return float(leg_cost_bps(pair, price, profile=cfg.cost_profile)) * _cost_mult(cfg)
 
 
 def _financing_spread_scaled(cfg: S3SimConfig) -> float:
@@ -262,12 +268,11 @@ def simulate_pair(
 
     d = panel_pair.sort_values("date").reset_index(drop=True)
     pair = _panel_pair_id(d)
-    if not pair or not pair_supported(pair):
+    profile = _active_profile(pair, cfg) if pair else cfg.cost_profile
+    if not pair or not pair_supported(pair, profile):
         if pair:
             logger.warning("skipping unsupported pair %s", pair)
         return empty
-
-    resolve_cost_profile(pair, cfg.cost_profile)
     signal = compute_signal(d, cfg)
     dates = pd.to_datetime(d["date"]).to_list()
     opens = _open_series(d).to_numpy(dtype=float)
@@ -375,10 +380,12 @@ def simulate_pair(
         else:
             asset_ret = 0.0
         gross = w_held * asset_ret
-        swap = 0.0
-        if cfg.include_swap and w_held != 0.0:
+        financing = 0.0
+        if profile == ETF_COST_PROFILE:
+            financing = daily_borrow_return(profile, weight=w_held) * _cost_mult(cfg)
+        elif cfg.include_swap and w_held != 0.0:
             rd = _rate_diff_on_date(pair, rates_df, fill_date)
-            swap = daily_swap_return(
+            financing = daily_swap_return(
                 pair,
                 w_held,
                 rd,
@@ -386,7 +393,7 @@ def simulate_pair(
                 wednesday_triple=True,
                 asof=fill_date,
             )
-        net_by_date[fill_date] += gross + swap - cost
+        net_by_date[fill_date] += gross + financing - cost
         gross_by_date[fill_date] += gross
 
     net = pd.Series(net_by_date, dtype=float).sort_index()
@@ -470,7 +477,7 @@ def simulate_book(
 
     for pair in pairs:
         p = _normalize_pair(pair)
-        if not pair_supported(p):
+        if not pair_supported(p, cfg.cost_profile):
             logger.warning("simulate_book: skipping unsupported pair %s", p)
             continue
         g = panel.loc[panel[pair_col].map(_normalize_pair) == p].copy()
@@ -666,7 +673,7 @@ def simulate_event_trades(
     prices = prices.sort_values(["date", pair_col])
 
     pairs = [_normalize_pair(p) for p in (cfg.pairs or tuple(prices[pair_col].unique()))]
-    pairs = [p for p in pairs if pair_supported(p)]
+    pairs = [p for p in pairs if pair_supported(p, cfg.cost_profile)]
 
     net_by_date: dict[pd.Timestamp, float] = defaultdict(float)
     gross_by_date: dict[pd.Timestamp, float] = defaultdict(float)
@@ -686,7 +693,7 @@ def simulate_event_trades(
                 if _pair_sign_for_currency(p, ccy) != 0:
                     target_pairs.append(p)
         for pair in target_pairs:
-            if not pair_supported(pair):
+            if not pair_supported(pair, cfg.cost_profile):
                 continue
             psign = _pair_sign_for_currency(pair, ccy) if ccy else 1
             if psign == 0:

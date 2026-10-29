@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from data.processing.s3_fx_price_panel import (
+from data.processing.s3_price_panel import (
     RESEARCH_IS_END_S3,
     S3_HOLDOUT_END,
     core_universe,

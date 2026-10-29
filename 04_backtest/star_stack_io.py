@@ -31,9 +31,15 @@ _SLEEVE_FILES = {
     "s3_event": "s3_event_star_stack.json",
 }
 
+# Generation subfolder under artifacts/ (S2 live book is v1; S1/S3 stay flat).
+_SLEEVE_ARTIFACT_SUBDIR = {
+    "s2": "v1",
+    "s2_coint": "v1",
+}
+
 
 def default_star_stack_path(sleeve: str, repo_root_dir: str | None = None) -> str:
-    """``04_backtest/{sleeve_folder}/artifacts/{sleeve}_star_stack.json``."""
+    """``04_backtest/{sleeve_folder}/artifacts/[v1/]{sleeve}_star_stack.json``."""
     key = str(sleeve).strip().lower()
     folder = _SLEEVE_FOLDERS.get(key)
     fname = _SLEEVE_FILES.get(key)
@@ -42,14 +48,30 @@ def default_star_stack_path(sleeve: str, repo_root_dir: str | None = None) -> st
             f"unknown sleeve {sleeve!r}; expected one of {sorted(_SLEEVE_FOLDERS)}"
         )
     root = repo_root_dir if repo_root_dir is not None else repo_root()
-    return os.path.join(root, "04_backtest", folder, "artifacts", fname)
+    parts = [root, "04_backtest", folder, "artifacts"]
+    sub = _SLEEVE_ARTIFACT_SUBDIR.get(key)
+    if sub:
+        parts.append(sub)
+    parts.append(fname)
+    return os.path.join(*parts)
 
 
-def require_star(name: str, value) -> None:
+def require_star(name: str, value):
+    """Raise if ``value`` is None. Call as ``require_star("KEY_STAR", stack.get("KEY_STAR"))``.
+
+    Returns ``value`` so callers can assign in one line. The first argument is the
+    key name, not the stack dict — passing a dict is a TypeError, not a silent None.
+    """
+    if isinstance(name, dict):
+        raise TypeError(
+            "require_star(name, value) takes the STAR key name first, not the stack. "
+            'Use require_star("UNIVERSE_STAR", stack.get("UNIVERSE_STAR")).'
+        )
     if value is None:
         raise ValueError(
             f"{name} is None. Type it in the freeze cell after reviewing fold-val metrics."
         )
+    return value
 
 
 def load_star_stack(path: str) -> dict:

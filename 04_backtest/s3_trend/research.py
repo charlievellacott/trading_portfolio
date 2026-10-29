@@ -14,8 +14,9 @@ from backtest.star_stack_io import (
     require_star,
     vt_target_ann_vol_from_stack,
 )
-from data.processing.s3_fx_price_panel import RESEARCH_IS_END_S3
+from data.processing.s3_price_panel import RESEARCH_IS_END_S3, core_universe
 from strategies.s3_trend.config import S3SimConfig
+from strategies.s3_trend.costs import ETF_COST_PROFILE, cost_profile_for_universe
 
 _HERE = os.path.abspath(__file__)
 _PKG_DIR = os.path.dirname(_HERE)
@@ -200,6 +201,11 @@ def _overlay_modes(stack: dict) -> dict[str, str]:
     return out
 
 
+def default_cost_profile_for_universe(universe: str | None) -> str:
+    """Core A / missing / event → OANDA; core B → Alpaca ETF."""
+    return cost_profile_for_universe(universe)
+
+
 def config_from_stack(
     stack: dict,
     hyp_overrides: dict | None = None,
@@ -207,9 +213,14 @@ def config_from_stack(
     """Map frozen ``*_STAR`` keys onto ``S3SimConfig`` (unset → dataclass defaults)."""
     kwargs: dict = {}
 
+    universe = stack.get("UNIVERSE_STAR")
     pairs = stack.get("PAIRS_STAR")
     if pairs not in (None, "None", ""):
         kwargs["pairs"] = tuple(str(p) for p in _as_tuple(pairs))
+    else:
+        u = str(universe or "").strip().upper()
+        if u in {"A", "B"}:
+            kwargs["pairs"] = tuple(str(p) for p in core_universe(u)["instruments"])
 
     bar = stack.get("BAR_STAR")
     if bar not in (None, "None", ""):
@@ -330,6 +341,11 @@ def config_from_stack(
 
     if hyp_overrides:
         kwargs.update(hyp_overrides)
+
+    if "cost_profile" not in kwargs:
+        kwargs["cost_profile"] = default_cost_profile_for_universe(universe)
+    if "include_swap" not in kwargs:
+        kwargs["include_swap"] = str(kwargs.get("cost_profile")) != ETF_COST_PROFILE
     # Drop VT default overwrite if neither stack nor override set it explicitly.
     if (
         VT_TARGET_ANN_VOL_STAR not in stack

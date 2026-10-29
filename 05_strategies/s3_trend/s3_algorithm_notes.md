@@ -5,9 +5,10 @@
 ## Universe change (FX book → multi-asset ETFs)
 
 The package was `s3_fx_trend` and the first core freeze was seven USD G10 pairs.
-That FX book is now core universe **A** (`FX_G10`). It stays selectable. New
-research freezes core universe **B** (`ETF_MULTI`): equity, bond, commodity, and
-USD ETFs. `UNIVERSE_STAR` selects the **core** book only.
+That FX book is now core universe **A** (`FX_G10`). It stays selectable. Core
+universe **B** (`ETF_MULTI`) is the equity / bond / commodity / USD ETF book.
+H-001 freezes `UNIVERSE_STAR` from a research-IS TSMOM 12M bake-off of A vs B.
+`UNIVERSE_STAR` selects the **core** book only.
 
 The **event sleeve is always Forex** (G10 + the economic calendar). It does not
 follow `UNIVERSE_STAR`. It will be shelved later; until then it still has an IS
@@ -28,8 +29,8 @@ Active numbering is H-001 … H-011 with no gaps (see the live core log).
 
 | ID | Book | Role |
 |---|---|---|
-| A | G10 FX vs USD | Selectable; not the default |
-| B | Multi-asset ETFs | Default `UNIVERSE_STAR` |
+| A | G10 FX vs USD | H-001 candidate |
+| B | Multi-asset ETFs | H-001 candidate |
 
 ## Timing contracts
 
@@ -52,7 +53,7 @@ Helper: `data.processing.s3_fx_event_panel.map_event_to_next_bar_fill`.
 
 ## Research IS / OOS
 
-- `RESEARCH_IS_END_S3 = 2016-12-31` in `data.processing.s3_fx_price_panel`.
+- `RESEARCH_IS_END_S3 = 2016-12-31` in `data.processing.s3_price_panel`.
 - One cut for FX core, ETF core, and the event sleeve.
 - Research IS is `date <= 2016-12-31` (panel from ~2007-01-01).
 - Sealed holdout is `2017-01-01` through `2019-12-31`, opened once.
@@ -92,11 +93,13 @@ S3 wiring: `strategies.s3_trend.metrics`, `backtest.s3_trend.report`.
 
 ## Costs
 
-See `universe.md` and `strategies.s3_trend.costs`:
+See `universe.md` and `strategies.s3_trend.costs`. `config_from_stack` picks the
+profile from `UNIVERSE_STAR` unless `COST_PROFILE_STAR` is set.
 
-- Spread + 0.1 pip slippage per leg.
-- Swap = rate differential ± **50 bps** financing; **Wednesday triple**.
-- Conversion markup **N/A** (0 bps) for v1 USD-quoted book.
+- Core A / event sleeve: `A_FX_OANDA_S3` — spread + 0.1 pip slippage per leg;
+  swap = rate differential ± **50 bps** financing; **Wednesday triple**.
+- Core B: `B_ETF_ALPACA` — 0 commission, 0.1 bps third-party, 3.2 bps open-fill
+  slippage (~3.3 bps/leg); ETB borrow 0. Swap off.
 
 ## BIS REER (H-011 value) — monthly + PIT M+2
 
