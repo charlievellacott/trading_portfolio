@@ -262,7 +262,7 @@ def load_s2_cuts(
     path = os.path.join(s2_data_dir(root, version=version), "s2_cuts.json")
     if not os.path.isfile(path):
         raise FileNotFoundError(
-            f"missing {path}. Run 01_data/data_files/s2_coint/v2/s2_pair_panel.ipynb "
+            f"missing {path}. Run 01_data/data_files/s2_coint/v2/s2_v2_pair_panel.ipynb "
             "with BOOK_SCOPE='freeze_only'."
         )
     with open(path, encoding="utf-8") as f:
@@ -318,7 +318,7 @@ def load_universe_panels(
     if not os.path.isfile(train_path):
         raise FileNotFoundError(
             f"missing {train_path}. For 1D run "
-            f"01_data/data_files/s2_coint/{ver}/s2_pair_panel.ipynb; "
+            f"01_data/data_files/s2_coint/{ver}/s2_{ver}_pair_panel.ipynb; "
             "for 1H run the bar-size hyp (no 4H panel is built)."
         )
     train = filter_pairs(pd.read_parquet(train_path), pair_ids)
@@ -343,7 +343,7 @@ def load_universe_c_panels(
     if not os.path.isfile(train_path):
         raise FileNotFoundError(
             f"missing {train_path}. For 1D run "
-            "01_data/data_files/s2_coint/v1/s2_pair_panel.ipynb; "
+            "01_data/data_files/s2_coint/v1/s2_v1_pair_panel.ipynb; "
             "for 1H run H-002 (no 4H panel exists for universe C)."
         )
     train = filter_pairs(pd.read_parquet(train_path), pair_ids)

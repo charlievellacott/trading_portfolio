@@ -2,7 +2,7 @@
 
 Version 1 (letter universes, including E) stays in `../v1/`. This ladder is a new generation.
 Walk-forward folds select. **One sealed holdout, opened once after H-011**, not after every hyp.
-Panel construction is infrastructure: `01_data/data_files/s2_coint/v2/s2_pair_panel.ipynb` (not a hypothesis).
+Panel construction is infrastructure: `01_data/data_files/s2_coint/v2/s2_v2_pair_panel.ipynb` (not a hypothesis).
 yfinance has no delisted prices: the panel builder reports the drop rate; every hyp quotes it.
 Alpaca `shortable` today is not a historical borrow flag.
 Kill the generation if holdout net Sharpe < 0.3 or more than 40% of PnL comes from one pair.
@@ -57,7 +57,7 @@ Next: run H-004.
 `off` | `block_05_flat_10` | `flat_05` on research IS. Freeze `BREAK_STAR` before the book bake-off.
 
 Notebook: `notebooks/hypothesis_tests/H-004_cointegration.ipynb`.
-Next: re-run `s2_pair_panel.ipynb` with `BOOK_SCOPE = "freeze_plus_rotate"`.
+Next: re-run `s2_v2_pair_panel.ipynb` with `BOOK_SCOPE = "freeze_plus_rotate"`.
 
 ## H-005 · Reshuffle cadence
 

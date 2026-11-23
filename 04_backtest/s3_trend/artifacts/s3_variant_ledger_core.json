@@ -11,7 +11,77 @@
         "B_1m"
       ],
       "n_arms": 6
+    },
+    {
+      "hyp_id": "H-002",
+      "arms": [
+        "tsmom_12m"
+      ],
+      "n_arms": 1
+    },
+    {
+      "hyp_id": "H-003",
+      "arms": [
+        "1M",
+        "3M",
+        "12M",
+        "equal_blend"
+      ],
+      "n_arms": 4
+    },
+    {
+      "hyp_id": "H-004",
+      "arms": [
+        "off",
+        "pair_vt"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-005",
+      "arms": [
+        "pair_only",
+        "pair_plus_book_vt"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-006",
+      "arms": [
+        "off",
+        "pair_delever",
+        "book_delever",
+        "both"
+      ],
+      "n_arms": 4
+    },
+    {
+      "hyp_id": "H-007",
+      "arms": [
+        "tsmom",
+        "donchian",
+        "both"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-008",
+      "arms": [
+        "sign_only",
+        "abs_scale"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-009",
+      "arms": [
+        "off",
+        "corr_gate",
+        "currency_cap",
+        "both"
+      ],
+      "n_arms": 4
     }
   ],
-  "cumulative_arms": 6
+  "cumulative_arms": 28
 }

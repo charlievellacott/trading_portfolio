@@ -8,7 +8,7 @@ Pairs form only inside the same leaf after H-001 freezes `POOL_STAR` (`sector` o
 No unrestricted cross-sector arm.
 
 Research IS, sealed holdout, and `PAPER_START` are frozen in
-`01_data/data_files/s2_coint/v2/s2_pair_panel.ipynb` Pass A (`s2_cuts.json`).
+`01_data/data_files/s2_coint/v2/s2_v2_pair_panel.ipynb` Pass A (`s2_cuts.json`).
 Do not use v1's letter-universe end date as this generation's cut.
 
 Survivorship: names without yfinance history are dropped and the drop rate is reported. They are not filled.
