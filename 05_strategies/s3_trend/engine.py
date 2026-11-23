@@ -30,7 +30,6 @@ from strategies.s3_trend.sizing import (
     apply_rebalance_band,
     apply_weak_signal_flat,
     book_vol_target_leverage,
-    enforce_currency_cap,
     pair_inverse_vol_weights,
 )
 
@@ -540,24 +539,6 @@ def simulate_book(
                 scaled_gross.append((gross_wide[col] * ratio).rename(col))
         net_wide = pd.concat(scaled_net, axis=1).fillna(0.0)
         gross_wide = pd.concat(scaled_gross, axis=1).fillna(0.0)
-        book_net = net_wide.mean(axis=1).rename("ret")
-        book_gross = gross_wide.mean(axis=1).rename("ret_gross")
-
-    # Currency cap: shrink weights and scale that pair's return by the same ratio.
-    if cfg.corr_conflict_mode in {"currency_cap", "both"} and not weights.empty:
-        orig = weights.copy()
-        capped_rows = []
-        for dt, row in orig.iterrows():
-            capped_rows.append(enforce_currency_cap(row, cfg.currency_cap_gross_pct))
-        weights = pd.DataFrame(capped_rows, index=orig.index)
-        weights = weights.reindex(columns=list(orig.columns))
-        for col in list(net_wide.columns):
-            if col not in weights.columns or col not in orig.columns:
-                continue
-            base_w = orig[col].abs().replace(0.0, np.nan)
-            ratio = (weights[col].abs() / base_w).fillna(1.0).clip(0.0, 1.0)
-            net_wide[col] = net_wide[col] * ratio
-            gross_wide[col] = gross_wide[col] * ratio
         book_net = net_wide.mean(axis=1).rename("ret")
         book_gross = gross_wide.mean(axis=1).rename("ret_gross")
 

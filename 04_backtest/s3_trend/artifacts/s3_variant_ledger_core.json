@@ -75,13 +75,22 @@
     {
       "hyp_id": "H-009",
       "arms": [
+        "baseline_1.25_0.75",
+        "stronger_1.5_0.5",
+        "mild_1.1_0.9"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-010",
+      "arms": [
         "off",
-        "corr_gate",
-        "currency_cap",
-        "both"
+        "band_10",
+        "band_20",
+        "weak_flat"
       ],
       "n_arms": 4
     }
   ],
-  "cumulative_arms": 28
+  "cumulative_arms": 31
 }

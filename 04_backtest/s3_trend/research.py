@@ -307,8 +307,6 @@ def config_from_stack(
         ("VALUE_AGREE_SCALE_STAR", "value_agree_scale"),
         ("VALUE_DISAGREE_SCALE_STAR", "value_disagree_scale"),
         ("SPIKE_THRESHOLD_SIGMAS_STAR", "spike_threshold_sigmas"),
-        ("CORR_GATE_THRESHOLD_STAR", "corr_gate_threshold"),
-        ("CURRENCY_CAP_GROSS_PCT_STAR", "currency_cap_gross_pct"),
         ("FINANCING_SPREAD_BPS_ANNUAL_STAR", "financing_spread_bps_annual"),
         ("EVENT_Z_GATE_STAR", "event_z_gate"),
     ):
@@ -322,7 +320,6 @@ def config_from_stack(
 
     for star_key, field in (
         ("SPIKE_MODE_STAR", "spike_mode"),
-        ("CORR_CONFLICT_MODE_STAR", "corr_conflict_mode"),
         ("COST_PROFILE_STAR", "cost_profile"),
         ("EVENT_BAR_STAR", "event_bar"),
     ):

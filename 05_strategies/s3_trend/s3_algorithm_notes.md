@@ -21,9 +21,14 @@ Dropped from the active core screen, kept under
 - Carry overlay (old H-010) — FX rate differentials do not map onto the ETF book.
 - Value / REER overlay (old H-011) — BIS REER is an FX value measure.
 
+Also dropped (not archived as a notebook): FX currency / corr conflict and
+asset-class caps (former H-009). Irrelevant for `ETF_MULTI`; no STAR keys or
+engine path remain (`CORR_CONFLICT_MODE_STAR`, `CURRENCY_CAP_GROSS_PCT_STAR`,
+`CORR_GATE_THRESHOLD_STAR`).
+
 The FX-era core hypothesis log is
 `02_research/s3_trend/redundant/s3_core_hypothesis_log_v1_fx.md`.
-Active numbering is H-001 … H-011 with no gaps (see the live core log).
+Active numbering is H-001 … H-010 with no gaps (see the live core log).
 
 ## Core universes
 

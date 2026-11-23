@@ -634,7 +634,6 @@ def baseline_configs_from_star(cfg: S3SimConfig) -> dict[str, S3SimConfig]:
         carry_mode="off",
         value_mode="off",
         spike_mode="off",
-        corr_conflict_mode="off",
         conviction_scaling="sign",
         weak_signal_flat_z=0.0,
         rebalance_band=0.0,
@@ -1090,7 +1089,6 @@ def write_core_star_tearsheet_pdf(
             "VALUE_MODE_STAR",
             "CARRY_AGREE_SCALE_STAR",
             "SPIKE_MODE_STAR",
-            "CORR_CONFLICT_MODE_STAR",
             "VT_TARGET_ANN_VOL_STAR",
             "COST_PROFILE_STAR",
         ]

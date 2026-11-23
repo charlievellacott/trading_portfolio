@@ -32,7 +32,6 @@ VALID_VALUE_MODE = frozenset({"off", "gate", "tilt"})
 VALID_CARRY_REFRESH = frozenset({"weekly", "monthly"})
 VALID_VALUE_REFRESH = frozenset({"monthly", "quarterly"})
 VALID_SPIKE_MODE = frozenset({"off", "pair_delever", "book_delever", "both"})
-VALID_CORR_CONFLICT = frozenset({"off", "corr_gate", "currency_cap", "both"})
 VALID_EVENT_BAR = frozenset({"1d", "1h"})
 
 
@@ -69,10 +68,6 @@ class S3SimConfig:
 
     spike_mode: str = "off"
     spike_threshold_sigmas: float = 2.0
-
-    corr_conflict_mode: str = "off"
-    corr_gate_threshold: float = 0.85
-    currency_cap_gross_pct: float = 0.50
 
     cost_profile: str = "A_FX_OANDA_S3"
     include_swap: bool = True
@@ -117,10 +112,6 @@ class S3SimConfig:
             )
         if self.spike_mode not in VALID_SPIKE_MODE:
             raise ValueError(f"spike_mode must be in {sorted(VALID_SPIKE_MODE)}")
-        if self.corr_conflict_mode not in VALID_CORR_CONFLICT:
-            raise ValueError(
-                f"corr_conflict_mode must be in {sorted(VALID_CORR_CONFLICT)}"
-            )
         if self.event_bar not in VALID_EVENT_BAR:
             raise ValueError(f"event_bar must be in {sorted(VALID_EVENT_BAR)}")
         if int(self.day_boundary_hour) < 0 or int(self.day_boundary_hour) > 23:
@@ -133,8 +124,6 @@ class S3SimConfig:
             raise ValueError("donchian_n must be >= 2")
         if float(self.vt_target_ann_vol) <= 0:
             raise ValueError("vt_target_ann_vol must be positive")
-        if float(self.currency_cap_gross_pct) <= 0:
-            raise ValueError("currency_cap_gross_pct must be positive")
         if float(self.cost_multiplier) <= 0:
             raise ValueError("cost_multiplier must be positive")
         if int(self.event_hold_bars) < 1:

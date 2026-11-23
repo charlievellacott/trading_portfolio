@@ -20,9 +20,11 @@ the per-period Sharpe.
 | H-006 | H-005 | Causal spike delever | OPEN |
 | H-007 | H-006 | Trend family | OPEN |
 | H-008 | H-008 | Conviction scaling | OPEN |
-| H-009 | H-009 | Asset-class caps and corr | OPEN |
-| H-010 | H-012 | Overlay polish | OPEN — overlays off |
-| H-011 | H-013 | Rebalance bands | OPEN |
+| H-009 | H-012 | Overlay polish | OPEN — overlays off |
+| H-010 | H-013 | Rebalance bands | OPEN |
+
+Dropped (not on the active ladder): FX currency / corr conflict and asset-class
+caps (former H-009). Irrelevant for the ETF_MULTI book; no replacement screen.
 
 ## H-001 · Universe
 
@@ -67,19 +69,16 @@ Arms: TSMOM, Donchian, both. No session-definition arm (that notebook is redunda
 
 Sign-only versus scaling by signal strength.
 
-## H-009 · Exposure
-
-Asset-class and sector gross caps, plus a correlation conflict rule.
-This replaces the FX currency cap. Arms stay small and pre-registered.
-
-## H-010 · Overlay polish
+## H-009 · Overlay polish
 
 Carry and value are not in the active screen. This notebook only polishes an
 overlay if one was frozen earlier. Expected freeze: overlays off.
+Notebook: `H-009_overlay_polish.ipynb`.
 
-## H-011 · Rebalance bands
+## H-010 · Rebalance bands
 
 No-trade band and weak-signal flat, after the trunk is frozen.
+Notebook: `H-010_rebalance_bands.ipynb`.
 
 ## Kill
 

@@ -1,8 +1,6 @@
-"""S3 pair / book sizing helpers (inverse-vol, conviction, currency caps)."""
+"""S3 pair / book sizing helpers (inverse-vol, conviction, rebalance)."""
 
 from __future__ import annotations
-
-from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -132,72 +130,3 @@ def apply_weak_signal_flat(
         return s.where(s.abs() >= thr, 0.0)
     x = float(signal) if np.isfinite(signal) else 0.0
     return 0.0 if abs(x) < thr else x
-
-
-def _normalize_pair(pair: str) -> str:
-    return str(pair).strip().upper().replace("_", "").replace("/", "").replace("=X", "")
-
-
-def currency_gross_exposure(
-    weights: pd.Series | dict[str, float],
-    pairs: list[str] | tuple[str, ...] | None = None,
-) -> pd.Series:
-    """Per-currency gross exposure from signed pair weights (base +, quote −)."""
-    if isinstance(weights, dict):
-        w = pd.Series(weights, dtype=float)
-    else:
-        w = pd.to_numeric(weights, errors="coerce").astype(float)
-    if pairs is not None:
-        w = w.reindex([_normalize_pair(p) for p in pairs]).fillna(0.0)
-    net: dict[str, float] = defaultdict(float)
-    for pair, val in w.items():
-        if not np.isfinite(val) or val == 0.0:
-            continue
-        p = _normalize_pair(str(pair))
-        if len(p) != 6:
-            continue
-        net[p[:3]] += float(val)
-        net[p[3:]] -= float(val)
-    if not net:
-        return pd.Series(dtype=float, name="gross")
-    return pd.Series({c: abs(v) for c, v in net.items()}, dtype=float, name="gross")
-
-
-def enforce_currency_cap(
-    target_weights: pd.Series | dict[str, float],
-    cap_pct: float,
-    *,
-    max_iter: int = 50,
-) -> pd.Series:
-    """Iteratively shrink the marginal offending pair until all gross ≤ ``cap_pct``."""
-    if isinstance(target_weights, dict):
-        w = pd.Series(target_weights, dtype=float).copy()
-    else:
-        w = pd.to_numeric(target_weights, errors="coerce").astype(float).copy()
-    w.index = [_normalize_pair(str(i)) for i in w.index]
-    cap = float(cap_pct)
-    if cap <= 0 or w.empty:
-        return w
-
-    for _ in range(int(max_iter)):
-        gross = currency_gross_exposure(w)
-        if gross.empty or float(gross.max()) <= cap + 1e-12:
-            break
-        offenders = gross[gross > cap]
-        # Shrink pairs that touch the worst currency.
-        worst_ccy = str(offenders.idxmax())
-        candidates: list[str] = []
-        for pair, val in w.items():
-            if not np.isfinite(val) or abs(val) < 1e-15:
-                continue
-            p = str(pair)
-            if p[:3] == worst_ccy or p[3:] == worst_ccy:
-                candidates.append(p)
-        if not candidates:
-            break
-        # Shrink the largest |weight| contributor.
-        marg = max(candidates, key=lambda p: abs(float(w.loc[p])))
-        scale = cap / max(float(gross.loc[worst_ccy]), 1e-12)
-        scale = min(max(scale, 0.0), 1.0)
-        w.loc[marg] = float(w.loc[marg]) * scale
-    return w
