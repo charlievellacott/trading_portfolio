@@ -73,7 +73,7 @@ Research IS end: A `2020-12-31`, B `2022-12-31`, C `2021-12-31`, **D / E / F `20
 - Lesson: EG pass at discovery ≠ tradable MR; venue friction must be small vs expected move.
 
 Full postmortem: `02_research/s2_coint/v1/notebooks/other_tests/01_asia_c_failure_diagnosis.ipynb`.
-Archived Asia artifacts: `04_backtest/s2_coint/artifacts/v1/asia_c/`.
+Archived Asia artifacts: `04_backtest/s2_coint/v1/artifacts/asia_c/`.
 
 ---
 

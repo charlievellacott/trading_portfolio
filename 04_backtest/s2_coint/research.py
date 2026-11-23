@@ -58,7 +58,7 @@ def repo_root(start: str | None = None) -> str:
 def s2_artifacts_dir(*, version: str = "v1", root: str | None = None) -> str:
     """Artifacts root for an S2 generation (``v1`` or ``v2``)."""
     ver = str(version).strip().lower() or "v1"
-    return os.path.join(repo_root(root), "04_backtest", "s2_coint", "artifacts", ver)
+    return os.path.join(repo_root(root), "04_backtest", "s2_coint", ver, "artifacts")
 
 
 ARTIFACTS_DIR = s2_artifacts_dir(version="v1")

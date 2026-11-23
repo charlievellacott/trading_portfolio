@@ -21,6 +21,7 @@ from backtest.s2_coint.report import (
     save_star_stack,
 )
 from backtest.s2_coint.research import (
+    ARTIFACTS_DIR,
     DAY_OLS_WINDOW,
     DAY_Z_WINDOW,
     DEFAULT_STAR_STACK,
@@ -555,7 +556,7 @@ def main() -> None:
         if old != new:
             report["changes"][key] = {"from": old, "to": new}
 
-    out_path = os.path.join(os.path.dirname(__file__), "artifacts", "s2_star_auto_review.json")
+    out_path = os.path.join(ARTIFACTS_DIR, "s2_star_auto_review.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, default=str)
         f.write("\n")

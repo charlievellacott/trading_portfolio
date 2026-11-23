@@ -31,15 +31,15 @@ _SLEEVE_FILES = {
     "s3_event": "s3_event_star_stack.json",
 }
 
-# Generation subfolder under artifacts/ (S2 live book is v1; S1/S3 stay flat).
-_SLEEVE_ARTIFACT_SUBDIR = {
+# Generation folder under the sleeve (S2 live book is v1; S1/S3 stay flat).
+_SLEEVE_VERSION_DIR = {
     "s2": "v1",
     "s2_coint": "v1",
 }
 
 
 def default_star_stack_path(sleeve: str, repo_root_dir: str | None = None) -> str:
-    """``04_backtest/{sleeve_folder}/artifacts/[v1/]{sleeve}_star_stack.json``."""
+    """``04_backtest/{sleeve_folder}/[v1/]artifacts/{sleeve}_star_stack.json``."""
     key = str(sleeve).strip().lower()
     folder = _SLEEVE_FOLDERS.get(key)
     fname = _SLEEVE_FILES.get(key)
@@ -48,11 +48,11 @@ def default_star_stack_path(sleeve: str, repo_root_dir: str | None = None) -> st
             f"unknown sleeve {sleeve!r}; expected one of {sorted(_SLEEVE_FOLDERS)}"
         )
     root = repo_root_dir if repo_root_dir is not None else repo_root()
-    parts = [root, "04_backtest", folder, "artifacts"]
-    sub = _SLEEVE_ARTIFACT_SUBDIR.get(key)
-    if sub:
-        parts.append(sub)
-    parts.append(fname)
+    parts = [root, "04_backtest", folder]
+    ver = _SLEEVE_VERSION_DIR.get(key)
+    if ver:
+        parts.append(ver)
+    parts.extend(["artifacts", fname])
     return os.path.join(*parts)
 
 

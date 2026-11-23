@@ -76,6 +76,6 @@ def test_default_star_stack_path_sleeves():
     s1 = default_star_stack_path("s1", repo_root_dir=root)
     s2 = default_star_stack_path("s2", repo_root_dir=root)
     assert s1.endswith(os.path.join("s1_equities", "artifacts", "s1_star_stack.json"))
-    assert s2.endswith(os.path.join("s2_coint", "artifacts", "v1", "s2_star_stack.json"))
+    assert s2.endswith(os.path.join("s2_coint", "v1", "artifacts", "s2_star_stack.json"))
     with pytest.raises(ValueError, match="unknown sleeve"):
         default_star_stack_path("fx")

@@ -12,7 +12,7 @@ Purged expanding walk-forward on **research IS** (3 folds, 5-day embargo) → pe
 
 **Helpers:** `fold_val_metrics`, `full_is_metrics`, `arm_selection_table` in `04_backtest/s2_coint/report.py` (pass `hyp_id=` for PSR/DSR); variant ledger in `04_backtest/s2_coint/research.py`; `load_star_panels` after H-005/H-006 freeze.
 
-**Frozen STAR (canonical):** `04_backtest/s2_coint/artifacts/v1/s2_star_stack.json`.
+**Frozen STAR (canonical):** `04_backtest/s2_coint/v1/artifacts/s2_star_stack.json`.
 
 The H-001–H-008 freeze is **not** the D book. It is what was frozen on universe **E**. D only contaminated the late knobs (H-009–H-015); those were reset to pre-search defaults in the revamp. Saved notebook outputs for H-009+ still show D pairs (`WSO|WSO.B`, `HEI|HEI.A`, `NWS|NWSA`) — do not treat those as the live freeze.
 
@@ -42,7 +42,7 @@ Mirror `03_models/s1_equities/model_tests/06_training_gbm_lambdarank_wf.ipynb`: 
 - **Fold-val:** score each **pre-registered** candidate config (including knobs like ATR multiple) on that fold’s validation segment. Aggregate across folds (boxplots of Sharpe, max DD, corr to S1). Freeze the winner on research IS only; never tune on sealed OOS.
 - **Research IS / sealed OOS:** research IS is the sleeve train panel through that universe’s fixed `RESEARCH_IS_END` (A `2020-12-31`, B `2022-12-31`, C `2021-12-31`, **D / E / F** `2021-12-31`); sealed OOS is after it. Registered in `data.processing.s2_universe_pools.RESEARCH_IS_END_BY_UNIVERSE`. Under `BOOK_STAR = freeze` the pair list is frozen at discovery on `date <= T`; under `rotate` it is re-selected each quarter on data `<= T_rebalance` only (H-004).
 - **Primary metrics (every hyp):** net **Sharpe**, **max drawdown**, and **correlation to S1**. Rank on net Sharpe and report correlation beside it — **no combined score**. Read correlation directionally: **a negative correlation to S1 is strictly better than a low positive one** (−0.2 beats 0.0), because negative correlation adds diversification rather than merely avoiding overlap.
-- **Secondary inference (every hyp screen):** `psr`, `dsr_local`, `dsr_stack` on the same net return series; see algorithm notes. Ledger: `04_backtest/s2_coint/artifacts/v1/s2_variant_ledger.json`; update via `register_hypothesis_arms` when arms add/remove (not when STAR changes).
+- **Secondary inference (every hyp screen):** `psr`, `dsr_local`, `dsr_stack` on the same net return series; see algorithm notes. Ledger: `04_backtest/s2_coint/v1/artifacts/s2_variant_ledger.json`; update via `register_hypothesis_arms` when arms add/remove (not when STAR changes).
 
 
 
@@ -135,7 +135,7 @@ Do **not** add an extra `.shift(1)` on close-`t` features. Do **not** materializ
 
 
 
-**Universe C shelved (2026-08).** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table lives in `02_research/s2_coint/v1/universe.md`; archived Asia artifacts in `04_backtest/s2_coint/artifacts/v1/asia_c/`. See Universe D shelved note below.
+**Universe C shelved (2026-08).** Gross Sharpe ≈ 0 (+0.02 to +0.24) before costs, net −0.08 to −0.48 after. Cost drag 271–439 bps/yr (HK 116 bps/RT, JP 64 bps/RT); median rolling ADF p 0.19–0.30, significant only 11–29% of days. Not a timing bug and not a trade-frequency problem (~3.6–4.2 round-trips/yr, `|z|>2` on ~12% of days). Per-pair table lives in `02_research/s2_coint/v1/universe.md`; archived Asia artifacts in `04_backtest/s2_coint/v1/artifacts/asia_c/`. See Universe D shelved note below.
 
 **Universe D shelved (2026-09).** WSO.B is not shortable via Alpaca or Interactive Brokers (IBKR). Locked book was `WSO.B|WSO`, `NWS|NWSA`, `HEI|HEI.A`; `WSO|WSO.B` delivered the entirety of the returns. No further broker search. H-001 drops US tickers with Alpaca `shortable=False` before EG screening (`easy_to_borrow` is display-only). A / B / C / D stay documented as learning points and are not re-selected.
 
