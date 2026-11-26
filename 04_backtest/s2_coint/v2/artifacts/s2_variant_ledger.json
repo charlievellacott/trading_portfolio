@@ -1,0 +1,21 @@
+{
+  "entries": [
+    {
+      "hyp_id": "H-001",
+      "arms": [
+        "sector",
+        "industry"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-002",
+      "arms": [
+        "raw_p05",
+        "bh_fdr"
+      ],
+      "n_arms": 2
+    }
+  ],
+  "cumulative_arms": 4
+}

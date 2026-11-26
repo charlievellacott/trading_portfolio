@@ -78,8 +78,10 @@ def ohlcv_dates_to_naive_utc(dates: pd.Series) -> pd.Series:
     return as_utc
 
 
-def _clamp_yfinance_1h_start(start: pd.Timestamp, end: pd.Timestamp) -> pd.Timestamp:
-    floor = yfinance_1h_min_start(end)
+def _clamp_yfinance_1h_start(start: pd.Timestamp) -> pd.Timestamp:
+    # Yahoo measures its 730-day wall from request time, not from the requested
+    # end date, so anchor the floor to today.
+    floor = yfinance_1h_min_start()
     if start < floor:
         logger.info(
             "clamping 1h start %s → %s (Yahoo %sd calendar wall)",
@@ -301,7 +303,7 @@ def _download_ohlcv(
             f"interval must be one of {sorted(VALID_OHLCV_INTERVALS)}, got {interval!r}"
         )
     if interval == "1h":
-        start = _clamp_yfinance_1h_start(start, end)
+        start = _clamp_yfinance_1h_start(start)
     if not tickers:
         return pd.DataFrame(columns=["date", "ticker", *OHLCV_COLUMNS])
 
