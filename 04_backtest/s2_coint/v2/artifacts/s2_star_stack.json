@@ -1,7 +1,7 @@
 {
   "POOL_STAR": "sector",
   "RESEARCH_IS_END_STAR": "2017-04-27",
-  "BAR_STAR": "1d",
+  "BAR_STAR": "1h",
   "PAIRS_STAR": [
     "EBAY|AN",
     "HBAN|KEY",
@@ -37,8 +37,25 @@
     "GIS|HRL",
     "RF|KEY",
     "HSIC|ILMN",
-    "EBAY|WHR"
+    "EBAY|WHR",
+    "MTD|TMO",
+    "EBAY|DRI",
+    "CB|CBOE",
+    "ROST|ULTA",
+    "EBAY|MAT",
+    "AWK|EIX",
+    "GD|RSG",
+    "EBAY|ORLY",
+    "V|ICE",
+    "CSCO|GRMN",
+    "CNC|INCY",
+    "GLW|GRMN",
+    "CNC|BMY",
+    "EBAY|MAR",
+    "MCO|CBOE"
   ],
-  "N_STAR": 35,
-  "FDR_STAR": "raw_p05"
+  "N_STAR": 50,
+  "FDR_STAR": "raw_p05",
+  "BREAK_STAR": "off",
+  "BOOK_STAR": "quarterly"
 }

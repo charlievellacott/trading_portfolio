@@ -463,6 +463,12 @@ def is_end_for_stack(stack: dict, panel: pd.DataFrame) -> pd.Timestamp:
 def overlap_is_end(panel: pd.DataFrame, *, frac: float = 0.70) -> pd.Timestamp:
     """70/30 cut on unique calendar days (midnight-normalized)."""
     dates = _session_dates(panel["date"])
+    if len(dates) < 2:
+        raise ValueError(
+            f"overlap_is_end needs a panel with >= 2 unique session dates, got {len(dates)} "
+            f"(panel rows={len(panel)}). The upstream fetch/build probably returned an empty "
+            "panel; check for 'WARN no 1h' / yfinance errors."
+        )
     cut = int(len(dates) * frac) - 1
     cut = min(max(cut, 0), len(dates) - 2)
     return pd.Timestamp(dates[cut])

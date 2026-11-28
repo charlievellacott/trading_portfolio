@@ -15,7 +15,58 @@
         "bh_fdr"
       ],
       "n_arms": 2
+    },
+    {
+      "hyp_id": "H-003",
+      "arms": [
+        "1d",
+        "1h"
+      ],
+      "n_arms": 2
+    },
+    {
+      "hyp_id": "H-004",
+      "arms": [
+        "off",
+        "block_05_flat_10",
+        "flat_05"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-005",
+      "arms": [
+        "freeze",
+        "quarterly",
+        "12m6m"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-006",
+      "arms": [
+        "20",
+        "35",
+        "50"
+      ],
+      "n_arms": 3
+    },
+    {
+      "hyp_id": "H-007",
+      "arms": [
+        "L:252",
+        "L:504",
+        "OLS:252",
+        "OLS:504",
+        "ADF:252",
+        "ADF:504",
+        "EZ:1.5",
+        "EZ:2.0",
+        "Z:60",
+        "Z:90"
+      ],
+      "n_arms": 10
     }
   ],
-  "cumulative_arms": 4
+  "cumulative_arms": 25
 }

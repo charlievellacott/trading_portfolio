@@ -54,6 +54,7 @@ _SCHEDULE_COLS: tuple[str, ...] = (
 __all__ = [
     "SLOT_WEIGHT",
     "build_active_schedule",
+    "build_v2_rebalance_schedule",
     "freeze_book",
     "quarter_end_rebalance_dates",
     "semiannual_rebalance_dates",
@@ -206,6 +207,91 @@ def build_active_schedule(
                 }
             )
     return pd.DataFrame(rows, columns=list(_SCHEDULE_COLS))
+
+
+V2_REBALANCE_COLS: tuple[str, ...] = (
+    "rebalance_date",
+    "effective_date",
+    "pair_id",
+    "ticker_y",
+    "ticker_x",
+    "pvalue",
+    "rank",
+    "lookback",
+    "schedule",
+    "pool",
+)
+
+
+def build_v2_rebalance_schedule(
+    closes: Mapping[str, pd.Series],
+    pool_pairs: Sequence[tuple[str, str]],
+    sessions: Sequence,
+    rebalance_dates: Mapping[str, Sequence],
+    lookbacks: Sequence[int],
+    *,
+    pool: str,
+    fdr: str,
+    ols_window: int,
+    bars_per_session: int = 1,
+    min_is_bars: int | None = None,
+    pvalue_threshold: float = 0.05,
+    fdr_alpha: float = 0.05,
+    top_k: int = 50,
+) -> pd.DataFrame:
+    """v2 Pass B rotate schedules (``s2_rebalance_{bar}.csv``) for any bar size.
+
+    For each ``schedule -> rebalance dates`` entry and each formation lookback ``L``
+    (session units), re-screen ``pool_pairs`` on the trailing ``L * bars_per_session``
+    bars with ``date <= T``, keep FDR / raw passers, rank by p-value (top ``top_k``),
+    and make the set effective at the first bar in ``sessions`` after ``T``.
+    ``lookback`` is stored in session units so 1d and 1h schedules share one schema.
+    """
+    from backtest.s2_coint.research import apply_bh_fdr
+
+    idx = pd.DatetimeIndex(pd.to_datetime(pd.Series(list(sessions)))).sort_values().unique()
+    idx = pd.DatetimeIndex(idx)
+    rows: list[dict] = []
+    for schedule_name, rebals in rebalance_dates.items():
+        for L in lookbacks:
+            for t in rebals:
+                t = pd.Timestamp(t)
+                effective = _next_session(idx, t)
+                if effective is None:
+                    continue
+                screen = screen_pair_cointegration(
+                    closes,
+                    pool_pairs,
+                    is_end=t,
+                    ols_window=ols_window,
+                    min_is_bars=min_is_bars,
+                    pvalue_threshold=pvalue_threshold,
+                    lookback_bars=int(L) * int(bars_per_session),
+                )
+                if fdr == "bh_fdr":
+                    screen = apply_bh_fdr(screen, alpha=fdr_alpha)
+                    chosen = screen.loc[screen["fdr_pass"]].copy()
+                else:
+                    chosen = screen.loc[
+                        screen["eligible"] & (screen["pvalue"] < pvalue_threshold)
+                    ].copy()
+                chosen = chosen.sort_values("pvalue", kind="mergesort").head(top_k)
+                for rank, row in enumerate(chosen.itertuples(index=False), start=1):
+                    rows.append(
+                        {
+                            "rebalance_date": t,
+                            "effective_date": effective,
+                            "pair_id": str(row.pair_id),
+                            "ticker_y": str(row.ticker_y),
+                            "ticker_x": str(row.ticker_x),
+                            "pvalue": float(row.pvalue),
+                            "rank": rank,
+                            "lookback": int(L),
+                            "schedule": str(schedule_name),
+                            "pool": pool,
+                        }
+                    )
+    return pd.DataFrame(rows, columns=list(V2_REBALANCE_COLS))
 
 
 def schedule_to_masks(

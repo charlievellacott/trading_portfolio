@@ -16,3 +16,4 @@ Liquidity: ADV floor at the research cut; report the share dropped.
 
 Panel artifacts (no `pit`, no universe letter) live under `01_data/data_files/s2_coint/v2/`:
 `s2_candidates_1d.csv`, `s2_panel_1d_{train,full}.parquet`, `s2_rebalance_1d.csv`.
+When `BAR_STAR = "1h"`: `s2_panel_1h_{train,full}.parquet` and `s2_rebalance_1h.csv` from `s2_v2_rebalance_1h.ipynb` (1h Pass B; same rotation pool, ~2 years of Yahoo 1h history).

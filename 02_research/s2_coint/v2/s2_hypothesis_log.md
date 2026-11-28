@@ -57,7 +57,7 @@ Next: run H-004.
 `off` | `block_05_flat_10` | `flat_05` on research IS. Freeze `BREAK_STAR` before the book bake-off.
 
 Notebook: `notebooks/hypothesis_tests/H-004_cointegration.ipynb`.
-Next: re-run `s2_v2_pair_panel.ipynb` with `BOOK_SCOPE = "freeze_plus_rotate"`.
+Next: re-run `s2_v2_pair_panel.ipynb` with `BOOK_SCOPE = "freeze_plus_rotate"` (`BAR_STAR = "1d"`), or run `01_data/data_files/s2_coint/v2/s2_v2_rebalance_1h.ipynb` (`BAR_STAR = "1h"`).
 
 ## H-005 · Reshuffle cadence
 
